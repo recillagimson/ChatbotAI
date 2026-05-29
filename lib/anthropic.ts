@@ -1,9 +1,22 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Chatbot, KnowledgeBaseEntry, Message } from "./types";
 
-export const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+let _anthropic: Anthropic | null = null;
+
+/**
+ * Lazily construct the Anthropic client. Like the Stripe client, we avoid
+ * instantiating at module load time: Next.js imports this module while
+ * "collecting page data" during `next build`, and the SDK throws if
+ * ANTHROPIC_API_KEY isn't present. Build the client on first request instead.
+ */
+function getAnthropic(): Anthropic {
+  if (!_anthropic) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
+    _anthropic = new Anthropic({ apiKey });
+  }
+  return _anthropic;
+}
 
 export const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
@@ -63,7 +76,7 @@ export async function generateReply(opts: {
     content: m.content,
   }));
 
-  const response = await anthropic.messages.create({
+  const response = await getAnthropic().messages.create({
     model: AI_MODEL,
     max_tokens: 400,
     system,

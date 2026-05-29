@@ -9,6 +9,7 @@ build/
 *.log
 .DS_Store
 next-env.d.ts
+tsconfig.tsbuildinfo
 .turbo
 .vscode/
 .idea/
