@@ -8,7 +8,7 @@ Go through every section in order. Each one starts with **what you do** and ends
 
 ## TL;DR — what you need to do (master checklist)
 
-- [ ] **1.** Install Node.js 20+ and run `npm install`
+- [Done] **1.** Install Node.js 20+ and run `npm install`
 - [ ] **2.** Create a Supabase project and run the schema
 - [ ] **3.** Get an Anthropic API key
 - [ ] **4.** Create a Stripe product ($349/mo) and grab keys
