@@ -56,13 +56,24 @@ export async function reconcileFromCheckoutSession(
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-  // Guard: only sync sessions that belong to this signed-in user.
+  // Authorization: fail CLOSED. Only sync a session that explicitly carries
+  // this signed-in user's id (our checkout always sets it). Missing metadata is
+  // denied — otherwise a user could pass an arbitrary session_id and attach
+  // someone else's subscription to their own account (IDOR).
   const sessionUser = session.metadata?.supabase_user_id as string | undefined;
-  if (sessionUser && sessionUser !== userId) return;
+  if (!sessionUser || sessionUser !== userId) return;
+
+  // Only sync sessions that actually completed/paid (ignore open/unpaid ones).
+  if (session.payment_status !== "paid" && session.status !== "complete") return;
   if (!session.subscription) return;
 
   const sub = await stripe.subscriptions.retrieve(
     session.subscription as string
   );
+
+  // Defense in depth: the subscription metadata must also match this user.
+  const subUser = sub.metadata?.supabase_user_id as string | undefined;
+  if (subUser && subUser !== userId) return;
+
   await upsertSubscriptionRow(sub, userId);
 }
