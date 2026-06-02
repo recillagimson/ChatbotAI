@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
-import { createServiceClient } from "@/lib/supabase/server";
+import { upsertSubscriptionRow } from "@/lib/billing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,8 +23,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_signature" }, { status: 400 });
   }
 
-  const supabase = createServiceClient();
-
   async function upsertSubscription(sub: Stripe.Subscription) {
     const userId =
       (sub.metadata?.supabase_user_id as string | undefined) ||
@@ -33,22 +31,7 @@ export async function POST(request: NextRequest) {
       console.warn("[stripe-webhook] no userId for subscription", sub.id);
       return;
     }
-
-    await supabase.from("subscriptions").upsert(
-      {
-        user_id: userId,
-        stripe_customer_id: sub.customer as string,
-        stripe_subscription_id: sub.id,
-        stripe_price_id: sub.items.data[0]?.price.id ?? null,
-        status: sub.status,
-        current_period_end: new Date(
-          sub.current_period_end * 1000
-        ).toISOString(),
-        cancel_at_period_end: sub.cancel_at_period_end,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" }
-    );
+    await upsertSubscriptionRow(sub, userId);
   }
 
   async function findUserIdByCustomer(

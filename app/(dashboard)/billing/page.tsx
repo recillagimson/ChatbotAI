@@ -8,12 +8,29 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BillingButtons } from "@/components/dashboard/billing-buttons";
+import { reconcileFromCheckoutSession } from "@/lib/billing";
 
-export default async function BillingPage() {
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; session_id?: string }>;
+}) {
+  const { status, session_id } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // After a successful checkout, sync the subscription straight from Stripe so
+  // the page is correct even if the webhook is delayed or not configured.
+  if (status === "success" && session_id && user) {
+    try {
+      await reconcileFromCheckoutSession(session_id, user.id);
+    } catch (err) {
+      console.error("[billing] reconcile failed", err);
+    }
+  }
+
   const { data: subscription } = await supabase
     .from("subscriptions")
     .select("*")
