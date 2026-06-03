@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
-import { verifyManychatSecret } from "@/lib/manychat";
+import { verifyManychatSecret, sendManychatMessage } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
 import type { Chatbot, KnowledgeBaseEntry, Message } from "@/lib/types";
 
@@ -191,7 +191,22 @@ export async function POST(request: NextRequest) {
     }),
   ]);
 
-  // 10. Return reply in ManyChat's response format (it sends it directly)
+  // 10. Deliver the reply to the user via ManyChat's Send Content API.
+  // The ManyChat flow is a fire-and-forget External Request (no Send Message /
+  // dynamic-content node) because dynamic-content rendering is unreliable on
+  // Instagram. We push the reply here instead. A failure is non-fatal: the
+  // reply is already stored and visible in the dashboard inbox.
+  try {
+    await sendManychatMessage({
+      subscriberId: body.subscriber_id,
+      text: replyText,
+    });
+  } catch (err) {
+    console.error("[manychat-webhook] push send failed", err);
+  }
+
+  // 11. Return 200. Body kept in ManyChat format for backward-compat and local
+  // tooling (chat-test); the actual delivery happened via the push above.
   return manychatReply(replyText);
 }
 

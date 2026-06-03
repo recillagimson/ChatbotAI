@@ -41,10 +41,19 @@ export function verifyManychatSecret(provided: string | null): boolean {
 }
 
 /**
- * Optional: actively send a message back via ManyChat Send Content API
- * (used when AI reply must be sent OUT of the webhook cycle, e.g. follow-ups).
+ * Actively send a message back to the user via ManyChat's Send Content API.
  *
- * Most flows don't need this — the External Request response IS the reply.
+ * This is our PRIMARY delivery mechanism. ManyChat's "Get Dynamic Content"
+ * (rendering the External Request response inline) is unreliable on Instagram —
+ * it silently drops the reply. So instead the flow is a fire-and-forget
+ * External Request, and we push the reply here.
+ *
+ * Notes:
+ *  - `content.type: "instagram"` is required for IG delivery (verified: a bare
+ *    payload without it is rejected; with it, ManyChat returns success).
+ *  - No `message_tag`: replies are sent within seconds of the customer's
+ *    message, always inside Instagram's 24-hour standard messaging window, so
+ *    no tag is needed (and ACCOUNT_UPDATE is a Messenger-only tag anyway).
  */
 export async function sendManychatMessage(opts: {
   subscriberId: string;
@@ -63,9 +72,11 @@ export async function sendManychatMessage(opts: {
       subscriber_id: opts.subscriberId,
       data: {
         version: "v2",
-        content: { messages: [{ type: "text", text: opts.text }] },
+        content: {
+          type: "instagram",
+          messages: [{ type: "text", text: opts.text }],
+        },
       },
-      message_tag: "ACCOUNT_UPDATE",
     }),
   });
 
