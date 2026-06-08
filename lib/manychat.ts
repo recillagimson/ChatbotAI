@@ -41,14 +41,27 @@ export function verifyManychatSecret(provided: string | null): boolean {
 }
 
 /**
- * Optional: actively send a message back via ManyChat Send Content API
- * (used when AI reply must be sent OUT of the webhook cycle, e.g. follow-ups).
+ * Actively send a message back to the user via ManyChat's Send Content API.
  *
- * Most flows don't need this — the External Request response IS the reply.
+ * This is our PRIMARY delivery mechanism. ManyChat's "Get Dynamic Content"
+ * (rendering the External Request response inline) is unreliable on Instagram —
+ * it silently drops the reply. So instead the flow is a fire-and-forget
+ * External Request, and we push the reply here.
+ *
+ * Notes:
+ *  - `content.type: "instagram"` is required for IG delivery (verified: a bare
+ *    payload without it is rejected; with it, ManyChat returns success).
+ *  - `message_tag`: normal replies omit it — they go out within seconds of the
+ *    customer's message, inside Instagram's 24-hour standard messaging window.
+ *    Auto follow-ups fire OUTSIDE that window, so they must pass
+ *    `messageTag: "HUMAN_AGENT"` (Instagram allows this up to ~7 days after the
+ *    user's last message). Beyond 7 days Instagram blocks delivery entirely.
  */
 export async function sendManychatMessage(opts: {
   subscriberId: string;
   text: string;
+  /** Instagram message tag for sending outside the 24h window (e.g. "HUMAN_AGENT"). */
+  messageTag?: string;
 }) {
   const apiKey = process.env.MANYCHAT_API_KEY;
   if (!apiKey) throw new Error("MANYCHAT_API_KEY not set");
@@ -63,9 +76,12 @@ export async function sendManychatMessage(opts: {
       subscriber_id: opts.subscriberId,
       data: {
         version: "v2",
-        content: { messages: [{ type: "text", text: opts.text }] },
+        content: {
+          type: "instagram",
+          messages: [{ type: "text", text: opts.text }],
+        },
       },
-      message_tag: "ACCOUNT_UPDATE",
+      ...(opts.messageTag ? { message_tag: opts.messageTag } : {}),
     }),
   });
 

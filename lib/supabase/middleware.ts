@@ -32,8 +32,13 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+  // NOTE: /reset-password is intentionally NOT an auth route — the recovery
+  // link logs the user in first, and they must reach the page to set a new
+  // password. Redirecting authed users away from it would break the flow.
   const isAuthRoute =
-    pathname.startsWith("/login") || pathname.startsWith("/signup");
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/signup") ||
+    pathname.startsWith("/forgot-password");
   const isProtected =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/conversations") ||
