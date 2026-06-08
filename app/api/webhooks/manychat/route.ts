@@ -19,8 +19,24 @@ const BodySchema = z.object({
 });
 
 /**
- * ManyChat External Request entry point.
- * Returns { reply: string } that ManyChat maps to a custom field and sends back.
+ * Format a reply in ManyChat's External Request response schema. ManyChat
+ * requires a top-level `version` plus `content.messages`; when present it
+ * renders those messages directly, so no separate "Send Message" step is
+ * needed. We also keep a flat `reply` field for our own tooling (chat-test,
+ * docs/API.md). An empty `text` yields no message (used for human takeover).
+ */
+function manychatReply(text: string, extra: Record<string, unknown> = {}) {
+  return NextResponse.json({
+    version: "v2",
+    content: { messages: text ? [{ type: "text", text }] : [] },
+    reply: text,
+    ...extra,
+  });
+}
+
+/**
+ * ManyChat External Request entry point. Returns a ManyChat-format response
+ * (version + content.messages) so ManyChat sends the reply back directly.
  */
 export async function POST(request: NextRequest) {
   // 1. Authenticate shared secret
@@ -50,10 +66,7 @@ export async function POST(request: NextRequest) {
     .single<Chatbot>();
 
   if (!chatbot) {
-    return NextResponse.json(
-      { reply: "Sorry, this account isn't active right now." },
-      { status: 200 }
-    );
+    return manychatReply("Sorry, this account isn't active right now.");
   }
 
   const { data: subscription } = await supabase
@@ -63,14 +76,9 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (!subscription || !["active", "trialing"].includes(subscription.status)) {
-    return NextResponse.json(
-      {
-        reply:
-          "Thanks for your message! We'll get back to you shortly.",
-        ai_skipped: true,
-        reason: "subscription_inactive",
-      },
-      { status: 200 }
+    return manychatReply(
+      "Thanks for your message! We'll get back to you shortly.",
+      { ai_skipped: true, reason: "subscription_inactive" }
     );
   }
 
@@ -126,10 +134,7 @@ export async function POST(request: NextRequest) {
 
   // 6. If human took over, do not generate AI reply
   if (conversationStatus === "ai_paused") {
-    return NextResponse.json(
-      { reply: "", ai_skipped: true, reason: "human_takeover" },
-      { status: 200 }
-    );
+    return manychatReply("", { ai_skipped: true, reason: "human_takeover" });
   }
 
   // 7. Fetch knowledge + recent history
@@ -186,8 +191,8 @@ export async function POST(request: NextRequest) {
     }),
   ]);
 
-  // 10. Return reply for ManyChat to send back
-  return NextResponse.json({ reply: replyText });
+  // 10. Return reply in ManyChat's response format (it sends it directly)
+  return manychatReply(replyText);
 }
 
 export async function GET() {
