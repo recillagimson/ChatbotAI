@@ -3,6 +3,14 @@ import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyManychatSecret, sendManychatMessage } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
+import {
+  checkRateLimit,
+  checkMonthlyCap,
+  checkDuplicate,
+  cacheLastReply,
+  incrementMonthlyCount,
+  getTrivialReply,
+} from "@/lib/limits";
 import type { Chatbot, KnowledgeBaseEntry, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -121,6 +129,9 @@ export async function POST(request: NextRequest) {
         unread_count: (existing.unread_count ?? 0) + 1,
         contact_name: existing.contact_name ?? displayName,
         contact_username: existing.contact_username ?? body.username ?? null,
+        // The contact replied — re-arm auto follow-up for the next silence.
+        followup_count: 0,
+        last_followup_at: null,
       })
       .eq("id", existing.id);
   }
@@ -137,7 +148,48 @@ export async function POST(request: NextRequest) {
     return manychatReply("", { ai_skipped: true, reason: "human_takeover" });
   }
 
-  // 7. Fetch knowledge + recent history
+  // 6a. Rate limit per (chatbot, subscriber). Silent drop on flood — no push,
+  // no AI cost. The inbound message is already recorded so a spamming user is
+  // still visible in the dashboard inbox.
+  const rl = await checkRateLimit(chatbot.id, body.subscriber_id);
+  if (!rl.ok) {
+    return manychatReply("", {
+      ai_skipped: true,
+      reason: "rate_limited",
+      limit: rl.limit,
+    });
+  }
+
+  // 6b. Trivial-input shortcut: "thanks" / "ok" / 👍 → static ack, no AI.
+  const trivial = getTrivialReply(body.message);
+  if (trivial) {
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial);
+    return manychatReply(trivial, { ai_skipped: true, reason: "trivial_ack" });
+  }
+
+  // 6c. Duplicate-message dedup: same message inside 30s → echo prior reply.
+  const dup = await checkDuplicate(chatbot.id, body.subscriber_id, body.message);
+  if (dup.isDuplicate) {
+    const echo = dup.lastReply ?? "Still on that — give me just a sec!";
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, echo);
+    return manychatReply(echo, { ai_skipped: true, reason: "duplicate" });
+  }
+
+  // 6d. Per-chatbot monthly cap. Over → static fallback, no AI.
+  const cap = await checkMonthlyCap(chatbot.id);
+  if (!cap.ok) {
+    const text = "Thanks for your message! We'll get back to you shortly.";
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, text);
+    return manychatReply(text, {
+      ai_skipped: true,
+      reason: "monthly_cap_reached",
+      current: cap.current,
+      cap: cap.cap,
+    });
+  }
+
+  // 7. Fetch knowledge + recent history. Order desc + limit so we get the
+  // newest 11 (= 10 prior + the just-inserted user message), not the oldest.
   const [{ data: knowledge }, { data: history }] = await Promise.all([
     supabase
       .from("knowledge_base")
@@ -149,12 +201,13 @@ export async function POST(request: NextRequest) {
       .from("messages")
       .select("role, content")
       .eq("conversation_id", conversationId!)
-      .order("created_at", { ascending: true })
-      .limit(20)
+      .order("created_at", { ascending: false })
+      .limit(11)
       .returns<Pick<Message, "role" | "content">[]>(),
   ]);
 
-  const priorHistory = (history ?? []).slice(0, -1); // exclude the just-inserted user msg
+  // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
+  const priorHistory = (history ?? []).slice(1).reverse();
 
   // 8. Generate reply
   let replyText = "Thanks for the message — a teammate will follow up shortly.";

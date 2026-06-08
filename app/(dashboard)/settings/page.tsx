@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { SettingsForm } from "@/components/dashboard/settings-form";
+import { ChangePasswordForm } from "@/components/dashboard/change-password-form";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -37,6 +38,18 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <SettingsForm profile={profile} email={user!.email ?? ""} />
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Password</CardTitle>
+          <CardDescription>
+            Change the password you use to sign in.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChangePasswordForm email={user!.email ?? ""} />
         </CardContent>
       </Card>
 

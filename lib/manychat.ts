@@ -58,6 +58,8 @@ export function verifyManychatSecret(provided: string | null): boolean {
 export async function sendManychatMessage(opts: {
   subscriberId: string;
   text: string;
+  /** Instagram message tag for sending outside the 24h window (e.g. "HUMAN_AGENT"). */
+  messageTag?: string;
 }) {
   const apiKey = process.env.MANYCHAT_API_KEY;
   if (!apiKey) throw new Error("MANYCHAT_API_KEY not set");

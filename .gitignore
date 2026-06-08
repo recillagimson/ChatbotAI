@@ -13,3 +13,7 @@ tsconfig.tsbuildinfo
 .turbo
 .vscode/
 .idea/
+
+# Local diagnostic/test scripts and docs (not for the repo)
+scripts/
+docs/

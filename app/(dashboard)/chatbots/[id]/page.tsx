@@ -3,6 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ChatbotSettingsForm } from "@/components/dashboard/chatbot-settings-form";
+import { ChatbotEditForm } from "@/components/dashboard/chatbot-edit-form";
+import { FOLLOWUP_ENABLED } from "@/lib/followup";
+import type { Chatbot } from "@/lib/types";
 import Link from "next/link";
 
 export default async function ChatbotDetailPage({
@@ -75,6 +79,39 @@ export default async function ChatbotDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Edit chatbot</CardTitle>
+          <CardDescription>
+            Update the name, AI instructions, and tone. Changes apply to new
+            replies right away.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChatbotEditForm chatbot={chatbot as Chatbot} />
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Auto follow-up</CardTitle>
+          <CardDescription>
+            Automatically message contacts who stop replying.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {FOLLOWUP_ENABLED ? (
+            <ChatbotSettingsForm chatbot={chatbot as Chatbot} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Coming soon. Instagram only lets us message a contact more than 24
+              hours after their last message once they&apos;ve opted in to
+              notifications — we&apos;re adding that opt-in next.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

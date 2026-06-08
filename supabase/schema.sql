@@ -121,6 +121,26 @@ create table if not exists public.usage_log (
 );
 create index if not exists usage_user_idx on public.usage_log(user_id, created_at desc);
 
+-- ---------------------------------------------------------------------
+-- Feature: auto follow-up
+--   Per-chatbot settings + per-conversation send state.
+--   Re-runnable: add-column-if-not-exists matches the manual one-shot apply.
+-- ---------------------------------------------------------------------
+alter table public.chatbots
+  add column if not exists auto_followup_enabled boolean not null default false,
+  add column if not exists auto_followup_days int not null default 3,        -- days of silence before a follow-up (app clamps 1..6)
+  add column if not exists auto_followup_repeat boolean not null default false,
+  add column if not exists auto_followup_max int not null default 3,         -- max sends when repeat is on (also bounded by IG's 7-day window)
+  add column if not exists auto_followup_template text;                      -- message body; supports {{name}}
+
+alter table public.conversations
+  add column if not exists last_followup_at timestamptz,
+  add column if not exists followup_count int not null default 0;
+
+-- Cron filters on stale active conversations; index supports that scan.
+create index if not exists conversations_followup_idx
+  on public.conversations(status, last_message_at desc);
+
 -- =====================================================================
 -- Trigger: auto-create profile on auth signup
 -- =====================================================================

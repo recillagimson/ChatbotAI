@@ -37,6 +37,11 @@ export interface Chatbot {
   instagram_username: string | null;
   system_prompt: string | null;
   is_active: boolean;
+  auto_followup_enabled: boolean;
+  auto_followup_days: number;
+  auto_followup_repeat: boolean;
+  auto_followup_max: number;
+  auto_followup_template: string | null;
   created_at: string;
 }
 
@@ -60,6 +65,8 @@ export interface Conversation {
   contact_username: string | null;
   status: "active" | "ai_paused" | "closed";
   last_message_at: string;
+  last_followup_at: string | null;
+  followup_count: number;
   unread_count: number;
   created_at: string;
 }
