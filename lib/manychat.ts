@@ -51,11 +51,9 @@ export function verifyManychatSecret(provided: string | null): boolean {
  * Notes:
  *  - `content.type: "instagram"` is required for IG delivery (verified: a bare
  *    payload without it is rejected; with it, ManyChat returns success).
- *  - `message_tag`: normal replies omit it — they go out within seconds of the
- *    customer's message, inside Instagram's 24-hour standard messaging window.
- *    Auto follow-ups fire OUTSIDE that window, so they must pass
- *    `messageTag: "HUMAN_AGENT"` (Instagram allows this up to ~7 days after the
- *    user's last message). Beyond 7 days Instagram blocks delivery entirely.
+ *  - No `message_tag`: replies are sent within seconds of the customer's
+ *    message, always inside Instagram's 24-hour standard messaging window, so
+ *    no tag is needed (and ACCOUNT_UPDATE is a Messenger-only tag anyway).
  */
 export async function sendManychatMessage(opts: {
   subscriberId: string;
@@ -81,7 +79,6 @@ export async function sendManychatMessage(opts: {
           messages: [{ type: "text", text: opts.text }],
         },
       },
-      ...(opts.messageTag ? { message_tag: opts.messageTag } : {}),
     }),
   });
 

@@ -43,31 +43,6 @@ function manychatReply(text: string, extra: Record<string, unknown> = {}) {
 }
 
 /**
- * Helper for canned-reply paths (rate-limit-passed gates that bypass the AI):
- * persists the outbound message in the conversation and pushes via ManyChat.
- * Each side is independent — a ManyChat failure doesn't lose the DB row.
- */
-async function persistAndPush(
-  supabase: ReturnType<typeof createServiceClient>,
-  conversationId: string,
-  subscriberId: string,
-  text: string
-): Promise<void> {
-  await Promise.all([
-    supabase.from("messages").insert({
-      conversation_id: conversationId,
-      role: "assistant",
-      content: text,
-      ai_generated: false,
-      tokens_used: 0,
-    }),
-    sendManychatMessage({ subscriberId, text }).catch((err) => {
-      console.error("[manychat-webhook] push send failed", err);
-    }),
-  ]);
-}
-
-/**
  * ManyChat External Request entry point. Returns a ManyChat-format response
  * (version + content.messages) so ManyChat sends the reply back directly.
  */
@@ -282,13 +257,6 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[manychat-webhook] push send failed", err);
   }
-
-  // 10a. Update Redis side-state: cache for dedup echo + bump monthly counter.
-  // These are best-effort; failures only affect future cost-control accuracy.
-  await Promise.all([
-    cacheLastReply(chatbot.id, body.subscriber_id, replyText),
-    incrementMonthlyCount(chatbot.id),
-  ]);
 
   // 11. Return 200. Body kept in ManyChat format for backward-compat and local
   // tooling (chat-test); the actual delivery happened via the push above.
