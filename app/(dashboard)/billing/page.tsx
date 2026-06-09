@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import {
   Card,
   CardContent,
@@ -17,9 +17,7 @@ export default async function BillingPage({
 }) {
   const { status, session_id } = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   // After a successful checkout, sync the subscription straight from Stripe so
   // the page is correct even if the webhook is delayed or not configured.

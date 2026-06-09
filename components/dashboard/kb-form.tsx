@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ export function KnowledgeBaseForm({
   chatbots: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [chatbotId, setChatbotId] = useState(chatbots[0]?.id ?? "");
 
   // Paste-text entry
@@ -46,7 +47,7 @@ export function KnowledgeBaseForm({
       setTitle("");
       setContent("");
       setLoading(false);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save entry.");
       setLoading(false);
@@ -93,7 +94,7 @@ export function KnowledgeBaseForm({
               : "")
         );
         if (fileInput.current) fileInput.current.value = "";
-        router.refresh();
+        startTransition(() => router.refresh());
       }
     } catch (err) {
       setUploadErr(err instanceof Error ? err.message : "Upload failed.");

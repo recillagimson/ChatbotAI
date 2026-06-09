@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import {
   Card,
   CardContent,
@@ -11,9 +11,7 @@ import { KnowledgeBaseList } from "@/components/dashboard/kb-list";
 
 export default async function KnowledgeBasePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const [{ data: chatbots }, { data: entries }] = await Promise.all([
     supabase

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,23 +14,31 @@ export function ConversationActions({
   currentStatus: string;
 }) {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const paused = currentStatus === "ai_paused";
+  const [isPending, startTransition] = useTransition();
+  // Optimistic: flip the button the instant it's clicked, before the server
+  // round-trip. Revert if the update fails.
+  const [paused, setPaused] = useState(currentStatus === "ai_paused");
 
-  async function toggle() {
-    setLoading(true);
-    const supabase = createClient();
-    await supabase
-      .from("conversations")
-      .update({ status: paused ? "active" : "ai_paused" })
-      .eq("id", conversationId);
-    router.refresh();
-    setLoading(false);
+  function toggle() {
+    const next = !paused;
+    setPaused(next);
+    startTransition(async () => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("conversations")
+        .update({ status: next ? "ai_paused" : "active" })
+        .eq("id", conversationId);
+      if (error) {
+        setPaused(!next); // revert on failure
+        return;
+      }
+      router.refresh();
+    });
   }
 
   return (
     <div className="flex gap-2">
-      <Button onClick={toggle} disabled={loading} variant="outline" size="sm">
+      <Button onClick={toggle} disabled={isPending} variant="outline" size="sm">
         {paused ? (
           <>
             <Play className="h-4 w-4 mr-2" /> Resume AI replies

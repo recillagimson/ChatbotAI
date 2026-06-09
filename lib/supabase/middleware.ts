@@ -27,9 +27,14 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refresh the session and read the user's claims. getClaims() is Supabase's
+  // current recommended middleware call: it loads (and refreshes) the token and
+  // writes cookies just like getUser() did, but verifies the JWT *locally* — no
+  // network round-trip per navigation — once the project has asymmetric JWT
+  // signing keys enabled. On legacy symmetric keys it transparently falls back
+  // to a network call (same as getUser), so this is never slower than before.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const isAuthed = !!claimsData?.claims;
 
   const { pathname } = request.nextUrl;
   // NOTE: /reset-password is intentionally NOT an auth route — the recovery
@@ -47,12 +52,12 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/billing") ||
     pathname.startsWith("/onboarding");
 
-  if (!user && isProtected) {
+  if (!isAuthed && isProtected) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
-  if (user && isAuthRoute) {
+  if (isAuthed && isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);

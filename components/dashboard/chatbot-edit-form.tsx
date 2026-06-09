@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ type Tone = Chatbot["tone"];
 
 export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [name, setName] = useState(chatbot.name);
   const [description, setDescription] = useState(
     chatbot.business_description ?? ""
@@ -52,7 +53,7 @@ export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
       return;
     }
     setSaved(true);
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   return (

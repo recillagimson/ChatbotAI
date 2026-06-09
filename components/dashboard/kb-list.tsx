@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -25,15 +26,36 @@ type Entry = {
 
 export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
+  // Optimistic delete: hide the row immediately, then confirm with the server.
+  // Tracking removed ids (rather than a copy of the list) means the next server
+  // refresh — which returns the list already without these rows — just works.
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
 
-  async function remove(id: string) {
+  function remove(id: string) {
     if (!confirm("Delete this knowledge entry?")) return;
-    const supabase = createClient();
-    await supabase.from("knowledge_base").delete().eq("id", id);
-    router.refresh();
+    setRemoved((s) => new Set(s).add(id));
+    startTransition(async () => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("knowledge_base")
+        .delete()
+        .eq("id", id);
+      if (error) {
+        setRemoved((s) => {
+          const n = new Set(s);
+          n.delete(id);
+          return n;
+        });
+        return;
+      }
+      router.refresh();
+    });
   }
 
-  if (!entries.length) {
+  const visible = entries.filter((e) => !removed.has(e.id));
+
+  if (!visible.length) {
     return (
       <Card>
         <CardContent className="py-8 text-center text-muted-foreground">
@@ -45,7 +67,7 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
 
   return (
     <div className="space-y-3">
-      {entries.map((e) => (
+      {visible.map((e) => (
         <Card key={e.id}>
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
             <div>

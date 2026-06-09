@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import {
   Card,
   CardContent,
@@ -11,9 +11,7 @@ import { ChangePasswordForm } from "@/components/dashboard/change-password-form"
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")

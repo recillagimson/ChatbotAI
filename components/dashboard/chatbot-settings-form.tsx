@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ const clampMax = (n: number) => Math.min(6, Math.max(1, Math.round(n || 1)));
 
 export function ChatbotSettingsForm({ chatbot }: { chatbot: Chatbot }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [enabled, setEnabled] = useState(chatbot.auto_followup_enabled);
   const [days, setDays] = useState(chatbot.auto_followup_days ?? 3);
   const [repeat, setRepeat] = useState(chatbot.auto_followup_repeat);
@@ -53,7 +54,7 @@ export function ChatbotSettingsForm({ chatbot }: { chatbot: Chatbot }) {
       return;
     }
     setSaved(true);
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   return (

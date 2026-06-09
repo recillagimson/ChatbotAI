@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import {
   Card,
   CardContent,
@@ -10,9 +10,7 @@ import { MessageSquare } from "lucide-react";
 
 export default async function ConversationsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: conversations } = await supabase
     .from("conversations")

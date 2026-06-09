@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ export function SettingsForm({
   email: string;
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
   const [companyName, setCompanyName] = useState(profile?.company_name ?? "");
   const [loading, setLoading] = useState(false);
@@ -32,7 +33,7 @@ export function SettingsForm({
       .eq("id", profile!.id);
     setLoading(false);
     setSaved(true);
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   return (
