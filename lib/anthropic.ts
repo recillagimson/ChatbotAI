@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Chatbot, KnowledgeBaseEntry, Message } from "./types";
+import type { Chatbot, Message } from "./types";
 
 let _anthropic: Anthropic | null = null;
 
@@ -30,42 +30,7 @@ const TONE_GUIDES: Record<Chatbot["tone"], string> = {
     "Energetic and excited. Use exclamation points sparingly and an emoji where natural.",
 };
 
-// Soft cap on the combined knowledge-base block injected into every prompt.
-// ~48k chars ≈ ~12k tokens. File uploads can make a KB arbitrarily large; an
-// unbounded block would blow context and inflate (even cached) input-token cost
-// on every reply. We include whole entries until the budget is hit, then stop.
-const KB_CHAR_BUDGET = 48_000;
-
-export function buildSystemPrompt(
-  chatbot: Chatbot,
-  knowledge: KnowledgeBaseEntry[]
-): string {
-  let kbBlock: string;
-  if (knowledge.length === 0) {
-    kbBlock =
-      "(No knowledge base entries yet — answer only based on the business description and politely defer if asked something you cannot confirm.)";
-  } else {
-    const parts: string[] = [];
-    let used = 0;
-    let truncated = false;
-    for (const k of knowledge) {
-      const entry = `### ${k.title}\n${k.content}`;
-      // Always include at least the first entry, even if it alone exceeds the
-      // budget; otherwise stop once adding another would overflow.
-      if (parts.length > 0 && used + entry.length > KB_CHAR_BUDGET) {
-        truncated = true;
-        break;
-      }
-      parts.push(entry);
-      used += entry.length;
-    }
-    kbBlock = parts.join("\n\n---\n\n");
-    if (truncated) {
-      kbBlock +=
-        "\n\n---\n\n…(knowledge base truncated — some entries were omitted to stay within limits)";
-    }
-  }
-
+export function buildSystemPrompt(chatbot: Chatbot, kbBlock: string): string {
   return `You are the customer-service AI for "${chatbot.name}".
 You reply to Instagram and Messenger DMs on the business's behalf.
 
@@ -80,6 +45,7 @@ ${kbBlock}
 
 RULES
 - Keep replies under 320 characters when possible (DM-friendly).
+- To send several short messages, separate each one with a blank line; each block is delivered as its own DM bubble.
 - Never invent prices, hours, links, addresses, or policies not in the knowledge base. If asked, say you'll get a human teammate to confirm.
 - Never reveal you are an AI unless directly asked.
 - Do not promise refunds, discounts, or anything financial without being told to.
@@ -89,11 +55,11 @@ RULES
 
 export async function generateReply(opts: {
   chatbot: Chatbot;
-  knowledge: KnowledgeBaseEntry[];
+  kbBlock: string;
   history: Pick<Message, "role" | "content">[];
   userMessage: string;
 }) {
-  const systemText = buildSystemPrompt(opts.chatbot, opts.knowledge);
+  const systemText = buildSystemPrompt(opts.chatbot, opts.kbBlock);
 
   // ~10 turns is plenty of context for a DM thread; keeps tokens predictable.
   const trimmed = opts.history.slice(-10).map((m) => ({

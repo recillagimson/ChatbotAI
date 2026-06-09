@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,29 +31,26 @@ export function KnowledgeBaseForm({
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { error } = await supabase.from("knowledge_base").insert({
-      chatbot_id: chatbotId,
-      user_id: user.id,
-      title,
-      content,
-      source_type: "manual",
-    });
-
-    if (error) {
-      setError(error.message);
+    try {
+      const res = await fetch("/api/knowledge-base", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatbot_id: chatbotId, title, content }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error ?? "Could not save entry.");
+        setLoading(false);
+        return;
+      }
+      setTitle("");
+      setContent("");
       setLoading(false);
-      return;
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save entry.");
+      setLoading(false);
     }
-    setTitle("");
-    setContent("");
-    setLoading(false);
-    router.refresh();
   }
 
   async function handleUpload(e: React.FormEvent) {

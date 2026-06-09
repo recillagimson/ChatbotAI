@@ -57,12 +57,23 @@ export function verifyManychatSecret(provided: string | null): boolean {
  */
 export async function sendManychatMessage(opts: {
   subscriberId: string;
-  text: string;
+  /**
+   * Reply text. Pass a string for a single bubble, or an array to send several
+   * separate DM bubbles in one call (each element renders as its own message).
+   */
+  text: string | string[];
   /** Instagram message tag for sending outside the 24h window (e.g. "HUMAN_AGENT"). */
   messageTag?: string;
 }) {
   const apiKey = process.env.MANYCHAT_API_KEY;
   if (!apiKey) throw new Error("MANYCHAT_API_KEY not set");
+
+  // Normalize to a list of non-empty bubbles. Nothing to send → no-op (also
+  // avoids posting a blank message when an empty string is passed).
+  const texts = (Array.isArray(opts.text) ? opts.text : [opts.text])
+    .map((t) => (t ?? "").trim())
+    .filter(Boolean);
+  if (texts.length === 0) return null;
 
   const res = await fetch("https://api.manychat.com/fb/sending/sendContent", {
     method: "POST",
@@ -76,7 +87,7 @@ export async function sendManychatMessage(opts: {
         version: "v2",
         content: {
           type: "instagram",
-          messages: [{ type: "text", text: opts.text }],
+          messages: texts.map((t) => ({ type: "text", text: t })),
         },
       },
     }),

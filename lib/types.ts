@@ -37,6 +37,7 @@ export interface Chatbot {
   instagram_username: string | null;
   system_prompt: string | null;
   is_active: boolean;
+  retrieval_active: boolean;
   auto_followup_enabled: boolean;
   auto_followup_days: number;
   auto_followup_repeat: boolean;
@@ -53,6 +54,8 @@ export interface KnowledgeBaseEntry {
   content: string;
   source_type: "manual" | "upload" | "url";
   source_name: string | null;
+  indexed: boolean;
+  needs_review: boolean;
   created_at: string;
 }
 
@@ -78,5 +81,16 @@ export interface Message {
   content: string;
   ai_generated: boolean;
   tokens_used: number | null;
+  created_at: string;
+}
+
+export interface KbChunk {
+  id: string;
+  knowledge_base_id: string;
+  chatbot_id: string;
+  user_id: string;
+  chunk_index: number;
+  content: string;
+  embedding_model: string | null;
   created_at: string;
 }

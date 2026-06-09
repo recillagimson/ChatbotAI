@@ -3,6 +3,8 @@ import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyManychatSecret, sendManychatMessage } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
+import { splitIntoMessages } from "@/lib/message-split";
+import { buildKbBlock } from "@/lib/retrieval";
 import {
   checkRateLimit,
   checkMonthlyCap,
@@ -11,10 +13,11 @@ import {
   incrementMonthlyCount,
   getTrivialReply,
 } from "@/lib/limits";
-import type { Chatbot, KnowledgeBaseEntry, Message } from "@/lib/types";
+import type { Chatbot, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const BodySchema = z.object({
   chatbot_id: z.string().uuid(),
@@ -34,9 +37,12 @@ const BodySchema = z.object({
  * docs/API.md). An empty `text` yields no message (used for human takeover).
  */
 function manychatReply(text: string, extra: Record<string, unknown> = {}) {
+  // Split into bubbles so the response body matches what we push (multiple
+  // short DMs instead of one wall of text); an empty `text` yields no message.
+  const bubbles = text ? splitIntoMessages(text) : [];
   return NextResponse.json({
     version: "v2",
-    content: { messages: text ? [{ type: "text", text }] : [] },
+    content: { messages: bubbles.map((t) => ({ type: "text", text: t })) },
     reply: text,
     ...extra,
   });
@@ -91,12 +97,14 @@ export async function POST(request: NextRequest) {
   const supabase = createServiceClient();
 
   // 3. Look up chatbot + verify subscription is active
-  const { data: chatbot } = await supabase
+  let chatbotQuery = supabase
     .from("chatbots")
     .select("*")
     .eq("id", body.chatbot_id)
-    .eq("is_active", true)
-    .single<Chatbot>();
+    .eq("is_active", true);
+  // Cross-tenant guard: if ManyChat sent a page_id, it MUST match this chatbot.
+  if (body.page_id) chatbotQuery = chatbotQuery.eq("manychat_page_id", body.page_id);
+  const { data: chatbot } = await chatbotQuery.single<Chatbot>();
 
   if (!chatbot) {
     return manychatReply("Sorry, this account isn't active right now.");
@@ -213,34 +221,33 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 7. Fetch knowledge + recent history. Order desc + limit so we get the
-  // newest 11 (= 10 prior + the just-inserted user message), not the oldest.
-  const [{ data: knowledge }, { data: history }] = await Promise.all([
-    supabase
-      .from("knowledge_base")
-      .select("*")
-      .eq("chatbot_id", chatbot.id)
-      .order("created_at", { ascending: true })
-      .returns<KnowledgeBaseEntry[]>(),
-    supabase
-      .from("messages")
-      .select("role, content")
-      .eq("conversation_id", conversationId!)
-      .order("created_at", { ascending: false })
-      .limit(11)
-      .returns<Pick<Message, "role" | "content">[]>(),
-  ]);
+  // 7. Fetch recent history. Order desc + limit so we get the newest 11
+  // (= 10 prior + the just-inserted user message), not the oldest.
+  const { data: history } = await supabase
+    .from("messages")
+    .select("role, content")
+    .eq("conversation_id", conversationId!)
+    .order("created_at", { ascending: false })
+    .limit(11)
+    .returns<Pick<Message, "role" | "content">[]>();
 
   // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
   const priorHistory = (history ?? []).slice(1).reverse();
 
-  // 8. Generate reply
+  // 8. Resolve KB (adaptive: full-context or vector retrieval) then generate.
+  const kb = await buildKbBlock({
+    supabase,
+    chatbot,
+    history: priorHistory,
+    userMessage: body.message,
+  });
+
   let replyText = "Thanks for the message — a teammate will follow up shortly.";
   let tokens = 0;
   try {
     const { text, tokensUsed } = await generateReply({
       chatbot,
-      knowledge: knowledge ?? [],
+      kbBlock: kb.block,
       history: priorHistory,
       userMessage: body.message,
     });
@@ -253,6 +260,9 @@ export async function POST(request: NextRequest) {
   }
 
   // 9. Persist outbound + usage
+  console.log(
+    `[manychat-webhook] kb mode=${kb.mode} chunks=${kb.chunks} topSim=${kb.topSimilarity ?? "-"} bot=${chatbot.id}`
+  );
   await Promise.all([
     supabase.from("messages").insert({
       conversation_id: conversationId!,
@@ -267,6 +277,12 @@ export async function POST(request: NextRequest) {
       event_type: "ai_reply",
       tokens_used: tokens,
     }),
+    supabase.from("usage_log").insert({
+      user_id: chatbot.user_id,
+      chatbot_id: chatbot.id,
+      event_type: "kb_retrieval",
+      tokens_used: kb.chunks,
+    }),
   ]);
 
   // 10. Deliver the reply to the user via ManyChat's Send Content API.
@@ -277,7 +293,9 @@ export async function POST(request: NextRequest) {
   try {
     await sendManychatMessage({
       subscriberId: body.subscriber_id,
-      text: replyText,
+      // Deliver as several short bubbles (one per burst) rather than one long
+      // message — the persona writes in bursts; this renders them separately.
+      text: splitIntoMessages(replyText),
     });
   } catch (err) {
     console.error("[manychat-webhook] push send failed", err);

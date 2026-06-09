@@ -234,3 +234,79 @@ create policy "own messages" on public.messages for all
 -- usage_log (read own)
 drop policy if exists "own usage" on public.usage_log;
 create policy "own usage" on public.usage_log for select using (auth.uid() = user_id);
+
+-- =====================================================================
+-- Feature: adaptive KB retrieval (pgvector)
+--   Derived kb_chunks index beside knowledge_base. Re-runnable.
+-- =====================================================================
+create extension if not exists vector;  -- project installs extensions in public (matches uuid-ossp/pgcrypto)
+
+-- Indexing/quality flags on the source entries.
+alter table public.knowledge_base
+  add column if not exists indexed      boolean not null default false,
+  add column if not exists needs_review boolean not null default false;
+
+-- Persisted retrieval mode for hysteresis (avoids flapping near the threshold).
+alter table public.chatbots
+  add column if not exists retrieval_active boolean not null default false;
+
+-- Derived retrieval index. One knowledge_base entry -> many chunks.
+create table if not exists public.kb_chunks (
+  id                uuid primary key default uuid_generate_v4(),
+  knowledge_base_id uuid not null references public.knowledge_base(id) on delete cascade,
+  chatbot_id        uuid not null references public.chatbots(id)       on delete cascade,
+  user_id           uuid not null references public.profiles(id)       on delete cascade,
+  chunk_index       int  not null,
+  content           text not null,
+  embedding         vector(1536),          -- text-embedding-3-small (1536-dim)
+  embedding_model   text,                  -- e.g. 'text-embedding-3-small'
+  created_at        timestamptz not null default now(),
+  unique (knowledge_base_id, chunk_index)
+);
+create index if not exists kb_chunks_chatbot_idx on public.kb_chunks(chatbot_id);
+create index if not exists kb_chunks_hnsw_idx
+  on public.kb_chunks using hnsw (embedding vector_cosine_ops)
+  where embedding is not null;
+
+alter table public.kb_chunks enable row level security;
+drop policy if exists "own kb chunks" on public.kb_chunks;
+create policy "own kb chunks" on public.kb_chunks for all
+  using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and chatbot_id in (select id from public.chatbots where user_id = auth.uid())
+  );
+
+-- Similarity search RPC. MUST stay SECURITY INVOKER. service_role-only execute.
+create or replace function public.match_kb_chunks(
+  p_chatbot_id     uuid,
+  p_query          vector(1536),
+  p_top_k          int   default 8,
+  p_min_similarity float default 0.3,
+  p_model          text  default 'text-embedding-3-small'
+)
+returns table (content text, knowledge_base_id uuid, chunk_index int, similarity float)
+language sql stable
+security invoker
+as $$
+  select c.content, c.knowledge_base_id, c.chunk_index,
+         1 - (c.embedding <=> p_query) as similarity
+  from public.kb_chunks c
+  where c.chatbot_id = p_chatbot_id
+    and c.embedding is not null
+    and c.embedding_model = p_model
+    and (1 - (c.embedding <=> p_query)) >= p_min_similarity
+  order by c.embedding <=> p_query
+  limit p_top_k;
+$$;
+
+revoke all on function public.match_kb_chunks(uuid, vector, int, float, text)
+  from public, anon, authenticated;
+grant execute on function public.match_kb_chunks(uuid, vector, int, float, text)
+  to service_role;
+
+-- Teardown (down-migration), if the feature is pulled:
+-- drop function if exists public.match_kb_chunks(uuid, vector, int, float, text);
+-- drop table if exists public.kb_chunks;
+-- alter table public.chatbots drop column if exists retrieval_active;
+-- alter table public.knowledge_base drop column if exists indexed, drop column if exists needs_review;

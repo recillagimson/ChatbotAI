@@ -1,5 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { indexEntry } from "@/lib/retrieval";
+import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 import { extractText, getDocumentProxy } from "unpdf";
 import mammoth from "mammoth";
 
@@ -34,6 +37,8 @@ interface FileResult {
   ok: boolean;
   chars?: number;
   truncated?: boolean;
+  needsReview?: boolean;
+  indexed?: boolean;
   error?: string;
 }
 
@@ -76,6 +81,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "no files uploaded" }, { status: 400 });
   }
 
+  // Per-chatbot KB-size cap (mirrors the paste-text create route): bounds
+  // embedding volume/cost. Tracked as a running total across this upload.
+  const { data: sizeRows } = await supabase
+    .from("knowledge_base")
+    .select("content")
+    .eq("chatbot_id", chatbotId);
+  let kbChars = (sizeRows ?? []).reduce(
+    (n, r) => n + (r.content?.length ?? 0),
+    0
+  );
+
   const results: FileResult[] = [];
   for (const file of files) {
     try {
@@ -85,27 +101,52 @@ export async function POST(request: NextRequest) {
       if (file.size > MAX_FILE_BYTES) {
         throw new Error("File exceeds the 10 MB limit");
       }
-      let text = (await parseFile(file)).trim();
-      if (!text) {
+      const rawText = (await parseFile(file)).trim();
+      if (!rawText) {
         throw new Error("No readable text found in the file");
       }
+      // Yield on the FULL extracted length (before truncation): a near-zero
+      // ratio means an image/scanned PDF; a truncated large file is high-yield.
+      const yieldPerKb = rawText.length / Math.max(1, file.size / 1024);
+      const needsReview = yieldPerKb < 100;
+
+      let text = rawText;
       let truncated = false;
       if (text.length > MAX_TEXT_CHARS) {
         text = text.slice(0, MAX_TEXT_CHARS);
         truncated = true;
       }
 
-      const { error } = await supabase.from("knowledge_base").insert({
-        chatbot_id: chatbotId,
-        user_id: user.id,
-        title: file.name,
-        content: text,
-        source_type: "upload",
-        source_name: file.name,
-      });
-      if (error) throw new Error(error.message);
+      if (kbChars + text.length > MAX_KB_CHARS_PER_CHATBOT) {
+        throw new Error("Knowledge base size limit reached for this chatbot");
+      }
 
-      results.push({ name: file.name, ok: true, chars: text.length, truncated });
+      const { data: inserted, error } = await supabase
+        .from("knowledge_base")
+        .insert({
+          chatbot_id: chatbotId,
+          user_id: user.id,
+          title: file.name,
+          content: text,
+          source_type: "upload",
+          source_name: file.name,
+          needs_review: needsReview,
+        })
+        .select("id, chatbot_id, user_id, content")
+        .single();
+      if (error || !inserted) throw new Error(error?.message ?? "insert failed");
+
+      kbChars += text.length;
+      const idx = await indexEntry(createServiceClient(), inserted);
+
+      results.push({
+        name: file.name,
+        ok: true,
+        chars: text.length,
+        truncated,
+        needsReview,
+        indexed: idx.indexed,
+      });
     } catch (err) {
       results.push({
         name: file.name,

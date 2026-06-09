@@ -19,6 +19,8 @@ type Entry = {
   source_type: string;
   created_at: string;
   chatbots: { name: string } | null;
+  indexed?: boolean;
+  needs_review?: boolean;
 };
 
 export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
@@ -51,6 +53,10 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
               <div className="flex items-center gap-2 mt-1">
                 <Badge variant="secondary">{e.chatbots?.name ?? "—"}</Badge>
                 <Badge variant="outline">{e.source_type}</Badge>
+                {e.needs_review && (
+                  <Badge variant="destructive">needs review</Badge>
+                )}
+                {e.indexed && <Badge variant="outline">indexed</Badge>}
               </div>
             </div>
             <Button variant="ghost" size="icon" onClick={() => remove(e.id)}>
