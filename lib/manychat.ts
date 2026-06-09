@@ -15,6 +15,7 @@
  */
 
 import { createHash, timingSafeEqual } from "crypto";
+import { sanitizeReply } from "./sanitize";
 
 export interface ManyChatWebhookPayload {
   /** ManyChat subscriber id (string) */
@@ -70,8 +71,11 @@ export async function sendManychatMessage(opts: {
 
   // Normalize to a list of non-empty bubbles. Nothing to send → no-op (also
   // avoids posting a blank message when an empty string is passed).
+  // sanitizeReply is the final guaranteed backstop: every outbound bubble from
+  // any path (AI reply, canned ack, dedup echo) is stripped of em/en dashes
+  // here so none ever reaches Instagram.
   const texts = (Array.isArray(opts.text) ? opts.text : [opts.text])
-    .map((t) => (t ?? "").trim())
+    .map((t) => sanitizeReply((t ?? "").trim()))
     .filter(Boolean);
   if (texts.length === 0) return null;
 

@@ -194,7 +194,9 @@ export async function POST(request: NextRequest) {
   }
 
   // 6b. Trivial-input shortcut: "thanks" / "ok" / 👍 → static ack, no AI.
-  const trivial = getTrivialReply(body.message);
+  // Persona bots (custom system_prompt) skip this so even a "thanks" gets an
+  // in-voice reply from the persona instead of a generic canned line.
+  const trivial = chatbot.system_prompt ? null : getTrivialReply(body.message);
   if (trivial) {
     await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial);
     return manychatReply(trivial, { ai_skipped: true, reason: "trivial_ack" });
@@ -203,7 +205,7 @@ export async function POST(request: NextRequest) {
   // 6c. Duplicate-message dedup: same message inside 30s → echo prior reply.
   const dup = await checkDuplicate(chatbot.id, body.subscriber_id, body.message);
   if (dup.isDuplicate) {
-    const echo = dup.lastReply ?? "Still on that — give me just a sec!";
+    const echo = dup.lastReply ?? "Still on that, give me just a sec!";
     await persistAndPush(supabase, conversationId!, body.subscriber_id, echo);
     return manychatReply(echo, { ai_skipped: true, reason: "duplicate" });
   }
@@ -242,7 +244,7 @@ export async function POST(request: NextRequest) {
     userMessage: body.message,
   });
 
-  let replyText = "Thanks for the message — a teammate will follow up shortly.";
+  let replyText = "Thanks for the message, a teammate will follow up shortly.";
   let tokens = 0;
   try {
     const { text, tokensUsed } = await generateReply({

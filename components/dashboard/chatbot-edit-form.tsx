@@ -18,6 +18,7 @@ export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
     chatbot.business_description ?? ""
   );
   const [tone, setTone] = useState<Tone>(chatbot.tone);
+  const [systemPrompt, setSystemPrompt] = useState(chatbot.system_prompt ?? "");
   const [instagramUsername, setInstagramUsername] = useState(
     chatbot.instagram_username ?? ""
   );
@@ -41,6 +42,7 @@ export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
         name: name.trim(),
         business_description: description.trim() || null,
         tone,
+        system_prompt: systemPrompt.trim() || null,
         instagram_username: instagramUsername.trim() || null,
       })
       .eq("id", chatbot.id);
@@ -116,6 +118,28 @@ export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
           <option value="casual">Casual</option>
           <option value="enthusiastic">Enthusiastic</option>
         </select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="edit-system-prompt">
+          System prompt / persona (advanced)
+        </Label>
+        <Textarea
+          id="edit-system-prompt"
+          rows={10}
+          placeholder="Paste a full persona prompt here (e.g. a named character with its own voice and rules)."
+          value={systemPrompt}
+          onChange={(e) => {
+            setSystemPrompt(e.target.value);
+            setSaved(false);
+          }}
+        />
+        <p className="text-xs text-muted-foreground">
+          When set, this overrides the business description and reply tone above
+          and becomes the bot&apos;s full instructions. The knowledge base is
+          still appended automatically. Leave blank to use the description and
+          tone instead.
+        </p>
       </div>
 
       {error && (

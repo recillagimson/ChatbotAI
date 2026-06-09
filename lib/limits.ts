@@ -120,7 +120,7 @@ export function getTrivialReply(text: string): string | null {
     .replace(/[.!?]+$/g, "")
     .replace(/\s+/g, " ");
   if (!n) return null;
-  if (THANKS_SET.has(n)) return "You're welcome — happy to help! Reach out anytime.";
+  if (THANKS_SET.has(n)) return "You're welcome, happy to help! Reach out anytime.";
   if (ACK_SET.has(n)) return "Got it! Let me know if there's anything else.";
   return null;
 }

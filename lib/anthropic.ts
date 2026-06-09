@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Chatbot, Message } from "./types";
+import { sanitizeReply } from "./sanitize";
 
 let _anthropic: Anthropic | null = null;
 
@@ -31,6 +32,22 @@ const TONE_GUIDES: Record<Chatbot["tone"], string> = {
 };
 
 export function buildSystemPrompt(chatbot: Chatbot, kbBlock: string): string {
+  // A chatbot with a custom system_prompt (a full persona like "Evan") takes
+  // over completely: drop the generic name/description/tone scaffolding (which
+  // would otherwise fight the persona — e.g. the friendly tone guide says
+  // "light emoji ok" and the header reframes it as a customer-service bot) and
+  // append only the knowledge base plus the bubble-split note the persona can't
+  // know about on its own.
+  if (chatbot.system_prompt && chatbot.system_prompt.trim()) {
+    return `${chatbot.system_prompt.trim()}
+
+KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
+${kbBlock}
+
+DELIVERY FORMAT
+To send several short messages, separate each one with a blank line. Each block is delivered as its own separate Instagram DM bubble. Keep each bubble short.`;
+  }
+
   return `You are the customer-service AI for "${chatbot.name}".
 You reply to Instagram and Messenger DMs on the business's behalf.
 
@@ -85,11 +102,13 @@ export async function generateReply(opts: {
     messages: [...trimmed, { role: "user", content: opts.userMessage }],
   });
 
-  const text = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n")
-    .trim();
+  const text = sanitizeReply(
+    response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("\n")
+      .trim()
+  );
 
   const usage = response.usage;
   return {
