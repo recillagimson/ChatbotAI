@@ -49,6 +49,29 @@ function manychatReply(text: string, extra: Record<string, unknown> = {}) {
 }
 
 /**
+ * Durable record that a reply was saved but never delivered (ManyChat push
+ * failed after retries). usage_log's event_type is free text, so no migration;
+ * scripts/diag-noreply.ps1 surfaces these. Best-effort: a logging failure must
+ * never break the response.
+ */
+async function logPushFailure(
+  supabase: ReturnType<typeof createServiceClient>,
+  userId: string,
+  chatbotId: string
+): Promise<void> {
+  try {
+    await supabase.from("usage_log").insert({
+      user_id: userId,
+      chatbot_id: chatbotId,
+      event_type: "push_failed",
+      tokens_used: 0,
+    });
+  } catch {
+    /* never throw from observability */
+  }
+}
+
+/**
  * Helper for canned-reply paths (rate-limit-passed gates that bypass the AI):
  * persists the outbound message in the conversation and pushes via ManyChat.
  * Each side is independent — a ManyChat failure doesn't lose the DB row.
@@ -57,7 +80,9 @@ async function persistAndPush(
   supabase: ReturnType<typeof createServiceClient>,
   conversationId: string,
   subscriberId: string,
-  text: string
+  text: string,
+  userId: string,
+  chatbotId: string
 ): Promise<void> {
   await Promise.all([
     supabase.from("messages").insert({
@@ -67,8 +92,9 @@ async function persistAndPush(
       ai_generated: false,
       tokens_used: 0,
     }),
-    sendManychatMessage({ subscriberId, text }).catch((err) => {
+    sendManychatMessage({ subscriberId, text }).catch(async (err) => {
       console.error("[manychat-webhook] push send failed", err);
+      await logPushFailure(supabase, userId, chatbotId);
     }),
   ]);
 }
@@ -140,20 +166,37 @@ export async function POST(request: NextRequest) {
   let conversationStatus = existing?.status;
 
   if (!existing) {
-    const { data: created } = await supabase
+    // Upsert, not insert: two simultaneous FIRST messages from one new
+    // subscriber both pass the SELECT above with no row, and a plain INSERT
+    // makes the loser violate unique(chatbot_id, manychat_subscriber_id) and
+    // 500 with no reply. On conflict the loser merge-updates the winner's row
+    // and gets back its real id/status. `status` is deliberately omitted:
+    // the schema default covers fresh inserts, and a conflict-update must not
+    // un-pause an ai_paused conversation (human takeover).
+    const { data: created, error: convError } = await supabase
       .from("conversations")
-      .insert({
-        chatbot_id: chatbot.id,
-        user_id: chatbot.user_id,
-        manychat_subscriber_id: body.subscriber_id,
-        contact_name: displayName,
-        contact_username: body.username ?? null,
-        status: "active",
-      })
+      .upsert(
+        {
+          chatbot_id: chatbot.id,
+          user_id: chatbot.user_id,
+          manychat_subscriber_id: body.subscriber_id,
+          contact_name: displayName,
+          contact_username: body.username ?? null,
+        },
+        { onConflict: "chatbot_id,manychat_subscriber_id" }
+      )
       .select("id, status")
       .single();
-    conversationId = created!.id;
-    conversationStatus = created!.status;
+    if (convError || !created) {
+      // Any DB failure here must still produce a 200 + reply, never a 500.
+      console.error("[manychat-webhook] conversation upsert failed", convError);
+      return manychatReply(
+        "Thanks for your message! We'll get back to you shortly.",
+        { ai_skipped: true, reason: "conversation_error" }
+      );
+    }
+    conversationId = created.id;
+    conversationStatus = created.status;
   } else {
     await supabase
       .from("conversations")
@@ -198,7 +241,7 @@ export async function POST(request: NextRequest) {
   // in-voice reply from the persona instead of a generic canned line.
   const trivial = chatbot.system_prompt ? null : getTrivialReply(body.message);
   if (trivial) {
-    await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial);
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial, chatbot.user_id, chatbot.id);
     return manychatReply(trivial, { ai_skipped: true, reason: "trivial_ack" });
   }
 
@@ -206,7 +249,7 @@ export async function POST(request: NextRequest) {
   const dup = await checkDuplicate(chatbot.id, body.subscriber_id, body.message);
   if (dup.isDuplicate) {
     const echo = dup.lastReply ?? "Still on that, give me just a sec!";
-    await persistAndPush(supabase, conversationId!, body.subscriber_id, echo);
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, echo, chatbot.user_id, chatbot.id);
     return manychatReply(echo, { ai_skipped: true, reason: "duplicate" });
   }
 
@@ -214,7 +257,7 @@ export async function POST(request: NextRequest) {
   const cap = await checkMonthlyCap(chatbot.id);
   if (!cap.ok) {
     const text = "Thanks for your message! We'll get back to you shortly.";
-    await persistAndPush(supabase, conversationId!, body.subscriber_id, text);
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, text, chatbot.user_id, chatbot.id);
     return manychatReply(text, {
       ai_skipped: true,
       reason: "monthly_cap_reached",
@@ -301,6 +344,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error("[manychat-webhook] push send failed", err);
+    await logPushFailure(supabase, chatbot.user_id, chatbot.id);
   }
 
   // 10a. Update Redis side-state: cache for dedup echo + bump monthly counter.

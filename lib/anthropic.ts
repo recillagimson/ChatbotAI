@@ -14,7 +14,11 @@ function getAnthropic(): Anthropic {
   if (!_anthropic) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-    _anthropic = new Anthropic({ apiKey });
+    // Explicit timeout: the SDK default is 10 minutes, but the webhook has
+    // maxDuration=60s — a hung call would let Vercel kill the function before
+    // even the canned fallback could be sent. 15s/attempt + 1 retry ≈ 31s worst
+    // case, leaving room for the ManyChat push retries inside the 60s budget.
+    _anthropic = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 1 });
   }
   return _anthropic;
 }

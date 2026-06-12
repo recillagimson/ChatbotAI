@@ -79,27 +79,64 @@ export async function sendManychatMessage(opts: {
     .filter(Boolean);
   if (texts.length === 0) return null;
 
-  const res = await fetch("https://api.manychat.com/fb/sending/sendContent", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      subscriber_id: opts.subscriberId,
-      data: {
-        version: "v2",
-        content: {
-          type: "instagram",
-          messages: texts.map((t) => ({ type: "text", text: t })),
-        },
+  const body = JSON.stringify({
+    subscriber_id: opts.subscriberId,
+    data: {
+      version: "v2",
+      content: {
+        type: "instagram",
+        messages: texts.map((t) => ({ type: "text", text: t })),
       },
-    }),
+    },
   });
 
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`ManyChat send failed: ${res.status} ${err}`);
+  // Retry transient failures (429 / 5xx / network) so a ManyChat blip doesn't
+  // silently drop a reply that's already saved to the DB. Other 4xx errors
+  // (invalid subscriber, closed messaging window) are permanent — throw
+  // immediately. Worst case 3×8s attempts + 1s+3s backoff = 28s, which fits
+  // the webhook's 60s budget after the AI call. Trade-off: if ManyChat accepts
+  // a request but our 8s abort fires before the response arrives, the retry
+  // double-delivers — a doubled reply beats a dropped one.
+  const ATTEMPTS = 3;
+  const BACKOFF_MS = [1_000, 3_000];
+  const ATTEMPT_TIMEOUT_MS = 8_000;
+  let lastError: Error = new Error("ManyChat send failed: no attempts made");
+
+  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    let delayMs = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
+    try {
+      const res = await fetch("https://api.manychat.com/fb/sending/sendContent", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body,
+        signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
+      });
+
+      if (res.ok) return res.json();
+
+      const errText = await res.text().catch(() => "");
+      lastError = new Error(
+        `ManyChat send failed: ${res.status} ${errText} (attempt ${attempt + 1}/${ATTEMPTS})`
+      );
+      if (res.status !== 429 && res.status < 500) throw lastError; // permanent
+      if (res.status === 429) {
+        const retryAfter = Number(res.headers.get("retry-after"));
+        if (Number.isFinite(retryAfter) && retryAfter > 0) {
+          delayMs = Math.min(retryAfter * 1_000, ATTEMPT_TIMEOUT_MS);
+        }
+      }
+    } catch (err) {
+      // fetch threw: network error or our abort. Both transient — retry.
+      // But re-throw the permanent-4xx error constructed above.
+      if (err === lastError) throw err;
+      lastError = new Error(
+        `ManyChat send failed: ${err instanceof Error ? err.message : String(err)} (attempt ${attempt + 1}/${ATTEMPTS})`
+      );
+    }
+    if (attempt < ATTEMPTS - 1) await new Promise((r) => setTimeout(r, delayMs));
   }
-  return res.json();
+  throw lastError;
 }
