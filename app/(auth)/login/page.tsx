@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -21,6 +21,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [linkFailed, setLinkFailed] = useState(false);
+
+  // Read one-time status flags the /auth/callback redirect leaves in the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setVerified(params.get("verified") === "1");
+    setLinkFailed(params.get("error") === "auth_failed");
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,6 +56,17 @@ export default function LoginPage() {
         <CardDescription>Log in to your ChatPilot account</CardDescription>
       </CardHeader>
       <CardContent>
+        {verified && (
+          <p className="text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded mb-4">
+            ✅ Your email is verified. You can log in now.
+          </p>
+        )}
+        {linkFailed && !verified && (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded mb-4">
+            That confirmation link didn&apos;t work or has expired. If your email
+            is already verified, just log in below, otherwise request a new link.
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
