@@ -15,15 +15,23 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const user = await getCurrentUser();
 
-  const [{ data: profile }, { data: subscription }, { count: chatbotCount }] =
-    await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user!.id).single(),
-      supabase.from("subscriptions").select("*").eq("user_id", user!.id).maybeSingle(),
-      supabase
-        .from("chatbots")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user!.id),
-    ]);
+  const [
+    { data: profile },
+    { data: subscription },
+    { count: chatbotCount },
+    { count: kbCount },
+  ] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user!.id).single(),
+    supabase.from("subscriptions").select("*").eq("user_id", user!.id).maybeSingle(),
+    supabase
+      .from("chatbots")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user!.id),
+    supabase
+      .from("knowledge_base")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user!.id),
+  ]);
 
   // Usage this month
   const monthStart = new Date();
@@ -129,12 +137,12 @@ export default async function DashboardPage() {
             href="/chatbots/new"
           />
           <StepRow
-            done={false}
+            done={(kbCount ?? 0) > 0}
             label="Add knowledge base entries"
             href="/knowledge-base"
           />
           <StepRow
-            done={false}
+            done={(conversationsCount ?? 0) > 0}
             label="Connect ManyChat → Instagram"
             href="/settings"
           />

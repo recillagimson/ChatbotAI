@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { MailCheck } from "lucide-react";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -22,13 +23,36 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    // Deterministic duplicate check first (server-side; reads the profiles
+    // source of truth). The signUp() heuristics below are only a backstop —
+    // they depend on Supabase's email-confirmation settings.
+    try {
+      const res = await fetch("/api/auth/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const { exists } = (await res.json()) as { exists?: boolean };
+      if (exists) {
+        setError(
+          "An account with this email already exists. Try logging in instead."
+        );
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Check failed (network/transient) — fall through; signUp still backstops.
+    }
+
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -37,12 +61,56 @@ export default function SignupPage() {
       },
     });
     if (error) {
+      // Covers the email-confirmation-disabled case, where Supabase returns an
+      // explicit "User already registered" error.
       setError(error.message);
       setLoading(false);
       return;
     }
-    router.push("/onboarding");
-    router.refresh();
+    // Already-registered detection: with email confirmation ON, Supabase does
+    // NOT error on a duplicate email (anti-enumeration); it returns a user with
+    // an empty `identities` array instead. Treat that as "already registered".
+    if (data.user && (data.user.identities?.length ?? 0) === 0) {
+      setError(
+        "An account with this email already exists. Try logging in instead."
+      );
+      setLoading(false);
+      return;
+    }
+    // A session means email confirmation is off — the user is signed in now.
+    if (data.session) {
+      router.push("/onboarding");
+      router.refresh();
+      return;
+    }
+    // No session: a confirmation email was sent. Tell them to check it.
+    setConfirmationSent(true);
+    setLoading(false);
+  }
+
+  if (confirmationSent) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Check your email</CardTitle>
+          <CardDescription>One last step to activate your account</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center space-y-4 py-2">
+            <MailCheck className="h-12 w-12 text-primary mx-auto" />
+            <p className="text-sm text-muted-foreground">
+              We sent a confirmation link to{" "}
+              <span className="font-medium text-foreground">{email}</span>. Click
+              it to activate your account, then log in. If you don&apos;t see it,
+              check your spam folder.
+            </p>
+            <Button asChild className="w-full">
+              <Link href="/login">Go to login</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
