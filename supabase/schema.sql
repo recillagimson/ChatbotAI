@@ -141,6 +141,16 @@ alter table public.conversations
 create index if not exists conversations_followup_idx
   on public.conversations(status, last_message_at desc);
 
+-- ---------------------------------------------------------------------
+-- Feature: per-chatbot ManyChat credentials
+--   Each chatbot stores its own ManyChat API key (encrypted at rest) and a
+--   per-chatbot inbound webhook secret. Re-runnable.
+-- ---------------------------------------------------------------------
+alter table public.chatbots
+  add column if not exists manychat_api_key_enc text,            -- AES-256-GCM ciphertext; null => global env fallback
+  add column if not exists webhook_secret text not null
+      default encode(gen_random_bytes(24), 'hex');              -- per-chatbot inbound auth token (gen_random_bytes from pgcrypto, already enabled)
+
 -- =====================================================================
 -- Trigger: auto-create profile on auth signup
 -- =====================================================================
