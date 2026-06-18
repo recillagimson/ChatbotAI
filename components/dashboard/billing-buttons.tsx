@@ -58,7 +58,7 @@ export function BillingButtons({
         </>
       ) : (
         <>
-          Subscribe · $349/mo
+          Subscribe · $997/mo
           <ArrowRight className="h-4 w-4" aria-hidden />
         </>
       )}

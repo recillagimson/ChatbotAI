@@ -14,7 +14,7 @@ export default function OnboardingPage() {
     <div className="p-8 max-w-3xl mx-auto">
       <div className="text-center mb-10">
         <CheckCircle2 className="h-12 w-12 text-primary mx-auto mb-3" />
-        <h1 className="text-3xl font-bold">You&apos;re in.</h1>
+        <h1 className="text-3xl font-display font-semibold tracking-tight">You&apos;re in.</h1>
         <p className="text-muted-foreground">
           Four quick steps and your AI is replying to DMs.
         </p>
@@ -25,7 +25,7 @@ export default function OnboardingPage() {
           icon={CreditCard}
           n={1}
           title="Activate your subscription"
-          description="Unlock AI replies with the $349/mo plan."
+          description="Unlock AI replies with the $997/mo plan."
           href="/billing"
           cta="Subscribe"
         />

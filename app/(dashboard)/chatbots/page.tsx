@@ -24,7 +24,7 @@ export default async function ChatbotsPage() {
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold">Chatbots</h1>
+          <h1 className="text-3xl font-display font-semibold tracking-tight">Chatbots</h1>
           <p className="text-muted-foreground">
             One chatbot per Instagram or Messenger page you want to automate.
           </p>

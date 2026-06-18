@@ -1,4 +1,4 @@
-# ChatPilot API Reference
+# SpeedSettr API Reference
 
 This is the HTTP API exposed by the app. Most of it is internal (called by the dashboard or by ManyChat / Stripe webhooks), but documented here so you can integrate with it, test it, or build alternative front-ends.
 

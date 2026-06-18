@@ -1,4 +1,4 @@
-# ChatPilot
+# SpeedSettr
 
 AI chatbot SaaS for Instagram and Messenger DMs. Small businesses subscribe ($349/mo), connect their Instagram via ManyChat, paste their FAQ, and the AI handles their DMs 24/7.
 
@@ -46,7 +46,7 @@ Then open <http://localhost:3000>.
                                          │
                                 ┌────────┴───────────┐
                                 │  Customer's        │
-                                │  ChatPilot         │
+                                │  SpeedSettr         │
                                 │  dashboard         │
                                 └────────────────────┘
 ```

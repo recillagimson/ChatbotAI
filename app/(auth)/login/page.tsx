@@ -54,7 +54,7 @@ export default function LoginPage() {
     <Card>
       <CardHeader>
         <CardTitle>Welcome back</CardTitle>
-        <CardDescription>Log in to your ChatPilot account</CardDescription>
+        <CardDescription>Log in to your SpeedSettr account</CardDescription>
       </CardHeader>
       <CardContent>
         {verified && (

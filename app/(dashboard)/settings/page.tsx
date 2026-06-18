@@ -23,7 +23,7 @@ export default async function SettingsPage() {
   return (
     <div className="p-8 max-w-3xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Settings</h1>
+        <h1 className="text-3xl font-display font-semibold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
           Manage your profile and ManyChat integration.
         </p>
@@ -56,7 +56,7 @@ export default async function SettingsPage() {
           <CardTitle>ManyChat connection guide</CardTitle>
           <CardDescription>
             Follow these steps in your ManyChat dashboard to send DMs into
-            ChatPilot.
+            SpeedSettr.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">

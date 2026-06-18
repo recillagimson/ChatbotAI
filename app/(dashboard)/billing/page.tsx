@@ -71,7 +71,7 @@ export default async function BillingPage({
   return (
     <div className="p-6 sm:p-8 max-w-3xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">Billing</h1>
+        <h1 className="text-3xl font-display font-semibold tracking-tight">Billing</h1>
         <p className="text-muted-foreground mt-1">
           Manage your subscription and payment method.
         </p>
@@ -135,13 +135,13 @@ export default async function BillingPage({
           {/* Price */}
           <div className="mt-6">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-4xl font-bold tracking-tight tabular-nums">
-                $349
+              <span className="text-4xl font-display font-semibold tracking-tight tabular-nums">
+                $997
               </span>
               <span className="text-muted-foreground">/ month</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Cancel anytime. No setup fees.
+              Cancel anytime. No setup fees. Save 10% on yearly billing.
             </p>
           </div>
 

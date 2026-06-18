@@ -1,4 +1,4 @@
-# ChatPilot — Setup Guide
+# SpeedSettr — Setup Guide
 
 This is your **end-to-end checklist** to take the platform from empty folder → live, paying customers.
 
@@ -95,7 +95,7 @@ You'll fill it in as you go through the sections below.
 1. Go to <https://dashboard.stripe.com> and sign in (or sign up).
 2. Stay in **Test mode** for now (toggle top-right).
 3. **Products → Add product**:
-   - Name: `ChatPilot Professional`
+   - Name: `SpeedSettr Professional`
    - Description: `AI replies for Instagram & Messenger DMs`
    - Pricing model: **Standard pricing → Recurring**
    - Price: `349.00 USD`, billed **monthly**.

@@ -22,7 +22,7 @@ export default async function ConversationsPage() {
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Conversations</h1>
+        <h1 className="text-3xl font-display font-semibold tracking-tight">Conversations</h1>
         <p className="text-muted-foreground">
           Every DM thread across your chatbots. Click in to view or take over.
         </p>

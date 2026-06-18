@@ -56,7 +56,7 @@ export default async function DashboardPage() {
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">
+        <h1 className="text-3xl font-display font-semibold tracking-tight">
           Welcome{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}
         </h1>
         <p className="text-muted-foreground">
@@ -73,7 +73,7 @@ export default async function DashboardPage() {
                 Your subscription is not active yet
               </p>
               <p className="text-sm text-amber-700">
-                Activate your $349/mo plan to start receiving AI replies.
+                Activate your $997/mo plan to start receiving AI replies.
               </p>
             </div>
             <Button asChild>
@@ -90,7 +90,7 @@ export default async function DashboardPage() {
             <Bot className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{chatbotCount ?? 0}</div>
+            <div className="text-2xl font-display font-semibold tabular-nums">{chatbotCount ?? 0}</div>
             <p className="text-xs text-muted-foreground">active assistants</p>
           </CardContent>
         </Card>
@@ -100,7 +100,7 @@ export default async function DashboardPage() {
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{conversationsCount ?? 0}</div>
+            <div className="text-2xl font-display font-semibold tabular-nums">{conversationsCount ?? 0}</div>
             <p className="text-xs text-muted-foreground">total threads</p>
           </CardContent>
         </Card>
@@ -112,7 +112,7 @@ export default async function DashboardPage() {
             <Zap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{repliesThisMonth ?? 0}</div>
+            <div className="text-2xl font-display font-semibold tabular-nums">{repliesThisMonth ?? 0}</div>
             <p className="text-xs text-muted-foreground">unlimited on your plan</p>
           </CardContent>
         </Card>
@@ -128,7 +128,7 @@ export default async function DashboardPage() {
         <CardContent className="space-y-3">
           <StepRow
             done={subActive}
-            label="Activate your $349/mo subscription"
+            label="Activate your $997/mo subscription"
             href="/billing"
           />
           <StepRow

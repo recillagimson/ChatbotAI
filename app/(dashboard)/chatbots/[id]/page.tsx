@@ -44,7 +44,7 @@ export default async function ChatbotDetailPage({
     <div className="p-8 max-w-4xl mx-auto">
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold">{chatbot.name}</h1>
+          <h1 className="text-3xl font-display font-semibold tracking-tight">{chatbot.name}</h1>
           <p className="text-muted-foreground">
             {chatbot.instagram_username
               ? `@${chatbot.instagram_username}`
@@ -61,7 +61,7 @@ export default async function ChatbotDetailPage({
         <Card>
           <CardContent className="pt-6">
             <p className="text-xs text-muted-foreground">Knowledge entries</p>
-            <p className="text-2xl font-bold">{kbCount ?? 0}</p>
+            <p className="text-2xl font-display font-semibold tabular-nums">{kbCount ?? 0}</p>
             <Button asChild variant="link" className="p-0 h-auto mt-2">
               <Link href="/knowledge-base">Manage</Link>
             </Button>
@@ -70,7 +70,7 @@ export default async function ChatbotDetailPage({
         <Card>
           <CardContent className="pt-6">
             <p className="text-xs text-muted-foreground">Conversations</p>
-            <p className="text-2xl font-bold">{convCount ?? 0}</p>
+            <p className="text-2xl font-display font-semibold tabular-nums">{convCount ?? 0}</p>
             <Button asChild variant="link" className="p-0 h-auto mt-2">
               <Link href="/conversations">View inbox</Link>
             </Button>

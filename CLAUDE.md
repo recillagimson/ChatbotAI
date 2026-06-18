@@ -1,10 +1,10 @@
-# ChatPilot — Project Context for Claude
+# SpeedSettr — Project Context for Claude
 
 > This file is auto-loaded every time Claude opens this project. It tells future Claude (or a fresh session) where we are and what's next. **Read this first.**
 
 ## What this project is
 
-A SaaS platform (working title: **ChatPilot**, real brand will be **Highthrive**) that auto-replies to Instagram and Messenger DMs using AI. Setty.ai-style. Small businesses subscribe at $349/mo and get a chatbot trained on their FAQ.
+A SaaS platform (**SpeedSettr** — www.speedsettr.com) that auto-replies to Instagram and Messenger DMs using AI. Setty.ai-style. Small businesses subscribe at $997/mo and get a chatbot trained on their FAQ.
 
 - **Owner:** Franco / Gimson (highthriveva@gmail.com)
 - **Built:** May 2026
@@ -78,7 +78,7 @@ A SaaS platform (working title: **ChatPilot**, real brand will be **Highthrive**
 
 5. **The user is the founder, not the deep technical owner.** Bias toward writing complete code and giving click-by-click instructions for third-party tools (Stripe, Supabase, ManyChat dashboards). Don't ask them to fill in implementation details.
 
-6. **Brand:** "ChatPilot" is a placeholder used throughout the codebase. The real brand is likely **Highthrive** (folder name + user's email). Do a find-and-replace before public launch — `ChatPilot` appears in `app/page.tsx`, `app/layout.tsx`, sidebar, auth pages, billing page, metadata.
+6. **Brand:** The product is **SpeedSettr** (www.speedsettr.com). Logo assets live in `public/brand/` (app-icon, icon-color, horizontal lockups); the favicon is `app/icon.svg`; the reusable mark+wordmark is `components/brand/logo.tsx` (`<Logo dark />` on dark surfaces). The lockup art spells it "Speedsettr" (lowercase s) but the app text uses "SpeedSettr" — confirm canonical casing with the owner. NOTE: internal Redis key prefixes still use `chatpilot:` (in `lib/limits.ts`) — leave them; they're invisible namespaces, not the brand, and renaming would reset live counters.
 
 ## How to verify the local setup still works (resume sanity check)
 

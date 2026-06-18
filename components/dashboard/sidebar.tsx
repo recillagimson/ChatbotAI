@@ -11,9 +11,8 @@ import {
   Settings,
   CreditCard,
   LogOut,
-  MessageCircle,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/brand/logo";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
@@ -38,11 +37,10 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-64 border-r bg-card flex flex-col">
-      <div className="h-16 flex items-center px-6 border-b">
-        <Link href="/dashboard" className="flex items-center gap-2 font-bold">
-          <MessageCircle className="h-5 w-5 text-primary" />
-          ChatPilot
+    <aside className="w-64 flex flex-col bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))]">
+      <div className="h-16 flex items-center px-6 border-b border-white/10">
+        <Link href="/dashboard" aria-label="SpeedSettr">
+          <Logo dark />
         </Link>
       </div>
       <nav className="flex-1 p-3 space-y-1">
@@ -55,11 +53,12 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                 active
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-accent"
+                  ? "bg-[hsl(var(--sidebar-active))] text-white shadow-sm"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
               )}
             >
               <Icon className="h-4 w-4" />
@@ -68,15 +67,15 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="p-3 border-t">
-        <Button
-          variant="ghost"
-          className="w-full justify-start"
+      <div className="p-3 border-t border-white/10">
+        <button
+          type="button"
           onClick={signOut}
+          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
         >
-          <LogOut className="h-4 w-4 mr-2" />
+          <LogOut className="h-4 w-4" />
           Sign out
-        </Button>
+        </button>
       </div>
     </aside>
   );

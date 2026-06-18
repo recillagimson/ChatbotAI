@@ -62,7 +62,7 @@ export default function NewChatbotPage() {
 
   return (
     <div className="p-8 max-w-2xl mx-auto">
-      <h1 className="text-3xl font-bold mb-2">New chatbot</h1>
+      <h1 className="text-3xl font-display font-semibold tracking-tight mb-2">New chatbot</h1>
       <p className="text-muted-foreground mb-8">
         Tell us about the business this chatbot will represent.
       </p>

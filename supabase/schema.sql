@@ -1,5 +1,5 @@
 -- =====================================================================
--- ChatPilot — Supabase schema
+-- SpeedSettr — Supabase schema
 -- Run this in the Supabase SQL Editor (one shot is fine; idempotent-ish).
 -- =====================================================================
 

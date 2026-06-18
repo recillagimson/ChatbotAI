@@ -58,7 +58,7 @@ export default async function ConversationDetailPage({
 
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-display font-semibold tracking-tight">
             {conversation.contact_name ||
               conversation.contact_username ||
               "Unknown contact"}
