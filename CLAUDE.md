@@ -55,7 +55,7 @@ A SaaS platform (**SpeedSettr** — www.speedsettr.com) that auto-replies to Ins
 ### Priority 3 — Live Instagram test via ManyChat (when boss's IG is verified)
 - Connect IG account in ManyChat (Settings → Channels → Instagram)
 - Build the "AI Reply" flow in ManyChat — see `SETUP.md` §5c and `/chatbots/[id]` page in dashboard for the exact JSON body
-- Critical: paste the same `MANYCHAT_WEBHOOK_SECRET` value from `.env.local` into the ManyChat header
+- Critical: in the ManyChat External Request header `x-manychat-secret`, paste the per-chatbot webhook secret shown on the Chatbots → [your bot] page (each chatbot has its own; the global `MANYCHAT_WEBHOOK_SECRET` env var is only a fallback for an un-migrated bot).
 - Use the chatbot UUID from the dashboard in the flow body
 - Map response field `reply` to a ManyChat custom field, then Send Message with that field
 

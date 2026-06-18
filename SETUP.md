@@ -234,6 +234,7 @@ Open <http://localhost:3000>. You should see the landing page.
      -H "x-manychat-secret: YOUR_SECRET" `
      -d '{\"chatbot_id\":\"YOUR_CHATBOT_UUID\",\"subscriber_id\":\"test-1\",\"message\":\"what are your hours?\"}'
    ```
+   *(Replace `YOUR_SECRET` with the per-chatbot webhook secret from **Chatbots → [your bot]** page; or `MANYCHAT_WEBHOOK_SECRET` from `.env.local` if using the global fallback for an un-migrated bot.)*
    You should get a JSON reply with the AI answer. The conversation appears in `/conversations`.
 7. Go to ManyChat, paste your chatbot UUID into the flow's body, and send yourself a DM from another Instagram account to verify end-to-end.
 
