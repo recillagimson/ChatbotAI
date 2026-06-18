@@ -402,6 +402,11 @@ export async function POST(request: NextRequest) {
 
   // 11. Return 200. Body kept in ManyChat format for backward-compat and local
   // tooling (chat-test); the actual delivery happened via the push above.
+  // If we couldn't resolve a ManyChat key, the reply was persisted but not
+  // delivered — return an empty body so no inline-render path delivers it either.
+  if (!apiKey) {
+    return manychatReply("", { ai_skipped: true, reason: "manychat_key_unavailable" });
+  }
   return manychatReply(replyText);
 }
 
