@@ -71,11 +71,13 @@ export default async function SettingsPage() {
             </code>
           </Step>
           <Step n={3}>
-            Add a header:{" "}
+            Add a header named{" "}
             <code className="bg-muted px-2 py-0.5 rounded text-xs">
-              x-manychat-secret: YOUR_SECRET
-            </code>
-            (the value of MANYCHAT_WEBHOOK_SECRET in your .env).
+              x-manychat-secret
+            </code>{" "}
+            and paste the secret value shown on your{" "}
+            <b>Chatbots → [your chatbot]</b> page (each chatbot has its own
+            secret).
           </Step>
           <Step n={4}>
             Set the request body (JSON) — copy the template from your
