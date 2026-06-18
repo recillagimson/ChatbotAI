@@ -72,7 +72,7 @@ A SaaS platform (**SpeedSettr** — www.speedsettr.com) that auto-replies to Ins
 
 2. **Don't propose direct Meta Graph API.** User explicitly chose ManyChat for speed-to-market. Customers bring their own ManyChat accounts; we are not multi-tenant on ManyChat itself.
 
-3. **`MANYCHAT_WEBHOOK_SECRET` is invented by us, not from ManyChat.** ManyChat's "API key" is a different thing (the colon-separated `pageId:token` format). The webhook secret is a shared password we paste into the External Request header in ManyChat.
+3. **ManyChat credentials are now per-chatbot, managed in-app.** Each chatbot row on the `chatbots` table carries its own `manychat_api_key_enc` (AES-256-GCM ciphertext, decrypted server-side via `lib/crypto.ts`) and `webhook_secret` (plaintext, shown to the owner and rotatable on the chatbot page). Inbound webhook auth checks the chatbot's own `webhook_secret` against the `x-manychat-secret` header, falling back to the global `MANYCHAT_WEBHOOK_SECRET` env var for un-migrated bots. Outbound sends use the chatbot's decrypted key, falling back to the global `MANYCHAT_API_KEY`; a present-but-undecryptable key HARD-FAILS (never falls back) to prevent cross-tenant delivery. The master encryption key is `CREDENTIALS_ENC_KEY` (64 hex chars, required once any customer saves a key). Resolution logic lives in `lib/manychat.ts` → `resolveManychatApiKey`. The global env vars remain only as fallbacks for the original single-bot setup.
 
 4. **Never put real secrets in `.env.example`.** That file is for placeholder templates only — it's the file that gets committed. Real values go in `.env.local` (gitignored).
 
