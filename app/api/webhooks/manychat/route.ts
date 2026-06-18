@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
-import { verifyManychatSecret, sendManychatMessage } from "@/lib/manychat";
+import {
+  verifyManychatSecret,
+  sendManychatMessage,
+  sendManychatMessagePaced,
+  pacingEnabled,
+} from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
 import { splitIntoMessages } from "@/lib/message-split";
 import { buildKbBlock } from "@/lib/retrieval";
@@ -104,6 +109,7 @@ async function persistAndPush(
  * (version + content.messages) so ManyChat sends the reply back directly.
  */
 export async function POST(request: NextRequest) {
+  const startedAt = performance.now(); // for the bubble-pacing deadline guard
   // 1. Authenticate shared secret
   const secret = request.headers.get("x-manychat-secret");
   if (!verifyManychatSecret(secret)) {
@@ -335,13 +341,21 @@ export async function POST(request: NextRequest) {
   // dynamic-content node) because dynamic-content rendering is unreliable on
   // Instagram. We push the reply here instead. A failure is non-fatal: the
   // reply is already stored and visible in the dashboard inbox.
+  // Deliver as several short bubbles (one per burst) rather than one long
+  // message — the persona writes in bursts; this renders them separately.
+  const bubbles = splitIntoMessages(replyText);
   try {
-    await sendManychatMessage({
-      subscriberId: body.subscriber_id,
-      // Deliver as several short bubbles (one per burst) rather than one long
-      // message — the persona writes in bursts; this renders them separately.
-      text: splitIntoMessages(replyText),
-    });
+    if (pacingEnabled() && bubbles.length > 1) {
+      // Drip the bubbles in with short, human-like gaps (each its own send).
+      await sendManychatMessagePaced({
+        subscriberId: body.subscriber_id,
+        bubbles,
+        startedAt,
+      });
+    } else {
+      // Single bubble (or pacing disabled): one call, as before.
+      await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles });
+    }
   } catch (err) {
     console.error("[manychat-webhook] push send failed", err);
     await logPushFailure(supabase, chatbot.user_id, chatbot.id);

@@ -140,3 +140,79 @@ export async function sendManychatMessage(opts: {
   }
   throw lastError;
 }
+
+// ---------------------------------------------------------------------------
+// Human-like bubble pacing
+// ---------------------------------------------------------------------------
+// Tunables (env-overridable; sane defaults). Total pacing is hard-capped so it
+// never threatens the 60s webhook budget or a ManyChat External Request timeout.
+const PACING_ENABLED = process.env.BUBBLE_PACING_ENABLED !== "false"; // default on
+const LEAD_IN_MS = 600; // brief "composing" pause before the first bubble
+const PER_CHAR_MS = 22; // typing-speed feel
+const MIN_GAP_MS = 600;
+const MAX_GAP_MS = 2_200;
+const MAX_TOTAL_PACING_MS = 6_000; // lead-in + gaps; scaled down if exceeded
+const PACING_DEADLINE_MS = 45_000; // if the request is already this old, stop sleeping
+
+/** True if bubble pacing is on (default). Set BUBBLE_PACING_ENABLED=false to disable. */
+export function pacingEnabled(): boolean {
+  return PACING_ENABLED;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+/**
+ * Deliver a multi-bubble reply with short, human-like gaps so messages "drip in"
+ * instead of landing all at once. Each bubble is its own sendContent call (reusing
+ * sendManychatMessage for per-call sanitize + retry). Gaps are scaled to bubble
+ * length, clamped, and the total is capped at MAX_TOTAL_PACING_MS; sleeps are
+ * skipped once the request passes PACING_DEADLINE_MS so we never blow the 60s
+ * budget. Every bubble is always attempted — a single failure is logged and the
+ * rest still send; throws once at the end if any failed so the caller can record
+ * push_failed.
+ */
+export async function sendManychatMessagePaced(opts: {
+  subscriberId: string;
+  bubbles: string[];
+  messageTag?: string;
+  startedAt?: number; // performance.now() at request start, for the deadline guard
+}): Promise<void> {
+  const bubbles = opts.bubbles.map((b) => (b ?? "").trim()).filter(Boolean);
+  if (bubbles.length === 0) return;
+
+  // Pre-compute lead-in + per-bubble gaps, then scale down if the sum exceeds the
+  // cap so total pacing stays bounded regardless of bubble count.
+  const rawGaps = bubbles.map((b, i) =>
+    i === 0 ? LEAD_IN_MS : clamp(b.length * PER_CHAR_MS, MIN_GAP_MS, MAX_GAP_MS)
+  );
+  const total = rawGaps.reduce((a, b) => a + b, 0);
+  const scale = total > MAX_TOTAL_PACING_MS ? MAX_TOTAL_PACING_MS / total : 1;
+  const gaps = rawGaps.map((g) => Math.round(g * scale));
+
+  const startedAt = opts.startedAt ?? performance.now();
+  let anyFailed = false;
+
+  for (let i = 0; i < bubbles.length; i++) {
+    // Skip the pause if the request is already old (protect the 60s budget);
+    // we still send every bubble, just without the gap.
+    if (gaps[i] > 0 && performance.now() - startedAt < PACING_DEADLINE_MS) {
+      await sleep(gaps[i]);
+    }
+    try {
+      await sendManychatMessage({
+        subscriberId: opts.subscriberId,
+        text: bubbles[i],
+        messageTag: opts.messageTag,
+      });
+    } catch (err) {
+      anyFailed = true;
+      console.error(
+        `[manychat] paced bubble ${i + 1}/${bubbles.length} failed`,
+        err
+      );
+    }
+  }
+
+  if (anyFailed) throw new Error("ManyChat paced send: one or more bubbles failed");
+}

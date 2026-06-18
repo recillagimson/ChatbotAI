@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { MailCheck } from "lucide-react";
@@ -21,14 +22,22 @@ export default function SignupPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+
+    // Cheap client-side guard before any network calls.
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
 
     // Deterministic duplicate check first (server-side; reads the profiles
     // source of truth). The signUp() heuristics below are only a backstop —
@@ -144,9 +153,8 @@ export default function SignupPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               required
               minLength={8}
               value={password}
@@ -155,6 +163,16 @@ export default function SignupPage() {
             <p className="text-xs text-muted-foreground">
               At least 8 characters.
             </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm password</Label>
+            <PasswordInput
+              id="confirmPassword"
+              required
+              minLength={8}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
           </div>
           {error && (
             <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded">

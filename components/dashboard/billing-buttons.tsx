@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Loader2, CreditCard, ArrowRight } from "lucide-react";
 
 export function BillingButtons({
   hasSubscription,
@@ -10,33 +11,57 @@ export function BillingButtons({
 }) {
   const [loading, setLoading] = useState<"checkout" | "portal" | null>(null);
 
-  async function startCheckout() {
-    setLoading("checkout");
-    const res = await fetch("/api/stripe/checkout", { method: "POST" });
-    const { url } = await res.json();
-    if (url) window.location.href = url;
-    else setLoading(null);
+  async function go(kind: "checkout" | "portal", endpoint: string) {
+    setLoading(kind);
+    try {
+      const res = await fetch(endpoint, { method: "POST" });
+      const { url } = await res.json();
+      if (url) {
+        window.location.href = url;
+        return; // keep the spinner during the redirect
+      }
+    } catch {
+      // fall through to re-enable the button
+    }
+    setLoading(null);
   }
 
-  async function openPortal() {
-    setLoading("portal");
-    const res = await fetch("/api/stripe/portal", { method: "POST" });
-    const { url } = await res.json();
-    if (url) window.location.href = url;
-    else setLoading(null);
+  if (hasSubscription) {
+    return (
+      <Button
+        onClick={() => go("portal", "/api/stripe/portal")}
+        disabled={loading !== null}
+        size="lg"
+        className="w-full sm:w-auto"
+      >
+        {loading === "portal" ? (
+          <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden />
+        ) : (
+          <CreditCard className="h-4 w-4" aria-hidden />
+        )}
+        {loading === "portal" ? "Opening..." : "Manage subscription"}
+      </Button>
+    );
   }
 
   return (
-    <div className="flex gap-3">
-      {!hasSubscription ? (
-        <Button onClick={startCheckout} disabled={loading !== null}>
-          {loading === "checkout" ? "Loading..." : "Subscribe — $349/mo"}
-        </Button>
+    <Button
+      onClick={() => go("checkout", "/api/stripe/checkout")}
+      disabled={loading !== null}
+      size="lg"
+      className="w-full sm:w-auto"
+    >
+      {loading === "checkout" ? (
+        <>
+          <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden />
+          Redirecting to checkout...
+        </>
       ) : (
-        <Button onClick={openPortal} disabled={loading !== null}>
-          {loading === "portal" ? "Loading..." : "Manage subscription"}
-        </Button>
+        <>
+          Subscribe · $349/mo
+          <ArrowRight className="h-4 w-4" aria-hidden />
+        </>
       )}
-    </div>
+    </Button>
   );
 }

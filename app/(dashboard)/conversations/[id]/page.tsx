@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import { ConversationActions } from "@/components/dashboard/conversation-actions";
+import { ConversationReplyBox } from "@/components/dashboard/conversation-reply-box";
+import { ChatScroll } from "@/components/dashboard/chat-scroll";
 
 export default async function ConversationDetailPage({
   params,
@@ -41,15 +43,20 @@ export default async function ConversationDetailPage({
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <Button asChild variant="ghost" size="sm" className="mb-4">
+    <div className="h-screen flex flex-col p-6 max-w-3xl mx-auto w-full">
+      <Button
+        asChild
+        variant="ghost"
+        size="sm"
+        className="mb-3 shrink-0 self-start"
+      >
         <Link href="/conversations">
           <ArrowLeft className="h-4 w-4 mr-2" />
           All conversations
         </Link>
       </Button>
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
           <h1 className="text-2xl font-bold">
             {conversation.contact_name ||
@@ -78,13 +85,15 @@ export default async function ConversationDetailPage({
         </Badge>
       </div>
 
-      <ConversationActions
-        conversationId={conversation.id}
-        currentStatus={conversation.status}
-      />
+      <div className="shrink-0">
+        <ConversationActions
+          conversationId={conversation.id}
+          currentStatus={conversation.status}
+        />
+      </div>
 
-      <Card className="mt-6">
-        <CardContent className="p-4 space-y-3">
+      <Card className="mt-4 flex-1 min-h-0 flex flex-col overflow-hidden">
+        <ChatScroll className="flex-1 min-h-0 p-4 space-y-3">
           {!messages?.length && (
             <p className="text-sm text-muted-foreground text-center py-8">
               No messages yet.
@@ -128,8 +137,15 @@ export default async function ConversationDetailPage({
               </div>
             );
           })}
-        </CardContent>
+        </ChatScroll>
       </Card>
+
+      <div className="shrink-0">
+        <ConversationReplyBox
+          conversationId={conversation.id}
+          paused={conversation.status === "ai_paused"}
+        />
+      </div>
     </div>
   );
 }
