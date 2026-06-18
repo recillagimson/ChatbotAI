@@ -6,6 +6,8 @@ import {
   sendManychatMessage,
   sendManychatMessagePaced,
   pacingEnabled,
+  resolveManychatApiKey,
+  ManychatKeyError,
 } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
 import { splitIntoMessages } from "@/lib/message-split";
@@ -62,13 +64,14 @@ function manychatReply(text: string, extra: Record<string, unknown> = {}) {
 async function logPushFailure(
   supabase: ReturnType<typeof createServiceClient>,
   userId: string,
-  chatbotId: string
+  chatbotId: string,
+  eventType: string = "push_failed"
 ): Promise<void> {
   try {
     await supabase.from("usage_log").insert({
       user_id: userId,
       chatbot_id: chatbotId,
-      event_type: "push_failed",
+      event_type: eventType,
       tokens_used: 0,
     });
   } catch {
@@ -87,7 +90,8 @@ async function persistAndPush(
   subscriberId: string,
   text: string,
   userId: string,
-  chatbotId: string
+  chatbotId: string,
+  apiKey: string | null
 ): Promise<void> {
   await Promise.all([
     supabase.from("messages").insert({
@@ -97,10 +101,12 @@ async function persistAndPush(
       ai_generated: false,
       tokens_used: 0,
     }),
-    sendManychatMessage({ subscriberId, text }).catch(async (err) => {
-      console.error("[manychat-webhook] push send failed", err);
-      await logPushFailure(supabase, userId, chatbotId);
-    }),
+    apiKey
+      ? sendManychatMessage({ subscriberId, text, apiKey }).catch(async (err) => {
+          console.error("[manychat-webhook] push send failed", err);
+          await logPushFailure(supabase, userId, chatbotId);
+        })
+      : Promise.resolve(),
   ]);
 }
 
@@ -110,11 +116,9 @@ async function persistAndPush(
  */
 export async function POST(request: NextRequest) {
   const startedAt = performance.now(); // for the bubble-pacing deadline guard
-  // 1. Authenticate shared secret
+  // 1. Read the shared secret header; it's verified AFTER the chatbot lookup
+  // against that chatbot's own webhook_secret (with a legacy env fallback).
   const secret = request.headers.get("x-manychat-secret");
-  if (!verifyManychatSecret(secret)) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
 
   // 2. Parse payload
   const json = await request.json().catch(() => null);
@@ -136,10 +140,19 @@ export async function POST(request: NextRequest) {
     .eq("is_active", true);
   // Cross-tenant guard: if ManyChat sent a page_id, it MUST match this chatbot.
   if (body.page_id) chatbotQuery = chatbotQuery.eq("manychat_page_id", body.page_id);
-  const { data: chatbot } = await chatbotQuery.single<Chatbot>();
+  const { data: chatbot } = await chatbotQuery.maybeSingle<Chatbot>();
 
+  // 3a. Authenticate: verify the secret against THIS chatbot's webhook_secret
+  // (legacy env secret as fallback for un-migrated bots). A missing chatbot and
+  // a bad secret return an identical 401 so a caller can't probe which case it is.
   if (!chatbot) {
-    return manychatReply("Sorry, this account isn't active right now.");
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const secretOk =
+    verifyManychatSecret(secret, chatbot.webhook_secret) ||
+    verifyManychatSecret(secret, process.env.MANYCHAT_WEBHOOK_SECRET);
+  if (!secretOk) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const { data: subscription } = await supabase
@@ -153,6 +166,20 @@ export async function POST(request: NextRequest) {
       "Thanks for your message! We'll get back to you shortly.",
       { ai_skipped: true, reason: "subscription_inactive" }
     );
+  }
+
+  // 3b. Resolve the ManyChat API key for this chatbot (decrypt the per-chatbot
+  // key, or fall back to the global env key for un-migrated owners). A decrypt
+  // failure is a HARD error — we NEVER fall back to the env key, which would push
+  // this tenant's reply through the owner's account. On failure we log a distinct
+  // event and leave apiKey null so pushes are skipped but messages still persist.
+  let apiKey: string | null = null;
+  try {
+    apiKey = resolveManychatApiKey(chatbot);
+  } catch (err) {
+    const code = err instanceof ManychatKeyError ? err.code : "no_manychat_api_key";
+    console.error("[manychat-webhook] api key unavailable", code);
+    await logPushFailure(supabase, chatbot.user_id, chatbot.id, code);
   }
 
   // 4. Upsert conversation
@@ -247,7 +274,7 @@ export async function POST(request: NextRequest) {
   // in-voice reply from the persona instead of a generic canned line.
   const trivial = chatbot.system_prompt ? null : getTrivialReply(body.message);
   if (trivial) {
-    await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial, chatbot.user_id, chatbot.id);
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial, chatbot.user_id, chatbot.id, apiKey);
     return manychatReply(trivial, { ai_skipped: true, reason: "trivial_ack" });
   }
 
@@ -255,7 +282,7 @@ export async function POST(request: NextRequest) {
   const dup = await checkDuplicate(chatbot.id, body.subscriber_id, body.message);
   if (dup.isDuplicate) {
     const echo = dup.lastReply ?? "Still on that, give me just a sec!";
-    await persistAndPush(supabase, conversationId!, body.subscriber_id, echo, chatbot.user_id, chatbot.id);
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, echo, chatbot.user_id, chatbot.id, apiKey);
     return manychatReply(echo, { ai_skipped: true, reason: "duplicate" });
   }
 
@@ -263,7 +290,7 @@ export async function POST(request: NextRequest) {
   const cap = await checkMonthlyCap(chatbot.id);
   if (!cap.ok) {
     const text = "Thanks for your message! We'll get back to you shortly.";
-    await persistAndPush(supabase, conversationId!, body.subscriber_id, text, chatbot.user_id, chatbot.id);
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, text, chatbot.user_id, chatbot.id, apiKey);
     return manychatReply(text, {
       ai_skipped: true,
       reason: "monthly_cap_reached",
@@ -343,22 +370,27 @@ export async function POST(request: NextRequest) {
   // reply is already stored and visible in the dashboard inbox.
   // Deliver as several short bubbles (one per burst) rather than one long
   // message — the persona writes in bursts; this renders them separately.
+  // When apiKey is null the decrypt/no-key failure was already logged in 3b; the
+  // reply is still persisted above and visible in the inbox, we just can't push.
   const bubbles = splitIntoMessages(replyText);
-  try {
-    if (pacingEnabled() && bubbles.length > 1) {
-      // Drip the bubbles in with short, human-like gaps (each its own send).
-      await sendManychatMessagePaced({
-        subscriberId: body.subscriber_id,
-        bubbles,
-        startedAt,
-      });
-    } else {
-      // Single bubble (or pacing disabled): one call, as before.
-      await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles });
+  if (apiKey) {
+    try {
+      if (pacingEnabled() && bubbles.length > 1) {
+        // Drip the bubbles in with short, human-like gaps (each its own send).
+        await sendManychatMessagePaced({
+          subscriberId: body.subscriber_id,
+          bubbles,
+          startedAt,
+          apiKey,
+        });
+      } else {
+        // Single bubble (or pacing disabled): one call, as before.
+        await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles, apiKey });
+      }
+    } catch (err) {
+      console.error("[manychat-webhook] push send failed", err);
+      await logPushFailure(supabase, chatbot.user_id, chatbot.id);
     }
-  } catch (err) {
-    console.error("[manychat-webhook] push send failed", err);
-    await logPushFailure(supabase, chatbot.user_id, chatbot.id);
   }
 
   // 10a. Update Redis side-state: cache for dedup echo + bump monthly counter.

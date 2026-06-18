@@ -128,7 +128,8 @@ export async function sendFollowup(
     "id" | "manychat_subscriber_id" | "contact_name" | "followup_count"
   >,
   template: string,
-  now: Date
+  now: Date,
+  apiKey: string
 ): Promise<string> {
   const text = renderTemplate(template, { name: conversation.contact_name });
 
@@ -136,6 +137,7 @@ export async function sendFollowup(
     subscriberId: conversation.manychat_subscriber_id,
     text,
     messageTag: "HUMAN_AGENT",
+    apiKey,
   });
 
   await Promise.all([
