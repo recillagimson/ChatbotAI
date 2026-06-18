@@ -112,7 +112,7 @@ export function ManychatKeyField({ chatbotId, configured }: ManychatKeyFieldProp
         >
           {saving ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
               Saving…
             </>
           ) : (
@@ -124,12 +124,12 @@ export function ManychatKeyField({ chatbotId, configured }: ManychatKeyFieldProp
           <Button
             type="button"
             variant="outline"
-            disabled={removing}
+            disabled={removing || saving}
             onClick={handleRemove}
           >
             {removing ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 Removing…
               </>
             ) : (
