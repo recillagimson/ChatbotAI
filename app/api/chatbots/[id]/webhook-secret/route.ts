@@ -28,12 +28,13 @@ export async function POST(
 
   // Ownership check — RLS also enforces this; the explicit filter gives a clean 404
   const supabase = await createClient();
-  const { data: chatbot } = await supabase
+  const { data: chatbot, error: ownershipError } = await supabase
     .from("chatbots")
     .select("id")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
+  if (ownershipError) return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   if (!chatbot) {
     return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
   }

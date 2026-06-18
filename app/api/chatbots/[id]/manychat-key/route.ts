@@ -37,12 +37,13 @@ export async function PUT(
 
   // Ownership check — RLS also enforces this; the explicit filter gives a clean 404
   const supabase = await createClient();
-  const { data: chatbot } = await supabase
+  const { data: chatbot, error: ownershipError } = await supabase
     .from("chatbots")
     .select("id")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
+  if (ownershipError) return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   if (!chatbot) {
     return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
   }
@@ -50,6 +51,7 @@ export async function PUT(
   // Validate the key against ManyChat before storing
   const result = await validateManychatApiKey(apiKey);
   if (!result.ok) {
+    console.warn("[manychat-key] ManyChat validation failed", result.error);
     return NextResponse.json(
       { error: "That ManyChat API key didn't work.", detail: result.error },
       { status: 400 }
@@ -94,12 +96,13 @@ export async function DELETE(
 
   // Ownership check
   const supabase = await createClient();
-  const { data: chatbot } = await supabase
+  const { data: chatbot, error: ownershipError } = await supabase
     .from("chatbots")
     .select("id")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
+  if (ownershipError) return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   if (!chatbot) {
     return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
   }
