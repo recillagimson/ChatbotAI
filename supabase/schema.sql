@@ -439,3 +439,59 @@ create policy "admin read usage" on public.usage_log for select using (public.is
 -- drop table if exists public.change_requests;
 -- drop function if exists public.is_superadmin();
 -- alter table public.profiles drop column if exists is_superadmin;
+
+-- =====================================================================
+-- Feature: request-changes chat assistant + attachments
+--   Multi-turn transcript + 'draft' state on change_requests, feedback
+--   attachments, and a private Storage bucket with per-user RLS. Re-runnable.
+-- =====================================================================
+
+-- 1. change_requests: chat transcript + 'draft' state + a short title for History labels.
+alter table public.change_requests
+  add column if not exists transcript jsonb not null default '[]'::jsonb,
+  add column if not exists title text;
+
+-- Widen the status check to include 'draft' (the in-progress client chat).
+alter table public.change_requests drop constraint if exists change_requests_status_check;
+alter table public.change_requests add constraint change_requests_status_check
+  check (status in ('draft','pending','approved','applied','rejected'));
+
+-- 2. feedback: attachments (array of { path, name, type, size }).
+alter table public.feedback
+  add column if not exists attachments jsonb not null default '[]'::jsonb;
+
+-- 3. Private Storage bucket for image/file uploads (feedback + request chat).
+insert into storage.buckets (id, name, public)
+  values ('request-uploads', 'request-uploads', false)
+  on conflict (id) do nothing;
+
+-- Per-user folder RLS on storage.objects: a user reads/writes only under their own
+-- user_id/ prefix; superadmins read all (for admin review). Served via signed URLs.
+drop policy if exists "own upload write"  on storage.objects;
+create policy "own upload write" on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'request-uploads'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "own upload read"   on storage.objects;
+create policy "own upload read" on storage.objects for select to authenticated
+  using (
+    bucket_id = 'request-uploads'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "admin upload read" on storage.objects;
+create policy "admin upload read" on storage.objects for select to authenticated
+  using (bucket_id = 'request-uploads' and public.is_superadmin());
+
+-- Teardown (down-migration), if the feature is pulled:
+-- drop policy if exists "admin upload read" on storage.objects;
+-- drop policy if exists "own upload read"   on storage.objects;
+-- drop policy if exists "own upload write"  on storage.objects;
+-- delete from storage.buckets where id = 'request-uploads';
+-- alter table public.feedback drop column if exists attachments;
+-- alter table public.change_requests drop constraint if exists change_requests_status_check;
+-- alter table public.change_requests add constraint change_requests_status_check
+--   check (status in ('pending','approved','applied','rejected'));
+-- alter table public.change_requests drop column if exists transcript, drop column if exists title;
