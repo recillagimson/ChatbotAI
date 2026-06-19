@@ -7,16 +7,19 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { BarChart3, MessageSquare, Reply, Bot, Timer } from "lucide-react";
+import { BarChart3, MessageSquare, Bot, Timer, AlertTriangle } from "lucide-react";
 import {
   resolveRange,
   getAnalyticsOverview,
+  getStageConversations,
   safePct,
   type RangeKey,
+  type FunnelStage,
 } from "@/lib/analytics";
 import { StatsControlsBar } from "@/components/dashboard/stats/stats-controls-bar";
 import { KpiStatCard } from "@/components/dashboard/stats/kpi-stat-card";
 import { StatusSplit } from "@/components/dashboard/stats/status-split";
+import { Funnel } from "@/components/dashboard/stats/funnel";
 
 export const dynamic = "force-dynamic";
 
@@ -50,15 +53,15 @@ function formatSecs(secs: number | null): string {
   return `${Math.round(secs / 3600)}h`;
 }
 
-/** Derive a tone from reply rate percentage. */
-function replyRateTone(
-  pct: number | null
-): "good" | "mid" | "bad" | "default" {
+/** Derive a tone from a percentage. */
+function pctTone(pct: number | null): "good" | "mid" | "bad" | "default" {
   if (pct === null) return "default";
   if (pct >= 50) return "good";
   if (pct >= 20) return "mid";
   return "bad";
 }
+
+const VALID_STAGES: readonly FunnelStage[] = ["entry", "replied", "link_sent"] as const;
 
 export default async function StatisticsPage({
   searchParams,
@@ -69,6 +72,8 @@ export default async function StatisticsPage({
     to?: string;
     bot?: string;
     tab?: string;
+    stage?: string;
+    stage_n?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -97,6 +102,96 @@ export default async function StatisticsPage({
   const overview = await getAnalyticsOverview(supabase, { from, to, chatbotId });
 
   const label = rangeLabel(rangeKey, customFrom, customTo);
+
+  // ── Expansion state ─────────────────────────────────────────────────────────
+  const expandedStage: FunnelStage | null = VALID_STAGES.includes(
+    sp.stage as FunnelStage
+  )
+    ? (sp.stage as FunnelStage)
+    : null;
+
+  const stageN = Math.max(1, Math.min(100, Number(sp.stage_n) || 8));
+
+  // Fetch conversations for the expanded stage (if any)
+  const stageRows =
+    expandedStage && overview
+      ? await getStageConversations(supabase, {
+          stage: expandedStage,
+          from,
+          to,
+          chatbotId,
+          limit: stageN,
+        })
+      : null;
+
+  const stageTotal = stageRows?.[0]?.total ?? 0;
+  const stageShown = stageRows?.length ?? 0;
+
+  // ── makeHref helper ─────────────────────────────────────────────────────────
+  /**
+   * Build a /statistics href from current search params, applying overrides.
+   * Pass null for a key to delete it from the query string.
+   */
+  function makeHref(updates: Record<string, string | null>): string {
+    const params = new URLSearchParams();
+
+    // Seed with relevant current params
+    const seeds: (keyof typeof sp)[] = [
+      "range",
+      "from",
+      "to",
+      "bot",
+      "tab",
+      "stage",
+      "stage_n",
+    ];
+    for (const key of seeds) {
+      const val = sp[key];
+      if (val) params.set(key, val);
+    }
+
+    // Apply overrides
+    for (const [key, val] of Object.entries(updates)) {
+      if (val === null) {
+        params.delete(key);
+      } else {
+        params.set(key, val);
+      }
+    }
+
+    const qs = params.toString();
+    return qs ? `/statistics?${qs}` : "/statistics";
+  }
+
+  // ── Funnel stages definition ────────────────────────────────────────────────
+  const funnelStages = overview
+    ? [
+        {
+          key: "entry",
+          label: "Conversations (entry)",
+          count: overview.funnel.entry,
+          real: true,
+        },
+        {
+          key: "replied",
+          label: "Replied",
+          count: overview.funnel.replied,
+          real: true,
+        },
+        {
+          key: "link_sent",
+          label: "Link sent",
+          count: overview.funnel.link_sent,
+          real: true,
+        },
+        {
+          key: "booked",
+          label: "Booked",
+          count: null,
+          real: false,
+        },
+      ]
+    : [];
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -165,37 +260,9 @@ export default async function StatisticsPage({
       {/* ── Main content: KPI strip + slots ── */}
       {!!chatbots?.length && overview !== null && (
         <>
-          {/* ── KPI strip — 5 cards, lg:grid-cols-5 ── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-            {/* 1. Total Conversations */}
-            <KpiStatCard
-              label="Total Conversations"
-              value={overview.funnel.entry ?? 0}
-              sub="entry events"
-              icon={MessageSquare}
-            />
-
-            {/* 2. Reply Rate — toned by threshold */}
-            {(() => {
-              const pct = safePct(
-                overview.funnel.replied,
-                overview.funnel.entry ?? 0
-              );
-              const replyDisplay =
-                pct === null ? "—" : `${pct.toFixed(1)}%`;
-              const tone = replyRateTone(pct);
-              return (
-                <KpiStatCard
-                  label="Reply Rate"
-                  value={replyDisplay}
-                  sub="replied / entry"
-                  icon={Reply}
-                  tone={tone}
-                />
-              );
-            })()}
-
-            {/* 3. AI Replies */}
+          {/* ── KPI strip — 4 cards (Reply Rate + Total Conversations moved to funnel column) ── */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {/* 1. AI Replies */}
             <KpiStatCard
               label="AI Replies"
               value={overview.usage.ai_replies ?? 0}
@@ -203,25 +270,88 @@ export default async function StatisticsPage({
               icon={Bot}
             />
 
-            {/* 4. Avg messages / convo */}
+            {/* 2. Avg messages / convo */}
             <KpiStatCard
-              label="Avg msgs / convo"
+              label="Avg msgs / convo"
               value={overview.messages.avg_per_convo ?? 0}
               sub="per thread"
             />
 
-            {/* 5. Avg first response */}
+            {/* 3. Avg first response */}
             <KpiStatCard
               label="Avg first response"
               value={formatSecs(overview.response_time.avg_secs)}
               sub="time to reply"
               icon={Timer}
             />
+
+            {/* 4. Delivery health (new — replaces Reply Rate + Total Convos in strip) */}
+            {(() => {
+              const failures = overview.usage.delivery_failures ?? 0;
+              return (
+                <KpiStatCard
+                  label="Delivery health"
+                  value={failures === 0 ? "Healthy" : `${failures} failure${failures !== 1 ? "s" : ""}`}
+                  sub="push failures"
+                  icon={AlertTriangle}
+                  tone={failures > 0 ? "bad" : "good"}
+                />
+              );
+            })()}
           </div>
 
-          {/* ST4b: funnel + side KPI cards */}
+          {/* ── ST4b: Funnel (2/3 width) + side KPI cards (1/3 width) ── */}
+          <div className="grid lg:grid-cols-3 gap-6 mb-8">
+            {/* Left 2 cols: conversation funnel */}
+            <div className="lg:col-span-2">
+              <Funnel
+                stages={funnelStages}
+                expandedStage={expandedStage}
+                stageRows={stageRows}
+                stageTotal={stageTotal}
+                stageShown={stageShown}
+                makeHref={makeHref}
+              />
+            </div>
 
-          {/* ST4: Status split (full width, below funnel) */}
+            {/* Right 1 col: funnel-related KPI cards */}
+            <div className="flex flex-col gap-4">
+              {/* Booking Rate — stub (not tracked) */}
+              <KpiStatCard
+                label="Booking Rate"
+                value="—"
+                sub="booked / entry"
+                stub
+              />
+
+              {/* Reply Rate — real, moved from top strip */}
+              {(() => {
+                const pct = safePct(
+                  overview.funnel.replied,
+                  overview.funnel.entry ?? 0
+                );
+                const display = pct === null ? "—" : `${pct.toFixed(1)}%`;
+                return (
+                  <KpiStatCard
+                    label="Reply Rate"
+                    value={display}
+                    sub="replied / entry"
+                    tone={pctTone(pct)}
+                  />
+                );
+              })()}
+
+              {/* Total Conversations — real, moved from top strip */}
+              <KpiStatCard
+                label="Total Conversations"
+                value={overview.funnel.entry ?? 0}
+                sub="entry events"
+                icon={MessageSquare}
+              />
+            </div>
+          </div>
+
+          {/* ── ST4: Status split (full width, below funnel) ── */}
           <div className="mb-8">
             <StatusSplit
               active={overview.status_split.active}
