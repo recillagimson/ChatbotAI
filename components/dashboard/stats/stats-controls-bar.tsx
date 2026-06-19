@@ -71,6 +71,8 @@ export function StatsControlsBar({
     const to = which === "to" ? val : (customTo ?? "");
     if (from && to) {
       push(withParams(searchParams, { from, to, range: null }));
+    } else {
+      push(withParams(searchParams, { from: null, to: null }));
     }
   }
 
@@ -135,7 +137,6 @@ export function StatsControlsBar({
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             "tabular-nums"
           )}
-          aria-label="From date"
         />
         <span className="text-muted-foreground text-sm select-none">–</span>
         <label className="sr-only" htmlFor="stats-to">
@@ -152,7 +153,6 @@ export function StatsControlsBar({
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             "tabular-nums"
           )}
-          aria-label="To date"
         />
       </div>
 
@@ -228,8 +228,6 @@ export function StatsControlsBar({
       {/* ── Split Test stub ── */}
       <div
         className="flex items-center gap-1 rounded-lg bg-muted/60 p-1 opacity-60"
-        title="Split testing coming soon"
-        aria-label="Split test filter (coming soon)"
       >
         {(["All", "Control", "Variant 2"] as const).map((label, i) => (
           <button
@@ -237,6 +235,8 @@ export function StatsControlsBar({
             type="button"
             disabled
             aria-disabled="true"
+            title="Split testing coming soon"
+            aria-label={`${label} — split testing coming soon`}
             className={cn(
               "inline-flex items-center justify-center min-h-[44px] px-3 py-1.5 rounded-md text-sm",
               "cursor-not-allowed transition-none",

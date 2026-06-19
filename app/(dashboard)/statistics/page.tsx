@@ -206,7 +206,7 @@ export default async function StatisticsPage({
             {/* 4. Avg messages / convo */}
             <KpiStatCard
               label="Avg msgs / convo"
-              value={overview.messages.avg_per_convo ?? "—"}
+              value={overview.messages.avg_per_convo ?? 0}
               sub="per thread"
             />
 
