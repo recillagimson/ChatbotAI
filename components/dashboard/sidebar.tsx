@@ -11,6 +11,7 @@ import {
   Settings,
   CreditCard,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { createClient } from "@/lib/supabase/client";
@@ -25,9 +26,17 @@ const nav = [
   { href: "/billing", label: "Billing", icon: CreditCard },
 ];
 
-export function Sidebar() {
+export function Sidebar({
+  isSuperadmin = false,
+}: {
+  isSuperadmin?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+
+  const items = isSuperadmin
+    ? [...nav, { href: "/admin", label: "Admin", icon: ShieldCheck }]
+    : nav;
 
   async function signOut() {
     const supabase = createClient();
@@ -44,7 +53,7 @@ export function Sidebar() {
         </Link>
       </div>
       <nav className="flex-1 p-3 space-y-1">
-        {nav.map((item) => {
+        {items.map((item) => {
           const active =
             pathname === item.href ||
             (item.href !== "/dashboard" && pathname.startsWith(item.href));
