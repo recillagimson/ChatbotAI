@@ -7,13 +7,16 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { BarChart3, MessageSquare } from "lucide-react";
+import { BarChart3, MessageSquare, Reply, Bot, Timer } from "lucide-react";
 import {
   resolveRange,
   getAnalyticsOverview,
   safePct,
   type RangeKey,
 } from "@/lib/analytics";
+import { StatsControlsBar } from "@/components/dashboard/stats/stats-controls-bar";
+import { KpiStatCard } from "@/components/dashboard/stats/kpi-stat-card";
+import { StatusSplit } from "@/components/dashboard/stats/status-split";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +48,16 @@ function formatSecs(secs: number | null): string {
   if (secs < 60) return `${Math.round(secs)}s`;
   if (secs < 3600) return `${Math.round(secs / 60)}m`;
   return `${Math.round(secs / 3600)}h`;
+}
+
+/** Derive a tone from reply rate percentage. */
+function replyRateTone(
+  pct: number | null
+): "good" | "mid" | "bad" | "default" {
+  if (pct === null) return "default";
+  if (pct >= 50) return "good";
+  if (pct >= 20) return "mid";
+  return "bad";
 }
 
 export default async function StatisticsPage({
@@ -88,7 +101,7 @@ export default async function StatisticsPage({
   return (
     <div className="p-8 max-w-6xl mx-auto">
       {/* ── Page header ── */}
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-3xl font-display font-semibold tracking-tight">
           Statistics
         </h1>
@@ -96,6 +109,18 @@ export default async function StatisticsPage({
           {label} &mdash; {selectedBotName}
         </p>
       </div>
+
+      {/* ── Controls bar — shown whenever chatbots exist (even when overview is null) ── */}
+      {!!chatbots?.length && (
+        <StatsControlsBar
+          rangeKey={rangeKey}
+          customFrom={customFrom}
+          customTo={customTo}
+          bot={chatbotId}
+          tab={sp.tab ?? "funnel"}
+          chatbots={chatbots ?? []}
+        />
+      )}
 
       {/* ── Empty state: no chatbots yet ── */}
       {!chatbots?.length && (
@@ -122,7 +147,7 @@ export default async function StatisticsPage({
       )}
 
       {/* ── Analytics not yet available (RPC not applied) ── */}
-      {chatbots?.length && overview === null && (
+      {!!chatbots?.length && overview === null && (
         <Card className="border-amber-400/60 bg-amber-50 dark:bg-amber-950/20">
           <CardHeader>
             <CardTitle className="text-base text-amber-800 dark:text-amber-300">
@@ -138,91 +163,72 @@ export default async function StatisticsPage({
       )}
 
       {/* ── Main content: KPI strip + slots ── */}
-      {chatbots?.length && overview !== null && (
+      {!!chatbots?.length && overview !== null && (
         <>
-          {/* ── KPI strip ── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {/* ── KPI strip — 5 cards, lg:grid-cols-5 ── */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
             {/* 1. Total Conversations */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Conversations
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-display font-semibold tabular-nums">
-                  {overview.funnel.entry}
-                </div>
-                <p className="text-xs text-muted-foreground">entry events</p>
-              </CardContent>
-            </Card>
+            <KpiStatCard
+              label="Total Conversations"
+              value={overview.funnel.entry ?? 0}
+              sub="entry events"
+              icon={MessageSquare}
+            />
 
-            {/* 2. Reply Rate */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Reply Rate</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-display font-semibold tabular-nums">
-                  {(() => {
-                    const pct = safePct(
-                      overview.funnel.replied,
-                      overview.funnel.entry
-                    );
-                    return pct === null ? "—" : `${pct.toFixed(1)}%`;
-                  })()}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  replied&thinsp;/&thinsp;entry
-                </p>
-              </CardContent>
-            </Card>
+            {/* 2. Reply Rate — toned by threshold */}
+            {(() => {
+              const pct = safePct(
+                overview.funnel.replied,
+                overview.funnel.entry ?? 0
+              );
+              const replyDisplay =
+                pct === null ? "—" : `${pct.toFixed(1)}%`;
+              const tone = replyRateTone(pct);
+              return (
+                <KpiStatCard
+                  label="Reply Rate"
+                  value={replyDisplay}
+                  sub="replied / entry"
+                  icon={Reply}
+                  tone={tone}
+                />
+              );
+            })()}
 
             {/* 3. AI Replies */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">AI Replies</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-display font-semibold tabular-nums">
-                  {overview.usage.ai_replies}
-                </div>
-                <p className="text-xs text-muted-foreground">messages sent</p>
-              </CardContent>
-            </Card>
+            <KpiStatCard
+              label="AI Replies"
+              value={overview.usage.ai_replies ?? 0}
+              sub="messages sent"
+              icon={Bot}
+            />
 
             {/* 4. Avg messages / convo */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Avg msgs&thinsp;/&thinsp;convo
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-display font-semibold tabular-nums">
-                  {overview.messages.avg_per_convo}
-                </div>
-                <p className="text-xs text-muted-foreground">per thread</p>
-              </CardContent>
-            </Card>
+            <KpiStatCard
+              label="Avg msgs / convo"
+              value={overview.messages.avg_per_convo ?? "—"}
+              sub="per thread"
+            />
 
-            {/* 5. Avg first response (wraps to next row on 4-col grid) */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Avg first response
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-display font-semibold tabular-nums">
-                  {formatSecs(overview.response_time.avg_secs)}
-                </div>
-                <p className="text-xs text-muted-foreground">time to reply</p>
-              </CardContent>
-            </Card>
+            {/* 5. Avg first response */}
+            <KpiStatCard
+              label="Avg first response"
+              value={formatSecs(overview.response_time.avg_secs)}
+              sub="time to reply"
+              icon={Timer}
+            />
           </div>
 
-          {/* ST4: <StatsControlsBar/>, funnel + side KPI cards, status split */}
+          {/* ST4b: funnel + side KPI cards */}
+
+          {/* ST4: Status split (full width, below funnel) */}
+          <div className="mb-8">
+            <StatusSplit
+              active={overview.status_split.active}
+              aiPaused={overview.status_split.ai_paused}
+              closed={overview.status_split.closed}
+            />
+          </div>
 
           {/* ST5: trend chart + Events view */}
 
