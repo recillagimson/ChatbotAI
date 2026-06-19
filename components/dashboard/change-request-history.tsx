@@ -7,6 +7,7 @@ const STATUS_MAP: Record<
   ChangeRequest["status"],
   { variant: BadgeVariant; label: string }
 > = {
+  draft: { variant: "secondary", label: "Draft" },
   pending: { variant: "secondary", label: "Pending review" },
   approved: { variant: "warning", label: "Approved (not live yet)" },
   applied: { variant: "success", label: "Applied" },

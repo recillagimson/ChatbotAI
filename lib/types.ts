@@ -113,8 +113,10 @@ export interface ChangeRequest {
   chatbot_id: string;
   user_id: string;
   request_text: string;
-  status: "pending" | "approved" | "applied" | "rejected";
+  status: "draft" | "pending" | "approved" | "applied" | "rejected";
   proposed: ChangeProposal | null;
+  transcript: TranscriptMessage[];
+  title: string | null;
   model_used: string | null;
   draft_error: string | null;
   final: ChangeFinal | null;
@@ -132,8 +134,23 @@ export interface Feedback {
   chatbot_id: string | null;
   message: string;
   status: "new" | "read" | "resolved";
+  attachments: Attachment[];
   admin_note: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface Attachment {
+  path: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
+export interface TranscriptMessage {
+  role: "user" | "assistant";
+  content: string;
+  images?: { path: string; name: string }[];  // storage paths (user messages only)
   created_at: string;
 }

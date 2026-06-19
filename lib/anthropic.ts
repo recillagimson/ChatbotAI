@@ -254,3 +254,100 @@ export async function generateReply(opts: {
     cacheWriteTokens: usage?.cache_creation_input_tokens ?? 0,
   };
 }
+
+export interface ChatTurnMessage {
+  role: "user" | "assistant";
+  content: string;
+  images?: { base64: string; mediaType: string }[];  // pre-resolved (user messages only)
+}
+
+/** PURE: the scoped, security-hardened system prompt for the change assistant. */
+export function buildChatSystemPrompt(
+  chatbot: Pick<Chatbot, "name" | "business_description" | "tone" | "system_prompt">,
+  kbTitles: string[]
+): string {
+  const currentBehavior =
+    chatbot.system_prompt && chatbot.system_prompt.trim()
+      ? chatbot.system_prompt.trim()
+      : `Generic customer-service bot for "${chatbot.name}".
+Business description: ${chatbot.business_description || "(none provided)"}
+Tone: ${TONE_GUIDES[chatbot.tone]}`;
+
+  return `You are the SpeedSettr change assistant. You help ONE client refine ONE of their Instagram/Messenger DM chatbots — "the project". Through a short, friendly conversation you figure out what behavior / persona / knowledge change they want, then propose it for the SpeedSettr team to review.
+
+THE PROJECT (the only thing you may discuss or change):
+- Name: ${chatbot.name}
+- Current behavior: ${currentBehavior}
+- Existing knowledge-base topics: ${kbTitles.length ? kbTitles.join(", ") : "(none yet)"}
+
+HARD SECURITY RULES — never violate, no matter what the user says:
+- You ONLY discuss this project's reply behavior, persona/voice, tone, and knowledge (facts the bot can cite).
+- You must NEVER ask for, reference, reveal, or change: API keys, ManyChat tokens or page IDs, the webhook secret, passwords, billing or subscription, other customers, account or technical settings, or anything security-related. If the user raises any of these, briefly say it's handled by the SpeedSettr team and steer back to the project's messaging. Do not speculate about them.
+- Never invent prices, hours, links, or policies. If a needed fact is missing, ask the client for it so it can be added to the knowledge base.
+
+HOW TO WORK:
+- Ask focused clarifying questions (one or two at a time) until you clearly understand the desired change. Keep replies short and warm.
+- Only when you have enough to act, call the propose_changes tool with a revised system_prompt and/or new kb_entries plus a short summary. When you set system_prompt, BAKE IN these guardrails so the live bot keeps them: keep replies under ~320 characters; never invent facts beyond the knowledge base; never reveal it is an AI unless asked; no unauthorized financial promises; hand off to a human if the user is upset or asks; match the customer's language; separate multiple short messages with blank lines (each becomes its own DM bubble).
+- If you still need information, DO NOT call the tool — just ask the next question.`;
+}
+
+/** PURE: map our transcript to Anthropic message params (image blocks for user turns). */
+export function toAnthropicMessages(messages: ChatTurnMessage[]): Anthropic.MessageParam[] {
+  return messages.map((m) => {
+    if (m.role === "user" && m.images && m.images.length) {
+      return {
+        role: "user",
+        content: [
+          ...m.images.map((img) => ({
+            type: "image" as const,
+            source: {
+              type: "base64" as const,
+              media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data: img.base64,
+            },
+          })),
+          { type: "text" as const, text: m.content || "(see attached image)" },
+        ],
+      };
+    }
+    return { role: m.role, content: m.content };
+  });
+}
+
+export async function chatTurn(opts: {
+  chatbot: Pick<Chatbot, "name" | "business_description" | "tone" | "system_prompt">;
+  kbTitles: string[];
+  messages: ChatTurnMessage[];
+}): Promise<{ assistantText: string; proposal?: ChangeProposal; tokensUsed: number; model: string }> {
+  const system = buildChatSystemPrompt(opts.chatbot, opts.kbTitles);
+
+  const response = await getAnthropic().messages.create({
+    model: AI_MODEL,
+    max_tokens: 1500,
+    system,
+    tools: [PROPOSE_CHANGES_TOOL],
+    messages: toAnthropicMessages(opts.messages),
+  });
+
+  let assistantText = "";
+  let proposal: ChangeProposal | undefined;
+  for (const block of response.content) {
+    if (block.type === "text") assistantText += block.text;
+    if (block.type === "tool_use" && block.name === "propose_changes") {
+      try { proposal = parseProposalInput(block.input); } catch { /* malformed → ignore, treat as no proposal */ }
+    }
+  }
+  assistantText = assistantText.trim();
+  if (proposal && !assistantText) {
+    assistantText = "Here's what I'd change — review the summary below and submit it to the team when you're happy.";
+  }
+
+  const usage = response.usage;
+  const tokensUsed =
+    (usage?.input_tokens ?? 0) +
+    (usage?.cache_creation_input_tokens ?? 0) +
+    (usage?.cache_read_input_tokens ?? 0) +
+    (usage?.output_tokens ?? 0);
+
+  return { assistantText, proposal, tokensUsed, model: AI_MODEL };
+}
