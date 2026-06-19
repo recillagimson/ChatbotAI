@@ -155,12 +155,10 @@ You said you have a **Pro account**. Here is the exact setup:
 2. **Settings → Channels → Instagram** → click **Connect**.
 3. Follow the Facebook/Meta flow to authorize your Instagram Business Account. (Your IG must be a Business or Creator account, linked to a Facebook Page. ManyChat will prompt you if it isn't.)
 
-### 5b. Pick a secret value
-Invent a long random string. Paste it into `.env.local`:
-```
-MANYCHAT_WEBHOOK_SECRET=paste-a-long-random-string-here-at-least-32-chars
-```
-You'll paste the **same string** into the ManyChat header below.
+### 5b. Set the webhook secret
+Credentials are now **per-chatbot**: after you create a chatbot (step 7), the chatbot page shows a unique webhook secret for that bot. Copy it — you'll paste it into the ManyChat External Request header in 5c instead of a `.env` value.
+
+> **One-time global fallback only:** if you are migrating the original single-bot setup and have not yet saved a per-chatbot secret, the old `MANYCHAT_WEBHOOK_SECRET` env var is still honoured as a fallback. New bots do not need it.
 
 ### 5c. Build the AI Reply flow in ManyChat
 1. **Automation → New Flow → Start from scratch**. Name it `AI Reply`.
@@ -170,7 +168,7 @@ You'll paste the **same string** into the ManyChat header below.
    - URL: `http://localhost:3000/api/webhooks/manychat` (for testing — switch to your production URL once deployed)
    - Headers (click **Add Header**):
      - Key: `x-manychat-secret`
-     - Value: *(paste the same secret string from step 5b)*
+     - Value: *(paste the webhook secret shown on the chatbot page — see step 5b)*
      - Key: `Content-Type`
      - Value: `application/json`
    - Body (Raw / JSON):
@@ -191,13 +189,26 @@ You'll paste the **same string** into the ManyChat header below.
 
 > The `chatbot_id` comes from `/chatbots/[id]` in your dashboard — copy the UUID after creating a chatbot in step 7.
 
-### 5d. ManyChat API key (optional)
-Only needed if you later want to send proactive follow-up messages from the backend (we have `sendManychatMessage` for this).
-1. ManyChat → **Settings → API**.
-2. Generate API key. Paste into `.env.local`:
-   ```
-   MANYCHAT_API_KEY=...
-   ```
+### 5d. ManyChat API key (per-chatbot, in-app)
+Each customer enters their ManyChat API key on their chatbot page (**Chatbots → [your bot]**). The app validates the key against ManyChat and stores it encrypted — no `.env` entry needed per customer.
+
+To get the key: ManyChat → **Settings → API → Generate API key**.
+
+> **Global fallback only:** `MANYCHAT_API_KEY` in `.env.local` is still used for any chatbot that has not yet saved a key in-app (e.g. the original single-bot setup). New customers do not need to touch `.env`.
+
+### 5e. Credential encryption key (required once any customer saves an API key)
+The per-chatbot API keys are encrypted at rest using a 32-byte master key. Generate it once and add it to `.env.local` (and Vercel env):
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Paste the output into `.env.local`:
+```
+CREDENTIALS_ENC_KEY=<64 hex chars>
+```
+
+> **Important:** store this key in a password manager. If it is lost, any customer API keys saved in-app become unrecoverable (customers must re-enter them). Do NOT rotate it without a re-encrypt migration.
 
 ---
 
@@ -223,6 +234,7 @@ Open <http://localhost:3000>. You should see the landing page.
      -H "x-manychat-secret: YOUR_SECRET" `
      -d '{\"chatbot_id\":\"YOUR_CHATBOT_UUID\",\"subscriber_id\":\"test-1\",\"message\":\"what are your hours?\"}'
    ```
+   *(Replace `YOUR_SECRET` with the per-chatbot webhook secret from **Chatbots → [your bot]** page; or `MANYCHAT_WEBHOOK_SECRET` from `.env.local` if using the global fallback for an un-migrated bot.)*
    You should get a JSON reply with the AI answer. The conversation appears in `/conversations`.
 7. Go to ManyChat, paste your chatbot UUID into the flow's body, and send yourself a DM from another Instagram account to verify end-to-end.
 
@@ -296,7 +308,7 @@ These are explicit next-step features if you want them later:
 | Symptom | Fix |
 |---|---|
 | `Cannot find module '@supabase/ssr'` | Run `npm install` again |
-| Webhook returns 401 | The `x-manychat-secret` header doesn't match `MANYCHAT_WEBHOOK_SECRET` |
+| Webhook returns 401 | The `x-manychat-secret` header doesn't match the chatbot's webhook secret (shown on the chatbot page); falls back to `MANYCHAT_WEBHOOK_SECRET` env var for un-migrated bots |
 | Webhook returns 400 with `bad_request` | Your ManyChat JSON body is missing a field. Check the body shape in section 5c |
 | Stripe checkout 500s | `STRIPE_PRICE_ID` is wrong or you mixed test/live keys |
 | Login works but `/dashboard` redirects to `/login` | Cookies aren't being set — check middleware, restart `npm run dev` |

@@ -6,6 +6,7 @@ import {
   IG_WINDOW_DAYS,
   FOLLOWUP_ENABLED,
 } from "@/lib/followup";
+import { resolveManychatApiKey } from "@/lib/manychat";
 import type { Chatbot, Conversation } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -23,6 +24,7 @@ type FollowupChatbotRow = Pick<
   | "auto_followup_repeat"
   | "auto_followup_max"
   | "auto_followup_template"
+  | "manychat_api_key_enc"
 >;
 
 type CandidateRow = Pick<
@@ -55,7 +57,7 @@ async function run() {
     .from("conversations")
     .select(
       "id, manychat_subscriber_id, contact_name, status, last_message_at, last_followup_at, followup_count, " +
-        "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_repeat, auto_followup_max, auto_followup_template)"
+        "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_repeat, auto_followup_max, auto_followup_template, manychat_api_key_enc)"
     )
     .eq("status", "active")
     .eq("chatbots.auto_followup_enabled", true)
@@ -101,8 +103,16 @@ async function run() {
       bump(reasons, decision.reason);
       continue;
     }
+    let apiKey: string;
     try {
-      await sendFollowup(supabase, row, cb.auto_followup_template!, now);
+      apiKey = resolveManychatApiKey(cb);
+    } catch {
+      errors++;
+      bump(reasons, "manychat_key_unavailable");
+      continue;
+    }
+    try {
+      await sendFollowup(supabase, row, cb.auto_followup_template!, now, apiKey);
       sent++;
     } catch (err) {
       errors++;

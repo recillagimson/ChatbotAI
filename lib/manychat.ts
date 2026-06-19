@@ -16,6 +16,38 @@
 
 import { createHash, timingSafeEqual } from "crypto";
 import { sanitizeReply } from "./sanitize";
+import { decryptSecret } from "./crypto";
+
+/** Thrown when a chatbot's ManyChat API key can't be resolved. */
+export class ManychatKeyError extends Error {
+  constructor(public code: "manychat_key_decrypt_failed" | "no_manychat_api_key") {
+    super(code);
+    this.name = "ManychatKeyError";
+  }
+}
+
+/**
+ * Resolve the ManyChat API key for a chatbot.
+ * - If the chatbot has an encrypted key, decrypt it. A decryption failure
+ *   (bad/rotated master key) is a HARD error — never fall back to the global
+ *   env key, which would send this tenant's reply through the owner's account.
+ * - Otherwise fall back to the global MANYCHAT_API_KEY (the un-migrated owner).
+ * - Throw ManychatKeyError if neither is available.
+ */
+export function resolveManychatApiKey(chatbot: {
+  manychat_api_key_enc?: string | null;
+}): string {
+  if (chatbot.manychat_api_key_enc) {
+    try {
+      return decryptSecret(chatbot.manychat_api_key_enc);
+    } catch {
+      throw new ManychatKeyError("manychat_key_decrypt_failed");
+    }
+  }
+  const env = process.env.MANYCHAT_API_KEY;
+  if (!env) throw new ManychatKeyError("no_manychat_api_key");
+  return env;
+}
 
 export interface ManyChatWebhookPayload {
   /** ManyChat subscriber id (string) */
@@ -32,11 +64,15 @@ export interface ManyChatWebhookPayload {
   message: string;
 }
 
-/** Constant-time compare of the shared webhook secret. */
-export function verifyManychatSecret(provided: string | null): boolean {
-  const expected = process.env.MANYCHAT_WEBHOOK_SECRET;
-  if (!expected || !provided) return false;
-  const a = createHash("sha256").update(expected).digest();
+/** Constant-time compare of the shared webhook secret against an expected
+ *  value (per-chatbot secret), defaulting to the env var for back-compat. */
+export function verifyManychatSecret(
+  provided: string | null,
+  expected?: string | null
+): boolean {
+  const exp = expected ?? process.env.MANYCHAT_WEBHOOK_SECRET;
+  if (!exp || !provided) return false;
+  const a = createHash("sha256").update(exp).digest();
   const b = createHash("sha256").update(provided).digest();
   return a.length === b.length && timingSafeEqual(a, b);
 }
@@ -65,9 +101,10 @@ export async function sendManychatMessage(opts: {
   text: string | string[];
   /** Instagram message tag for sending outside the 24h window (e.g. "HUMAN_AGENT"). */
   messageTag?: string;
+  /** ManyChat API key to authenticate the send (resolved per-chatbot by the caller). */
+  apiKey: string;
 }) {
-  const apiKey = process.env.MANYCHAT_API_KEY;
-  if (!apiKey) throw new Error("MANYCHAT_API_KEY not set");
+  const { apiKey } = opts;
 
   // Normalize to a list of non-empty bubbles. Nothing to send → no-op (also
   // avoids posting a blank message when an empty string is passed).
@@ -177,6 +214,8 @@ export async function sendManychatMessagePaced(opts: {
   bubbles: string[];
   messageTag?: string;
   startedAt?: number; // performance.now() at request start, for the deadline guard
+  /** ManyChat API key to authenticate each send (resolved per-chatbot by the caller). */
+  apiKey: string;
 }): Promise<void> {
   const bubbles = opts.bubbles.map((b) => (b ?? "").trim()).filter(Boolean);
   if (bubbles.length === 0) return;
@@ -204,6 +243,7 @@ export async function sendManychatMessagePaced(opts: {
         subscriberId: opts.subscriberId,
         text: bubbles[i],
         messageTag: opts.messageTag,
+        apiKey: opts.apiKey,
       });
     } catch (err) {
       anyFailed = true;
@@ -215,4 +255,26 @@ export async function sendManychatMessagePaced(opts: {
   }
 
   if (anyFailed) throw new Error("ManyChat paced send: one or more bubbles failed");
+}
+
+/**
+ * Validate a ManyChat API key by calling getInfo. Returns the page name on
+ * success so the UI can confirm which account was connected.
+ */
+export async function validateManychatApiKey(
+  apiKey: string
+): Promise<{ ok: boolean; pageName?: string; error?: string }> {
+  try {
+    const res = await fetch("https://api.manychat.com/fb/page/getInfo", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(8_000),
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json?.status === "success") {
+      return { ok: true, pageName: json?.data?.name ?? undefined };
+    }
+    return { ok: false, error: json?.message || `ManyChat returned ${res.status}` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "network error" };
+  }
 }
