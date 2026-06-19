@@ -92,7 +92,7 @@ export function StageConversationList({
         {shown < total && loadMoreHref ? (
           <Link
             href={loadMoreHref}
-            className="text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded min-h-[44px] inline-flex items-center px-2"
+            className="text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded inline-flex items-center h-11 px-2"
           >
             Load more
           </Link>

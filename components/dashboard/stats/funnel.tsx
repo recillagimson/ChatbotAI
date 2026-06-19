@@ -49,7 +49,7 @@ export function Funnel({
       </CardHeader>
 
       <CardContent>
-        <div className="space-y-1">
+        <div className="space-y-2">
           {stages.map((stage, idx) => {
             const isExpanded = expandedStage === stage.key;
             const isReal = stage.real;
