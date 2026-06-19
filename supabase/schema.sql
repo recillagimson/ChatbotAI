@@ -310,3 +310,132 @@ grant execute on function public.match_kb_chunks(uuid, vector, int, float, text)
 -- drop table if exists public.kb_chunks;
 -- alter table public.chatbots drop column if exists retrieval_active;
 -- alter table public.knowledge_base drop column if exists indexed, drop column if exists needs_review;
+
+-- =====================================================================
+-- Feature: superadmin console + change requests + feedback
+--   Team-side role flag + cross-tenant RLS overlays keyed on a
+--   security-definer privilege helper + two request tables. Re-runnable.
+-- =====================================================================
+
+-- 1. Role flag on profiles.
+alter table public.profiles add column if not exists is_superadmin boolean not null default false;
+
+-- 2. Privilege helper. SECURITY DEFINER so its own read of profiles bypasses RLS
+--    (prevents policy self-recursion when used inside a profiles policy below).
+create or replace function public.is_superadmin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select is_superadmin from public.profiles where id = auth.uid()), false);
+$$;
+revoke all on function public.is_superadmin() from public, anon;
+grant execute on function public.is_superadmin() to authenticated;
+
+-- 3. change_requests: a client's natural-language ask + the Sonnet draft + the team's decision.
+create table if not exists public.change_requests (
+  id           uuid primary key default uuid_generate_v4(),
+  chatbot_id   uuid not null references public.chatbots(id) on delete cascade,
+  user_id      uuid not null references public.profiles(id) on delete cascade,  -- the CLIENT (owner)
+  request_text text not null,
+  status       text not null default 'pending'
+                 check (status in ('pending','approved','applied','rejected')),
+  proposed     jsonb,        -- { system_prompt?: text, kb_entries?: [{title,content}], summary: text }
+  model_used   text,
+  draft_error  text,         -- set if the auto-draft Sonnet call failed (request still usable)
+  final        jsonb,        -- team-edited/selected payload, set at Approve
+  admin_note   text,
+  reviewed_by  uuid references public.profiles(id),
+  reviewed_at  timestamptz,
+  applied_at   timestamptz,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create index if not exists change_requests_status_idx  on public.change_requests(status, created_at desc);
+create index if not exists change_requests_chatbot_idx on public.change_requests(chatbot_id);
+
+drop trigger if exists touch_change_requests on public.change_requests;
+create trigger touch_change_requests before update on public.change_requests
+  for each row execute function public.touch_updated_at();
+
+-- 4. feedback: a lighter client->team channel.
+create table if not exists public.feedback (
+  id          uuid primary key default uuid_generate_v4(),
+  user_id     uuid not null references public.profiles(id) on delete cascade,
+  chatbot_id  uuid references public.chatbots(id) on delete set null,   -- optional
+  message     text not null,
+  status      text not null default 'new' check (status in ('new','read','resolved')),
+  admin_note  text,
+  reviewed_by uuid references public.profiles(id),
+  reviewed_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index if not exists feedback_status_idx on public.feedback(status, created_at desc);
+
+alter table public.change_requests enable row level security;
+alter table public.feedback        enable row level security;
+
+-- 5. RLS — change_requests
+drop policy if exists "cr owner insert" on public.change_requests;
+create policy "cr owner insert" on public.change_requests for insert
+  with check (
+    auth.uid() = user_id
+    and chatbot_id in (select id from public.chatbots where user_id = auth.uid())
+  );
+
+drop policy if exists "cr read" on public.change_requests;
+create policy "cr read" on public.change_requests for select
+  using (auth.uid() = user_id or public.is_superadmin());
+
+drop policy if exists "cr admin update" on public.change_requests;
+create policy "cr admin update" on public.change_requests for update
+  using (public.is_superadmin()) with check (public.is_superadmin());
+
+-- 6. RLS — feedback
+drop policy if exists "fb owner insert" on public.feedback;
+create policy "fb owner insert" on public.feedback for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "fb read" on public.feedback;
+create policy "fb read" on public.feedback for select
+  using (auth.uid() = user_id or public.is_superadmin());
+
+drop policy if exists "fb admin update" on public.feedback;
+create policy "fb admin update" on public.feedback for update
+  using (public.is_superadmin()) with check (public.is_superadmin());
+
+-- 7. Admin RLS overlays on existing tables (ADDITIONAL permissive policies; the
+--    existing "own …" policies remain, so normal users are unaffected).
+drop policy if exists "admin read profiles" on public.profiles;
+create policy "admin read profiles" on public.profiles for select using (public.is_superadmin());
+
+drop policy if exists "admin read subscriptions" on public.subscriptions;
+create policy "admin read subscriptions" on public.subscriptions for select using (public.is_superadmin());
+
+drop policy if exists "admin all chatbots" on public.chatbots;
+create policy "admin all chatbots" on public.chatbots for all
+  using (public.is_superadmin()) with check (public.is_superadmin());
+
+drop policy if exists "admin all kb" on public.knowledge_base;
+create policy "admin all kb" on public.knowledge_base for all
+  using (public.is_superadmin()) with check (public.is_superadmin());
+
+drop policy if exists "admin read conversations" on public.conversations;
+create policy "admin read conversations" on public.conversations for select using (public.is_superadmin());
+
+drop policy if exists "admin read usage" on public.usage_log;
+create policy "admin read usage" on public.usage_log for select using (public.is_superadmin());
+
+-- Teardown (down-migration), if the feature is pulled:
+-- drop policy if exists "admin read usage" on public.usage_log;
+-- drop policy if exists "admin read conversations" on public.conversations;
+-- drop policy if exists "admin all kb" on public.knowledge_base;
+-- drop policy if exists "admin all chatbots" on public.chatbots;
+-- drop policy if exists "admin read subscriptions" on public.subscriptions;
+-- drop policy if exists "admin read profiles" on public.profiles;
+-- drop table if exists public.feedback;
+-- drop table if exists public.change_requests;
+-- drop function if exists public.is_superadmin();
+-- alter table public.profiles drop column if exists is_superadmin;
