@@ -22,6 +22,9 @@ import { StatusSplit } from "@/components/dashboard/stats/status-split";
 import { Funnel } from "@/components/dashboard/stats/funnel";
 import { TrendChart } from "@/components/dashboard/stats/trend-chart";
 import { EventsList } from "@/components/dashboard/stats/events-list";
+import { DisqualifiedCallout } from "@/components/dashboard/stats/disqualified-callout";
+import { PhasesFunnel } from "@/components/dashboard/stats/phases-funnel";
+import { FollowupSequences } from "@/components/dashboard/stats/followup-sequences";
 
 export const dynamic = "force-dynamic";
 
@@ -413,7 +416,13 @@ export default async function StatisticsPage({
                 />
               </div>
 
-              {/* ST6: phases, follow-up sequences, disqualified callout (stubs) */}
+              {/* ST6: honest stub sections — Disqualified callout, Phases funnel, Follow-up sequences */}
+              <DisqualifiedCallout />
+              <PhasesFunnel avgMsgsPerConvo={overview.messages.avg_per_convo ?? 0} />
+              <FollowupSequences
+                followupsSent={overview.followups.followups_sent ?? 0}
+                convWithFollowup={overview.followups.conv_with_followup ?? 0}
+              />
             </>
           )}
 
