@@ -5,8 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChatbotSettingsForm } from "@/components/dashboard/chatbot-settings-form";
 import { ChatbotEditForm } from "@/components/dashboard/chatbot-edit-form";
+import { ChangeRequestForm } from "@/components/dashboard/change-request-form";
+import { ChangeRequestHistory } from "@/components/dashboard/change-request-history";
+import { FeedbackForm } from "@/components/dashboard/feedback-form";
 import { FOLLOWUP_ENABLED } from "@/lib/followup";
-import type { Chatbot } from "@/lib/types";
+import type { Chatbot, ChangeRequest } from "@/lib/types";
 import Link from "next/link";
 
 export default async function ChatbotDetailPage({
@@ -36,6 +39,13 @@ export default async function ChatbotDetailPage({
     .from("conversations")
     .select("*", { count: "exact", head: true })
     .eq("chatbot_id", id);
+
+  const { data: changeRequests } = await supabase
+    .from("change_requests")
+    .select("*")
+    .eq("chatbot_id", id)
+    .eq("user_id", user!.id)
+    .order("created_at", { ascending: false });
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const webhookUrl = `${appUrl}/api/webhooks/manychat`;
@@ -108,6 +118,35 @@ export default async function ChatbotDetailPage({
               notifications — we&apos;re adding that opt-in next.
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Request a change</CardTitle>
+          <CardDescription>
+            Tell the SpeedSettr team what to tweak — we&apos;ll draft it and
+            apply it for you.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <ChangeRequestForm chatbotId={chatbot.id} />
+          <ChangeRequestHistory
+            requests={(changeRequests ?? []) as ChangeRequest[]}
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Send feedback</CardTitle>
+          <CardDescription>
+            Share what&apos;s working or what&apos;s not. It goes straight to the
+            team.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FeedbackForm chatbotId={chatbot.id} />
         </CardContent>
       </Card>
 
