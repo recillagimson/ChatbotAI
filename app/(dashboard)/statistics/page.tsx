@@ -145,7 +145,23 @@ export default async function StatisticsPage({
           .limit(50)
       : null;
 
-  const events = eventsResult?.data ?? [];
+  const rawEvents = eventsResult?.data ?? [];
+
+  // Supabase embedded joins return the related row as an ARRAY even for to-one
+  // relationships. Normalize chatbots to a scalar before passing to EventsList
+  // so ev.chatbots?.name works at runtime (not just in TypeScript types).
+  const normalizedEvents = rawEvents.map((ev) => {
+    const chatbotsField = (ev.chatbots as unknown as { name: string }[] | { name: string } | null);
+    return {
+      id: ev.id,
+      event_type: ev.event_type,
+      tokens_used: ev.tokens_used,
+      created_at: ev.created_at,
+      chatbots: Array.isArray(chatbotsField)
+        ? (chatbotsField[0] ?? null)
+        : (chatbotsField ?? null),
+    };
+  });
 
   // ── makeHref helper ─────────────────────────────────────────────────────────
   /**
@@ -403,15 +419,7 @@ export default async function StatisticsPage({
 
           {tab === "events" && (
             <div className="mb-8">
-              <EventsList
-                events={(events as unknown as {
-                  id: string;
-                  event_type: string;
-                  tokens_used: number | null;
-                  created_at: string;
-                  chatbots: { name: string } | null;
-                }[])}
-              />
+              <EventsList events={normalizedEvents} />
             </div>
           )}
         </>
