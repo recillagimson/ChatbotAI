@@ -310,3 +310,147 @@ grant execute on function public.match_kb_chunks(uuid, vector, int, float, text)
 -- drop table if exists public.kb_chunks;
 -- alter table public.chatbots drop column if exists retrieval_active;
 -- alter table public.knowledge_base drop column if exists indexed, drop column if exists needs_review;
+
+-- =====================================================================
+-- Feature: statistics page analytics (read-only, RLS-scoped)
+--   Two security-invoker RPCs granted to authenticated. Re-runnable.
+-- =====================================================================
+
+-- Aggregated overview for a date range (+ optional chatbot filter).
+create or replace function public.analytics_overview(
+  p_from       timestamptz,
+  p_to         timestamptz,
+  p_chatbot_id uuid default null
+)
+returns jsonb
+language sql
+stable
+security invoker
+as $$
+  with convs as (
+    select c.id, c.status, c.created_at, c.followup_count
+    from public.conversations c
+    where c.user_id = auth.uid()
+      and c.created_at >= p_from and c.created_at < p_to
+      and (p_chatbot_id is null or c.chatbot_id = p_chatbot_id)
+  ),
+  msgflags as (
+    select cv.id,
+      exists(select 1 from public.messages m where m.conversation_id = cv.id and m.role = 'user')      as has_user,
+      exists(select 1 from public.messages m where m.conversation_id = cv.id and m.role = 'assistant') as has_assistant,
+      exists(select 1 from public.messages m where m.conversation_id = cv.id and m.role = 'assistant'
+             and m.content ~* 'https?://')                                                             as has_link,
+      (select count(*)        from public.messages m where m.conversation_id = cv.id)                  as msg_count,
+      (select min(m.created_at) from public.messages m where m.conversation_id = cv.id and m.role = 'user')      as first_user,
+      (select min(m.created_at) from public.messages m where m.conversation_id = cv.id and m.role = 'assistant') as first_assistant
+    from convs cv
+  ),
+  funnel as (
+    select
+      (select count(*) from convs)                                          as entry,
+      (select count(*) from msgflags where has_user and has_assistant)      as replied,
+      (select count(*) from msgflags where has_link)                        as link_sent
+  ),
+  rt as (
+    select
+      avg(extract(epoch from (first_assistant - first_user)))                                              as avg_secs,
+      percentile_cont(0.5) within group (order by extract(epoch from (first_assistant - first_user)))      as median_secs
+    from msgflags
+    where first_assistant is not null and first_user is not null and first_assistant >= first_user
+  ),
+  status_split as (
+    select
+      count(*) filter (where status = 'active')    as active,
+      count(*) filter (where status = 'ai_paused') as ai_paused,
+      count(*) filter (where status = 'closed')    as closed
+    from convs
+  ),
+  msgs_agg as (
+    select coalesce(sum(msg_count), 0) as total_msgs, count(*) as n from msgflags
+  ),
+  ai as (
+    select
+      count(*) filter (where u.event_type = 'ai_reply')                                                       as ai_replies,
+      coalesce(sum(u.tokens_used) filter (where u.event_type = 'ai_reply'), 0)                                as tokens,
+      count(*) filter (where u.event_type in ('push_failed','no_manychat_api_key','manychat_key_decrypt_failed')) as delivery_failures
+    from public.usage_log u
+    where u.user_id = auth.uid()
+      and u.created_at >= p_from and u.created_at < p_to
+      and (p_chatbot_id is null or u.chatbot_id = p_chatbot_id)
+  ),
+  followups as (
+    select
+      coalesce(sum(followup_count), 0)            as followups_sent,
+      count(*) filter (where followup_count > 0)  as conv_with_followup
+    from convs
+  ),
+  series as (
+    select
+      to_char(d::date, 'YYYY-MM-DD') as day,
+      (select count(*) from convs c where date_trunc('day', c.created_at) = d) as conversations,
+      (select count(*) from public.usage_log u
+         where u.user_id = auth.uid() and u.event_type = 'ai_reply'
+           and date_trunc('day', u.created_at) = d
+           and (p_chatbot_id is null or u.chatbot_id = p_chatbot_id)) as ai_replies
+    from generate_series(date_trunc('day', p_from),
+                         date_trunc('day', p_to - interval '1 second'),
+                         interval '1 day') d
+  )
+  select jsonb_build_object(
+    'funnel',        (select to_jsonb(funnel)       from funnel),
+    'response_time', (select to_jsonb(rt)           from rt),
+    'status_split',  (select to_jsonb(status_split) from status_split),
+    'messages',      (select jsonb_build_object('total', total_msgs,
+                              'avg_per_convo', case when n > 0 then round(total_msgs::numeric / n, 1) else 0 end)
+                       from msgs_agg),
+    'usage',         (select to_jsonb(ai)           from ai),
+    'followups',     (select to_jsonb(followups)    from followups),
+    'series',        (select coalesce(jsonb_agg(to_jsonb(series) order by day), '[]'::jsonb) from series)
+  );
+$$;
+
+revoke all on function public.analytics_overview(timestamptz, timestamptz, uuid) from public, anon;
+grant execute on function public.analytics_overview(timestamptz, timestamptz, uuid) to authenticated;
+
+-- Paginated conversation list for one funnel stage (called when a stage is expanded).
+create or replace function public.analytics_stage_conversations(
+  p_stage      text,
+  p_from       timestamptz,
+  p_to         timestamptz,
+  p_chatbot_id uuid default null,
+  p_limit      int  default 6,
+  p_offset     int  default 0
+)
+returns table (id uuid, contact_username text, contact_name text, created_at timestamptz, total bigint)
+language sql
+stable
+security invoker
+as $$
+  with convs as (
+    select c.id, c.contact_username, c.contact_name, c.created_at
+    from public.conversations c
+    where c.user_id = auth.uid()
+      and c.created_at >= p_from and c.created_at < p_to
+      and (p_chatbot_id is null or c.chatbot_id = p_chatbot_id)
+      and case p_stage
+        when 'entry'   then true
+        when 'replied' then
+          exists(select 1 from public.messages m where m.conversation_id = c.id and m.role = 'user')
+          and exists(select 1 from public.messages m where m.conversation_id = c.id and m.role = 'assistant')
+        when 'link_sent' then
+          exists(select 1 from public.messages m where m.conversation_id = c.id and m.role = 'assistant' and m.content ~* 'https?://')
+        else false
+      end
+  )
+  select id, contact_username, contact_name, created_at, count(*) over () as total
+  from convs
+  order by created_at desc
+  limit p_limit offset p_offset;
+$$;
+
+revoke all on function public.analytics_stage_conversations(text, timestamptz, timestamptz, uuid, int, int) from public, anon;
+grant execute on function public.analytics_stage_conversations(text, timestamptz, timestamptz, uuid, int, int) to authenticated;
+
+-- Teardown (down-migration), if the statistics feature is pulled:
+-- drop function if exists public.analytics_overview(timestamptz, timestamptz, uuid);
+-- drop function if exists public.analytics_stage_conversations(text, timestamptz, timestamptz, uuid, int, int);
