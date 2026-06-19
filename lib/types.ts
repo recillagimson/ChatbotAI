@@ -12,6 +12,7 @@ export interface Profile {
   company_name: string | null;
   avatar_url: string | null;
   onboarding_completed: boolean;
+  is_superadmin: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -92,5 +93,47 @@ export interface KbChunk {
   chunk_index: number;
   content: string;
   embedding_model: string | null;
+  created_at: string;
+}
+
+export interface ChangeProposal {
+  system_prompt?: string;                          // omitted/empty = leave the prompt unchanged
+  kb_entries?: { title: string; content: string }[]; // NEW kb entries to add (may be omitted/empty)
+  summary: string;                                 // plain-English "what changed and why" for the team
+}
+
+// The team-finalized payload chosen at Approve (no summary needed).
+export interface ChangeFinal {
+  system_prompt?: string;
+  kb_entries?: { title: string; content: string }[];
+}
+
+export interface ChangeRequest {
+  id: string;
+  chatbot_id: string;
+  user_id: string;
+  request_text: string;
+  status: "pending" | "approved" | "applied" | "rejected";
+  proposed: ChangeProposal | null;
+  model_used: string | null;
+  draft_error: string | null;
+  final: ChangeFinal | null;
+  admin_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  applied_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Feedback {
+  id: string;
+  user_id: string;
+  chatbot_id: string | null;
+  message: string;
+  status: "new" | "read" | "resolved";
+  admin_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
   created_at: string;
 }

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Chatbot, Message } from "./types";
+import type { Chatbot, Message, ChangeProposal } from "./types";
 import { sanitizeReply } from "./sanitize";
 
 let _anthropic: Anthropic | null = null;
@@ -34,6 +34,134 @@ const TONE_GUIDES: Record<Chatbot["tone"], string> = {
   enthusiastic:
     "Energetic and excited. Use exclamation points sparingly and an emoji where natural.",
 };
+
+const PROPOSE_CHANGES_TOOL: Anthropic.Tool = {
+  name: "propose_changes",
+  description:
+    "Return proposed updates to the Instagram DM chatbot for the SpeedSettr team to review.",
+  input_schema: {
+    type: "object",
+    properties: {
+      system_prompt: {
+        type: "string",
+        description:
+          "The FULL revised system prompt / persona for the bot. Omit (or leave empty) if no prompt change is needed.",
+      },
+      kb_entries: {
+        type: "array",
+        description: "NEW knowledge-base entries to add. Omit/empty if none.",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            content: { type: "string" },
+          },
+          required: ["title", "content"],
+        },
+      },
+      summary: {
+        type: "string",
+        description: "A concise plain-English explanation of what you changed and why, for the human reviewer.",
+      },
+    },
+    required: ["summary"],
+  },
+};
+
+/** Normalize/guard a propose_changes tool input into a ChangeProposal. Throws on unusable input. */
+export function parseProposalInput(input: unknown): ChangeProposal {
+  if (!input || typeof input !== "object") {
+    throw new Error("propose_changes returned no object input");
+  }
+  const obj = input as Record<string, unknown>;
+  const summary = typeof obj.summary === "string" ? obj.summary.trim() : "";
+  if (!summary) throw new Error("propose_changes returned no summary");
+
+  const system_prompt =
+    typeof obj.system_prompt === "string" && obj.system_prompt.trim()
+      ? obj.system_prompt.trim()
+      : undefined;
+
+  let kb_entries: { title: string; content: string }[] | undefined;
+  if (Array.isArray(obj.kb_entries)) {
+    const cleaned = obj.kb_entries
+      .filter(
+        (e): e is { title: string; content: string } =>
+          !!e &&
+          typeof e === "object" &&
+          typeof (e as Record<string, unknown>).title === "string" &&
+          typeof (e as Record<string, unknown>).content === "string"
+      )
+      .map((e) => ({ title: e.title.trim(), content: e.content.trim() }))
+      .filter((e) => e.title && e.content);
+    if (cleaned.length) kb_entries = cleaned;
+  }
+
+  return { summary, ...(system_prompt ? { system_prompt } : {}), ...(kb_entries ? { kb_entries } : {}) };
+}
+
+export async function draftChangeRequest(opts: {
+  chatbot: Chatbot;
+  kbTitles: string[];
+  requestText: string;
+  adminGuidance?: string;
+}): Promise<{ proposal: ChangeProposal; tokensUsed: number; model: string }> {
+  const { chatbot, kbTitles, requestText, adminGuidance } = opts;
+
+  const currentBehavior =
+    chatbot.system_prompt && chatbot.system_prompt.trim()
+      ? chatbot.system_prompt.trim()
+      : `Generic customer-service bot for "${chatbot.name}".
+Business description: ${chatbot.business_description || "(none provided)"}
+Tone: ${TONE_GUIDES[chatbot.tone]}`;
+
+  const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change to their bot. Produce a revised system prompt and/or new knowledge-base entries that fulfill the request.
+
+CRITICAL: whenever you set system_prompt, BAKE IN these non-negotiable safety guardrails (the platform relies on them and will otherwise lose them):
+- Keep replies under ~320 characters when possible (Instagram DM-friendly).
+- Never invent prices, hours, links, addresses, or policies that aren't in the knowledge base; offer to get a human teammate to confirm.
+- Never reveal it is an AI unless directly asked.
+- Never promise refunds, discounts, or anything financial unless explicitly instructed.
+- If the user is angry or asks for a human, reply briefly and say a teammate will follow up.
+- Match the language of the customer's message.
+- To send several short messages, separate each one with a blank line (each becomes its own DM bubble).
+
+Only set system_prompt if the request warrants a prompt change. Propose kb_entries only for NEW facts not already covered by the existing titles. Always include a concise summary for the reviewer. Respond by calling the propose_changes tool.`;
+
+  const userContent = `CURRENT BOT BEHAVIOR (your starting point):
+${currentBehavior}
+
+EXISTING KNOWLEDGE-BASE ENTRY TITLES (do not duplicate these):
+${kbTitles.length ? kbTitles.map((t) => `- ${t}`).join("\n") : "(none)"}
+
+CLIENT'S CHANGE REQUEST:
+${requestText}${adminGuidance ? `\n\nADDITIONAL GUIDANCE FROM THE SPEEDSETTR TEAM (takes priority):\n${adminGuidance}` : ""}`;
+
+  const response = await getAnthropic().messages.create({
+    model: AI_MODEL,
+    max_tokens: 2500,
+    system,
+    tools: [PROPOSE_CHANGES_TOOL],
+    tool_choice: { type: "tool", name: "propose_changes" },
+    messages: [{ role: "user", content: userContent }],
+  });
+
+  const toolUse = response.content.find(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "propose_changes"
+  );
+  if (!toolUse) throw new Error("Model did not return a propose_changes tool call");
+
+  const proposal = parseProposalInput(toolUse.input);
+
+  const usage = response.usage;
+  const tokensUsed =
+    (usage?.input_tokens ?? 0) +
+    (usage?.cache_creation_input_tokens ?? 0) +
+    (usage?.cache_read_input_tokens ?? 0) +
+    (usage?.output_tokens ?? 0);
+
+  return { proposal, tokensUsed, model: AI_MODEL };
+}
 
 export function buildSystemPrompt(chatbot: Chatbot, kbBlock: string): string {
   // A chatbot with a custom system_prompt (a full persona like "Evan") takes
