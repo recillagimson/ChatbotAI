@@ -20,6 +20,8 @@ import { StatsControlsBar } from "@/components/dashboard/stats/stats-controls-ba
 import { KpiStatCard } from "@/components/dashboard/stats/kpi-stat-card";
 import { StatusSplit } from "@/components/dashboard/stats/status-split";
 import { Funnel } from "@/components/dashboard/stats/funnel";
+import { TrendChart } from "@/components/dashboard/stats/trend-chart";
+import { EventsList } from "@/components/dashboard/stats/events-list";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +128,24 @@ export default async function StatisticsPage({
 
   const stageTotal = stageRows?.[0]?.total ?? 0;
   const stageShown = stageRows?.length ?? 0;
+
+  // ── Active tab ───────────────────────────────────────────────────────────────
+  const tab = sp.tab === "events" ? "events" : "funnel";
+
+  // ── Events query (only when tab=events and overview is loaded) ───────────────
+  const eventsResult =
+    tab === "events" && overview !== null
+      ? await supabase
+          .from("usage_log")
+          .select("id, event_type, tokens_used, created_at, chatbots(name)")
+          .eq("user_id", user!.id)
+          .gte("created_at", from)
+          .lt("created_at", to)
+          .order("created_at", { ascending: false })
+          .limit(50)
+      : null;
+
+  const events = eventsResult?.data ?? [];
 
   // ── makeHref helper ─────────────────────────────────────────────────────────
   /**
@@ -300,69 +320,100 @@ export default async function StatisticsPage({
             })()}
           </div>
 
-          {/* ── ST4b: Funnel (2/3 width) + side KPI cards (1/3 width) ── */}
-          <div className="grid lg:grid-cols-3 gap-6 mb-8">
-            {/* Left 2 cols: conversation funnel */}
-            <div className="lg:col-span-2">
-              <Funnel
-                stages={funnelStages}
-                expandedStage={expandedStage}
-                stageRows={stageRows}
-                stageTotal={stageTotal}
-                stageShown={stageShown}
-                makeHref={makeHref}
-              />
-            </div>
-
-            {/* Right 1 col: funnel-related KPI cards */}
-            <div className="flex flex-col gap-4">
-              {/* Booking Rate — stub (not tracked) */}
-              <KpiStatCard
-                label="Booking Rate"
-                value="—"
-                sub="booked / entry"
-                stub
-              />
-
-              {/* Reply Rate — real, moved from top strip */}
-              {(() => {
-                const pct = safePct(
-                  overview.funnel.replied,
-                  overview.funnel.entry ?? 0
-                );
-                const display = pct === null ? "—" : `${pct.toFixed(1)}%`;
-                return (
-                  <KpiStatCard
-                    label="Reply Rate"
-                    value={display}
-                    sub="replied / entry"
-                    tone={pctTone(pct)}
-                  />
-                );
-              })()}
-
-              {/* Total Conversations — real, moved from top strip */}
-              <KpiStatCard
-                label="Total Conversations"
-                value={overview.funnel.entry ?? 0}
-                sub="entry events"
-                icon={MessageSquare}
-              />
-            </div>
-          </div>
-
-          {/* ── ST4: Status split (full width, below funnel) ── */}
+          {/* ── ST5: Trend chart — always visible in both tabs ── */}
           <div className="mb-8">
-            <StatusSplit
-              active={overview.status_split.active}
-              aiPaused={overview.status_split.ai_paused}
-              closed={overview.status_split.closed}
-            />
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-medium">
+                  Activity over time
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <TrendChart series={overview.series} />
+              </CardContent>
+            </Card>
           </div>
 
-          {/* ST5: trend chart + Events view */}
+          {/* ── Tab-conditional section: Funnel (default) or Events ── */}
+          {tab === "funnel" && (
+            <>
+              {/* ── ST4b: Funnel (2/3 width) + side KPI cards (1/3 width) ── */}
+              <div className="grid lg:grid-cols-3 gap-6 mb-8">
+                {/* Left 2 cols: conversation funnel */}
+                <div className="lg:col-span-2">
+                  <Funnel
+                    stages={funnelStages}
+                    expandedStage={expandedStage}
+                    stageRows={stageRows}
+                    stageTotal={stageTotal}
+                    stageShown={stageShown}
+                    makeHref={makeHref}
+                  />
+                </div>
 
-          {/* ST6: phases, follow-up sequences, disqualified callout (stubs) */}
+                {/* Right 1 col: funnel-related KPI cards */}
+                <div className="flex flex-col gap-4">
+                  {/* Booking Rate — stub (not tracked) */}
+                  <KpiStatCard
+                    label="Booking Rate"
+                    value="—"
+                    sub="booked / entry"
+                    stub
+                  />
+
+                  {/* Reply Rate — real, moved from top strip */}
+                  {(() => {
+                    const pct = safePct(
+                      overview.funnel.replied,
+                      overview.funnel.entry ?? 0
+                    );
+                    const display = pct === null ? "—" : `${pct.toFixed(1)}%`;
+                    return (
+                      <KpiStatCard
+                        label="Reply Rate"
+                        value={display}
+                        sub="replied / entry"
+                        tone={pctTone(pct)}
+                      />
+                    );
+                  })()}
+
+                  {/* Total Conversations — real, moved from top strip */}
+                  <KpiStatCard
+                    label="Total Conversations"
+                    value={overview.funnel.entry ?? 0}
+                    sub="entry events"
+                    icon={MessageSquare}
+                  />
+                </div>
+              </div>
+
+              {/* ── ST4: Status split (full width, below funnel) ── */}
+              <div className="mb-8">
+                <StatusSplit
+                  active={overview.status_split.active}
+                  aiPaused={overview.status_split.ai_paused}
+                  closed={overview.status_split.closed}
+                />
+              </div>
+
+              {/* ST6: phases, follow-up sequences, disqualified callout (stubs) */}
+            </>
+          )}
+
+          {tab === "events" && (
+            <div className="mb-8">
+              <EventsList
+                events={(events as unknown as {
+                  id: string;
+                  event_type: string;
+                  tokens_used: number | null;
+                  created_at: string;
+                  chatbots: { name: string } | null;
+                }[])}
+              />
+            </div>
+          )}
         </>
       )}
     </div>
