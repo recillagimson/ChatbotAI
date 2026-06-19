@@ -11,8 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CLAUDE_IMAGE_TYPES } from "@/lib/storage";
+import type { Attachment } from "@/lib/types";
 
 type FeedbackStatus = "new" | "read" | "resolved";
+
+type SignedAttachment = Attachment & { url: string | null };
+
+const IMAGE_TYPES = new Set<string>(CLAUDE_IMAGE_TYPES);
 
 export type FeedbackItem = {
   id: string;
@@ -23,7 +29,46 @@ export type FeedbackItem = {
   clientEmail: string | null;
   clientName: string | null;
   botName: string | null;
+  attachments: SignedAttachment[];
 };
+
+function AttachmentView({ att }: { att: SignedAttachment }) {
+  const isImage = IMAGE_TYPES.has(att.type);
+
+  if (!att.url) {
+    return (
+      <span className="inline-flex items-center rounded border bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+        {att.name}
+      </span>
+    );
+  }
+
+  if (isImage) {
+    return (
+      <a
+        href={att.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={att.url} alt={att.name} className="max-h-24 rounded border" />
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={att.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      <span aria-hidden="true">📎</span>
+      <span className="max-w-[16rem] truncate">{att.name}</span>
+    </a>
+  );
+}
 
 function statusBadge(status: FeedbackStatus) {
   switch (status) {
@@ -105,6 +150,16 @@ function FeedbackCard({ item }: { item: FeedbackItem }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="whitespace-pre-wrap text-sm">{item.message}</p>
+
+        {item.attachments.length > 0 && (
+          <ul className="flex flex-wrap items-center gap-3">
+            {item.attachments.map((att) => (
+              <li key={att.path}>
+                <AttachmentView att={att} />
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor={noteId}>Internal note</Label>

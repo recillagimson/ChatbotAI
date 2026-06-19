@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Bot,
   MessageSquare,
+  MessageCircle,
   BookOpen,
   Settings,
   CreditCard,
@@ -22,6 +23,7 @@ const nav = [
   { href: "/chatbots", label: "Chatbots", icon: Bot },
   { href: "/conversations", label: "Conversations", icon: MessageSquare },
   { href: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
+  { href: "/feedback", label: "Feedback", icon: MessageCircle },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/billing", label: "Billing", icon: CreditCard },
 ];

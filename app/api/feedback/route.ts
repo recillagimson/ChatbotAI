@@ -8,6 +8,17 @@ export const dynamic = "force-dynamic";
 const Body = z.object({
   message: z.string().min(1).max(4000),
   chatbot_id: z.string().uuid().optional(),
+  attachments: z
+    .array(
+      z.object({
+        path: z.string(),
+        name: z.string(),
+        type: z.string(),
+        size: z.number(),
+      })
+    )
+    .max(5)
+    .optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -18,7 +29,13 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Please write your feedback." }, { status: 400 });
   }
-  const { message, chatbot_id } = parsed.data;
+  const { message, chatbot_id, attachments } = parsed.data;
+
+  // Defense-in-depth over storage RLS: every attachment must live in the
+  // caller's own folder ({user.id}/...).
+  if (attachments?.some((a) => !a.path.startsWith(user.id + "/"))) {
+    return NextResponse.json({ error: "Invalid attachment." }, { status: 400 });
+  }
 
   const supabase = await createClient();
 
@@ -34,9 +51,13 @@ export async function POST(request: NextRequest) {
     boundChatbotId = owned ? chatbot_id : null;
   }
 
-  const { error } = await supabase
-    .from("feedback")
-    .insert({ user_id: user.id, chatbot_id: boundChatbotId, message, status: "new" });
+  const { error } = await supabase.from("feedback").insert({
+    user_id: user.id,
+    chatbot_id: boundChatbotId,
+    message,
+    status: "new",
+    attachments: attachments ?? [],
+  });
   if (error) return NextResponse.json({ error: "Could not send your feedback." }, { status: 500 });
 
   return NextResponse.json({ ok: true });

@@ -7,7 +7,6 @@ import { ChatbotSettingsForm } from "@/components/dashboard/chatbot-settings-for
 import { ChatbotEditForm } from "@/components/dashboard/chatbot-edit-form";
 import { ChangeRequestForm } from "@/components/dashboard/change-request-form";
 import { ChangeRequestHistory } from "@/components/dashboard/change-request-history";
-import { FeedbackForm } from "@/components/dashboard/feedback-form";
 import { FOLLOWUP_ENABLED } from "@/lib/followup";
 import type { Chatbot, ChangeRequest } from "@/lib/types";
 import Link from "next/link";
@@ -134,19 +133,6 @@ export default async function ChatbotDetailPage({
           <ChangeRequestHistory
             requests={(changeRequests ?? []) as ChangeRequest[]}
           />
-        </CardContent>
-      </Card>
-
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Send feedback</CardTitle>
-          <CardDescription>
-            Share what&apos;s working or what&apos;s not. It goes straight to the
-            team.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FeedbackForm chatbotId={chatbot.id} />
         </CardContent>
       </Card>
 

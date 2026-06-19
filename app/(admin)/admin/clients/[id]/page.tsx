@@ -248,6 +248,12 @@ export default async function AdminClientDetailPage({
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {new Date(fb.created_at).toLocaleDateString()}
                   </span>
+                  {fb.attachments?.length ? (
+                    <span className="text-xs text-muted-foreground">
+                      📎 {fb.attachments.length}{" "}
+                      {fb.attachments.length === 1 ? "file" : "files"}
+                    </span>
+                  ) : null}
                 </div>
                 <p className="mt-1 line-clamp-2 text-sm">{fb.message}</p>
               </div>

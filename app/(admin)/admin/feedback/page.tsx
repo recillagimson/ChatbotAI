@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { signAttachment } from "@/lib/storage";
 import { FeedbackInbox } from "@/components/admin/feedback-inbox";
-import type { Feedback, Profile } from "@/lib/types";
+import type { Attachment, Feedback, Profile } from "@/lib/types";
 
 type Status = Feedback["status"];
 const VALID_STATUSES: Status[] = ["new", "read", "resolved"];
@@ -68,16 +69,24 @@ export default async function AdminFeedbackPage({
     botName.set(b.id, b.name);
   }
 
-  const items = feedback.map((f) => ({
-    id: f.id,
-    message: f.message,
-    status: f.status,
-    created_at: f.created_at,
-    admin_note: f.admin_note,
-    clientEmail: clientEmail.get(f.user_id) ?? null,
-    clientName: clientName.get(f.user_id) ?? null,
-    botName: f.chatbot_id ? botName.get(f.chatbot_id) ?? null : null,
-  }));
+  const items = await Promise.all(
+    feedback.map(async (f) => ({
+      id: f.id,
+      message: f.message,
+      status: f.status,
+      created_at: f.created_at,
+      admin_note: f.admin_note,
+      clientEmail: clientEmail.get(f.user_id) ?? null,
+      clientName: clientName.get(f.user_id) ?? null,
+      botName: f.chatbot_id ? botName.get(f.chatbot_id) ?? null : null,
+      attachments: await Promise.all(
+        ((f.attachments ?? []) as Attachment[]).map(async (a) => ({
+          ...a,
+          url: await signAttachment(supabase, a.path),
+        }))
+      ),
+    }))
+  );
 
   const newCount = feedback.filter((f) => f.status === "new").length;
 
