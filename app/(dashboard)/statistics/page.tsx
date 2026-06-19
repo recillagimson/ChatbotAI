@@ -251,7 +251,7 @@ export default async function StatisticsPage({
           customFrom={customFrom}
           customTo={customTo}
           bot={chatbotId}
-          tab={sp.tab ?? "funnel"}
+          tab={tab}
           chatbots={chatbots ?? []}
         />
       )}
