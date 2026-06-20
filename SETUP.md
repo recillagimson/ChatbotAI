@@ -175,11 +175,9 @@ Credentials are now **per-chatbot**: after you create a chatbot (step 7), the ch
      ```json
      {
        "chatbot_id": "PASTE_CHATBOT_ID_FROM_DASHBOARD",
-       "subscriber_id": "{{subscriber_id}}",
-       "page_id": "{{page_id}}",
-       "first_name": "{{first_name}}",
-       "last_name": "{{last_name}}",
+       "subscriber_id": "{{user_id}}",
        "username": "{{ig_username}}",
+       "first_name": "{{first_name}}",
        "message": "{{last_input_text}}"
      }
      ```
