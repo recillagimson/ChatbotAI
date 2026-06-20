@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChatbotSettingsForm } from "@/components/dashboard/chatbot-settings-form";
 import { ChatbotEditForm } from "@/components/dashboard/chatbot-edit-form";
+import { ManychatKeyField } from "@/components/dashboard/manychat-key-field";
+import { WebhookSecretField } from "@/components/dashboard/webhook-secret-field";
 import { FOLLOWUP_ENABLED } from "@/lib/followup";
 import type { Chatbot } from "@/lib/types";
 import Link from "next/link";
@@ -26,6 +28,10 @@ export default async function ChatbotDetailPage({
     .single();
 
   if (!chatbot) notFound();
+
+  const apiKeySet = !!chatbot.manychat_api_key_enc;
+  // Never serialize the encrypted key to the browser; the client forms don't use it.
+  const safeChatbot = { ...chatbot, manychat_api_key_enc: null } as Chatbot;
 
   const { count: kbCount } = await supabase
     .from("knowledge_base")
@@ -87,7 +93,7 @@ export default async function ChatbotDetailPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ChatbotEditForm chatbot={chatbot as Chatbot} />
+          <ChatbotEditForm chatbot={safeChatbot} />
         </CardContent>
       </Card>
 
@@ -100,7 +106,7 @@ export default async function ChatbotDetailPage({
         </CardHeader>
         <CardContent>
           {FOLLOWUP_ENABLED ? (
-            <ChatbotSettingsForm chatbot={chatbot as Chatbot} />
+            <ChatbotSettingsForm chatbot={safeChatbot} />
           ) : (
             <p className="text-sm text-muted-foreground">
               Coming soon. Instagram only lets us message a contact more than 24
@@ -108,6 +114,16 @@ export default async function ChatbotDetailPage({
               notifications — we&apos;re adding that opt-in next.
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>ManyChat API key</CardTitle>
+          <CardDescription>The key SpeedSettr uses to send replies from this account.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ManychatKeyField chatbotId={chatbot.id} configured={apiKeySet} />
         </CardContent>
       </Card>
 
@@ -121,7 +137,11 @@ export default async function ChatbotDetailPage({
         <CardContent className="space-y-4">
           <Field label="Webhook URL" value={webhookUrl} />
           <Field label="HTTP method" value="POST" />
-          <Field label="Required header" value="x-manychat-secret: (the secret from your .env)" />
+          <Field label="Required header (name)" value="x-manychat-secret" />
+          <div>
+            <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">Secret value (this chatbot)</p>
+            <WebhookSecretField chatbotId={chatbot.id} secret={chatbot.webhook_secret} />
+          </div>
           <Field
             label="JSON body fields to send"
             value={`{

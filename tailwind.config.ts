@@ -40,6 +40,15 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        conv: {
+          good: "hsl(var(--conv-good))",
+          mid: "hsl(var(--conv-mid))",
+          bad: "hsl(var(--conv-bad))",
+        },
+        chart: {
+          1: "hsl(var(--chart-1))",
+          2: "hsl(var(--chart-2))",
+        },
       },
       fontFamily: {
         sans: [

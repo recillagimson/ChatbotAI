@@ -28,6 +28,15 @@
     --sidebar: 270 78% 18%; /* #2E0A52 */
     --sidebar-foreground: 0 0% 100%;
     --sidebar-active: 267 65% 58%; /* vibrant, slightly lifted for dark bg */
+
+    /* Conversion health tokens */
+    --conv-good: 152 58% 40%;   /* green  — healthy conversion */
+    --conv-mid:  38 92% 48%;    /* amber  — middling */
+    --conv-bad:  0 72% 55%;     /* red    — poor / zero */
+
+    /* Chart series tokens */
+    --chart-1: 267 59% 45%;     /* brand purple (primary series) */
+    --chart-2: 267 45% 68%;     /* lighter purple (secondary series) */
   }
 
   .dark {
@@ -52,6 +61,15 @@
     --sidebar: 263 50% 9%;
     --sidebar-foreground: 0 0% 98%;
     --sidebar-active: 267 70% 64%;
+
+    /* Conversion health tokens (slightly lifted for dark bg contrast) */
+    --conv-good: 152 55% 52%;
+    --conv-mid:  38 92% 56%;
+    --conv-bad:  0 72% 62%;
+
+    /* Chart series tokens (lighter for dark bg) */
+    --chart-1: 267 70% 64%;
+    --chart-2: 267 50% 75%;
   }
 
   * { @apply border-border; }

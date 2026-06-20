@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { sendManychatMessage } from "@/lib/manychat";
+import { sendManychatMessage, resolveManychatApiKey } from "@/lib/manychat";
 
 export const runtime = "nodejs";
 
@@ -44,12 +44,31 @@ export async function POST(
   // filter is belt-and-suspenders and gives a clean 404 instead of an RLS empty.
   const { data: conversation, error } = await supabase
     .from("conversations")
-    .select("id, manychat_subscriber_id")
+    .select("id, manychat_subscriber_id, chatbot_id")
     .eq("id", id)
     .eq("user_id", user.id)
     .single();
   if (error || !conversation) {
     return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+  }
+
+  // Resolve the ManyChat API key for the conversation's chatbot (RLS lets the
+  // owner read their own chatbot). On decrypt/no-key failure we surface a clear
+  // 502 instead of silently sending through the wrong (global) account.
+  const { data: chatbot } = await supabase
+    .from("chatbots")
+    .select("manychat_api_key_enc")
+    .eq("id", conversation.chatbot_id)
+    .single();
+
+  let apiKey: string;
+  try {
+    apiKey = resolveManychatApiKey(chatbot ?? {});
+  } catch {
+    return NextResponse.json(
+      { error: "ManyChat isn't connected for this chatbot. Add your API key in the chatbot settings." },
+      { status: 502 }
+    );
   }
 
   // Deliver to Instagram first — if ManyChat rejects it, don't leave a phantom
@@ -58,6 +77,7 @@ export async function POST(
     await sendManychatMessage({
       subscriberId: conversation.manychat_subscriber_id,
       text,
+      apiKey,
     });
   } catch (err) {
     console.error("[conversation-reply] ManyChat send failed", err);

@@ -35,6 +35,8 @@ export interface Chatbot {
   business_description: string | null;
   tone: "friendly" | "professional" | "casual" | "enthusiastic";
   manychat_page_id: string | null;
+  manychat_api_key_enc: string | null;  // AES-256-GCM ciphertext of the ManyChat API key; null = env fallback
+  webhook_secret: string;               // per-chatbot inbound webhook secret (plaintext; NOT NULL in DB)
   instagram_username: string | null;
   system_prompt: string | null;
   is_active: boolean;
