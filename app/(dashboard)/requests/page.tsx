@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { signAttachment } from "@/lib/storage";
 import { RequestChat } from "@/components/dashboard/request-chat";
 import type { ChangeProposal, TranscriptMessage } from "@/lib/types";
@@ -9,12 +8,35 @@ import { cn } from "@/lib/utils";
 
 type CrStatus = "draft" | "pending" | "approved" | "applied" | "rejected";
 
-const STATUS_META: Record<CrStatus, { label: string; variant: BadgeProps["variant"] }> = {
-  draft: { label: "Draft", variant: "secondary" },
-  pending: { label: "In review", variant: "warning" },
-  approved: { label: "Approved", variant: "warning" },
-  applied: { label: "Applied", variant: "success" },
-  rejected: { label: "Rejected", variant: "destructive" },
+// Client-facing status pills (soft pill + leading dot). A draft is always in the
+// client's court (reply or submit) → "Needs your reply"; submitted = "In review";
+// approved/applied (live) = "Approved"; rejected = "Declined".
+const STATUS_META: Record<CrStatus, { label: string; pill: string; dot: string }> = {
+  draft: {
+    label: "Needs your reply",
+    pill: "bg-amber-50 text-amber-700 ring-amber-600/20",
+    dot: "bg-amber-500",
+  },
+  pending: {
+    label: "In review",
+    pill: "bg-green-50 text-green-700 ring-green-600/20",
+    dot: "bg-green-500",
+  },
+  approved: {
+    label: "Approved",
+    pill: "bg-green-600 text-white ring-green-700/30",
+    dot: "bg-white/90",
+  },
+  applied: {
+    label: "Approved",
+    pill: "bg-green-600 text-white ring-green-700/30",
+    dot: "bg-white/90",
+  },
+  rejected: {
+    label: "Declined",
+    pill: "bg-red-50 text-red-700 ring-red-600/20",
+    dot: "bg-red-500",
+  },
 };
 
 function greetingFor(name: string | null): string {
@@ -188,9 +210,18 @@ export default async function RequestsPage({
                         <span className="min-w-0 flex-1 truncate">
                           {h.title || "Untitled request"}
                         </span>
-                        <Badge variant={meta.variant} className="shrink-0">
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
+                            meta.pill
+                          )}
+                        >
+                          <span
+                            className={cn("h-1.5 w-1.5 rounded-full", meta.dot)}
+                            aria-hidden="true"
+                          />
                           {meta.label}
-                        </Badge>
+                        </span>
                       </Link>
                     </li>
                   );
