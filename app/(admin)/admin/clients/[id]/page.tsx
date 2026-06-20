@@ -115,6 +115,7 @@ export default async function AdminClientDetailPage({
       .from("change_requests")
       .select("*")
       .eq("user_id", id)
+      .neq("status", "draft")
       .order("created_at", { ascending: false }),
     supabase
       .from("feedback")

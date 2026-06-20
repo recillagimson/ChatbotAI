@@ -43,6 +43,7 @@ export default async function AdminRequestsPage({
   let query = supabase
     .from("change_requests")
     .select("*")
+    .neq("status", "draft")
     .order("created_at", { ascending: false });
   if (status) query = query.eq("status", status);
   const { data: requestsData } = await query;

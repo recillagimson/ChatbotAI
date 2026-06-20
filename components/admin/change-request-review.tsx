@@ -23,10 +23,16 @@ export function ChangeRequestReview({
   request,
   chatbot,
   clientEmail,
+  transcript,
 }: {
   request: ChangeRequest;
   chatbot: { id: string; name: string; system_prompt: string | null };
   clientEmail: string | null;
+  transcript: {
+    role: "user" | "assistant";
+    content: string;
+    images?: { name: string; url: string | null }[];
+  }[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -107,6 +113,83 @@ export function ChangeRequestReview({
 
   return (
     <div className="space-y-6">
+      {/* 0. Reviewer reminder (color + text) */}
+      <div
+        role="note"
+        className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+      >
+        <span className="font-medium">Reminder:</span> Review the full
+        conversation below before publishing — an approved + published change
+        goes live on the client&apos;s bot.
+      </div>
+
+      {/* 0b. Conversation (client ↔ assistant transcript + attachments) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Conversation</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {transcript.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No conversation captured (submitted directly).
+            </p>
+          ) : (
+            transcript.map((m, i) => {
+              const isClient = m.role === "user";
+              return (
+                <div
+                  key={i}
+                  className={isClient ? "flex justify-end" : "flex justify-start"}
+                >
+                  <div
+                    className={
+                      isClient
+                        ? "max-w-[85%] rounded-lg border bg-muted/50 px-3 py-2"
+                        : "max-w-[85%] rounded-lg border bg-background px-3 py-2"
+                    }
+                  >
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">
+                      {isClient ? "Client" : "Assistant"}
+                    </p>
+                    {m.content && (
+                      <p className="whitespace-pre-wrap text-sm">{m.content}</p>
+                    )}
+                    {m.images && m.images.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {m.images.map((img, j) =>
+                          img.url ? (
+                            <a
+                              key={j}
+                              href={img.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={img.url}
+                                alt={img.name}
+                                className="max-h-32 rounded border"
+                              />
+                            </a>
+                          ) : (
+                            <span
+                              key={j}
+                              className="text-xs text-muted-foreground"
+                            >
+                              {img.name} (unavailable)
+                            </span>
+                          )
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+
       {/* 1. Client request (read-only) */}
       <Card>
         <CardHeader>

@@ -3,10 +3,18 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { ChangeRequestReview } from "@/components/admin/change-request-review";
-import type { ChangeRequest, Chatbot, Profile } from "@/lib/types";
+import { signAttachment } from "@/lib/storage";
+import type {
+  ChangeRequest,
+  Chatbot,
+  Profile,
+  TranscriptMessage,
+} from "@/lib/types";
 
 function statusBadge(status: ChangeRequest["status"]) {
   switch (status) {
+    case "draft":
+      return <Badge variant="secondary">Draft</Badge>;
     case "pending":
       return <Badge variant="secondary">Pending</Badge>;
     case "approved":
@@ -33,6 +41,25 @@ export default async function AdminRequestReviewPage({
     .maybeSingle();
   if (!crData) notFound();
   const cr = crData as ChangeRequest;
+
+  // Sign the transcript's image paths server-side (admin "upload read" policy).
+  const transcript = (cr.transcript ?? []) as TranscriptMessage[];
+  const transcriptView = await Promise.all(
+    transcript.map(async (m) =>
+      m.role === "user" && m.images?.length
+        ? {
+            role: m.role,
+            content: m.content,
+            images: await Promise.all(
+              m.images.map(async (im) => ({
+                name: im.name,
+                url: await signAttachment(supabase, im.path),
+              }))
+            ),
+          }
+        : { role: m.role, content: m.content }
+    )
+  );
 
   const { data: chatbotData } = await supabase
     .from("chatbots")
@@ -93,7 +120,12 @@ export default async function AdminRequestReviewPage({
         </div>
       </div>
 
-      {chatbot ? (
+      {cr.status === "draft" ? (
+        <p className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          This request is still a draft — the client hasn&apos;t submitted it for
+          review yet. It will appear in the queue once they submit it.
+        </p>
+      ) : chatbot ? (
         <ChangeRequestReview
           request={cr}
           chatbot={{
@@ -102,6 +134,7 @@ export default async function AdminRequestReviewPage({
             system_prompt: chatbot.system_prompt,
           }}
           clientEmail={clientEmail}
+          transcript={transcriptView}
         />
       ) : (
         <p className="text-destructive">
