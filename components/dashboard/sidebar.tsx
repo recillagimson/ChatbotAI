@@ -13,6 +13,7 @@ import {
   CreditCard,
   LogOut,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { createClient } from "@/lib/supabase/client";
@@ -24,6 +25,7 @@ const nav = [
   { href: "/conversations", label: "Conversations", icon: MessageSquare },
   { href: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
   { href: "/feedback", label: "Feedback", icon: MessageCircle },
+  { href: "/requests", label: "Request Changes", icon: Sparkles },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/billing", label: "Billing", icon: CreditCard },
 ];
