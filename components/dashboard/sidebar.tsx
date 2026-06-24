@@ -55,7 +55,7 @@ export function Sidebar({
     <aside className="w-64 flex flex-col bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))]">
       <div className="h-16 flex items-center px-6 border-b border-white/10">
         <Link href="/dashboard" aria-label="SpeedSettr">
-          <Logo dark />
+          <Logo white />
         </Link>
       </div>
       <nav className="flex-1 p-3 space-y-1">

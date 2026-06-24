@@ -2,34 +2,67 @@
 import { cn } from "@/lib/utils";
 
 /**
- * SpeedSettr logo — the brand horizontal lockup (ships in /public/brand).
- * Uses the dark lockup (built-in dark background, white wordmark) on dark
- * surfaces, and the transparent light lockup on light surfaces, so the logo is
- * always legible. Pass `dark` on dark surfaces; `size="sm"` for compact spots.
+ * SpeedSettr logo — the original full-color brand artwork (icon + wordmark +
+ * tagline), background-removed + optimized to WebP (see public/brand/).
+ *
+ * The color lockup's "SPEED" is deep navy, which would vanish on dark surfaces,
+ * so on `dark` placements (sidebar, hero, auth panel, footer, admin nav) the
+ * color logo sits on a white "chip" to stay crisp and legible. Light surfaces
+ * show the color logo directly. `showWordmark={false}` renders the icon alone.
  */
 export function Logo({
   className,
   dark = false,
+  white = false,
   size = "md",
+  showWordmark = true,
 }: {
   className?: string;
   dark?: boolean;
+  /** Render the flat white knockout (sits directly on dark surfaces, no chip). */
+  white?: boolean;
   size?: "sm" | "md";
   showWordmark?: boolean;
 }) {
-  const height = size === "sm" ? "h-6" : "h-8";
-  // Dark surfaces use the dark lockup with its background stripped so it sits
-  // seamlessly on the brand sidebar/nav (the shipped dark lockup bakes in a
-  // #1C0838 plaque that clashes with the #2E0A52 sidebar). Light surfaces use
-  // the transparent light lockup.
-  const src = dark
-    ? "/brand/lockup-horizontal-dark-transparent.svg"
-    : "/brand/lockup-horizontal-light.svg";
-  return (
+  const height = size === "sm" ? "h-8" : "h-10";
+  const colorSrc = showWordmark
+    ? "/brand/logo-lockup.webp"
+    : "/brand/logo-icon.webp";
+  const whiteSrc = showWordmark
+    ? "/brand/logo-lockup-white.webp"
+    : "/brand/logo-icon-white.webp";
+  const src = white ? whiteSrc : colorSrc;
+  const dims = showWordmark
+    ? { width: 413, height: 120 }
+    : { width: 132, height: 128 };
+
+  const img = (
     <img
       src={src}
       alt="SpeedSettr"
-      className={cn(height, "w-auto", className)}
+      width={dims.width}
+      height={dims.height}
+      draggable={false}
+      className={cn(height, "w-auto select-none", (white || !dark) && className)}
     />
+  );
+
+  // White knockout: sits directly on dark surfaces, no chip needed.
+  if (white) return img;
+
+  // Light surfaces: full-color logo directly.
+  if (!dark) return img;
+
+  // Dark surfaces: full-color logo on a white chip so the navy wordmark reads.
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-xl bg-white shadow-[0_4px_16px_-6px_rgba(0,0,0,0.45)] ring-1 ring-black/5",
+        size === "sm" ? "px-2.5 py-1" : "px-3 py-1.5",
+        className
+      )}
+    >
+      {img}
+    </span>
   );
 }

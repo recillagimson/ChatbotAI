@@ -34,11 +34,11 @@ interface FunnelStageRowProps {
  */
 const BAR_GRADIENTS = [
   // entry — darkest brand
-  "from-[#2E0A52] to-[#4A1580]",
+  "from-[#1e1b4b] to-[#4338ca]",
   // replied
-  "from-[#4A1580] to-[#6B2FB5]",
+  "from-[#4338ca] to-[#6366f1]",
   // link_sent
-  "from-[#6B2FB5] to-[#8B52D0]",
+  "from-[#6366f1] to-[#818cf8]",
   // booked stub
   "from-muted to-muted",
 ] as const;

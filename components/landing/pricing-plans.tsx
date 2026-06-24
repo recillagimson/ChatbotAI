@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PRICING } from "@/lib/pricing";
 
 const FEATURES = [
   "Unlimited AI replies on Instagram & Messenger",
@@ -14,10 +15,10 @@ const FEATURES = [
   "Priority support",
 ];
 
-const MONTHLY = 997;
-const ANNUAL_PER_MONTH = 897; // 10% off
-const ANNUAL_TOTAL = 10_768; // 997 * 12 * 0.9, rounded
-const ANNUAL_SAVINGS = 1_196; // vs paying monthly for a year
+const MONTHLY = PRICING.monthly;
+const ANNUAL_PER_MONTH = PRICING.annualPerMonth; // 10% off
+const ANNUAL_TOTAL = PRICING.annualTotal; // 897 × 12, matches the Stripe annual price
+const ANNUAL_SAVINGS = PRICING.annualSavings; // vs paying monthly for a year
 
 export function PricingPlans() {
   const [annual, setAnnual] = useState(true);
@@ -37,7 +38,7 @@ export function PricingPlans() {
             onClick={() => setAnnual(false)}
             className={cn(
               "rounded-full px-4 py-1.5 font-medium transition-colors",
-              !annual ? "bg-white text-[#2E0A52]" : "text-white/60 hover:text-white"
+              !annual ? "bg-white text-[#1e1b4b]" : "text-white/60 hover:text-white"
             )}
           >
             Monthly
@@ -48,14 +49,14 @@ export function PricingPlans() {
             onClick={() => setAnnual(true)}
             className={cn(
               "flex items-center gap-2 rounded-full px-4 py-1.5 font-medium transition-colors",
-              annual ? "bg-white text-[#2E0A52]" : "text-white/60 hover:text-white"
+              annual ? "bg-white text-[#1e1b4b]" : "text-white/60 hover:text-white"
             )}
           >
             Yearly
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                annual ? "bg-[#6B2FB5] text-white" : "bg-white/10 text-white/70"
+                annual ? "bg-[#6366f1] text-white" : "bg-white/10 text-white/70"
               )}
             >
               Save 10%
@@ -69,15 +70,15 @@ export function PricingPlans() {
         {/* glow */}
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#6B2FB5]/40 blur-3xl"
+          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#6366f1]/40 blur-3xl"
         />
 
         <div className="relative">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[#C9A8F5]">
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c7d2fe]">
               Professional
             </span>
-            <span className="rounded-full bg-[#6B2FB5] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+            <span className="rounded-full bg-[#6366f1] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
               All-inclusive
             </span>
           </div>
@@ -105,7 +106,7 @@ export function PricingPlans() {
 
           <Link
             href="/signup"
-            className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#6B2FB5] font-semibold text-white transition-transform hover:scale-[1.02] hover:bg-[#7d3fce] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+            className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#6366f1] font-semibold text-white transition-transform hover:scale-[1.02] hover:bg-[#818cf8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             Start now
             <ArrowRight className="h-4 w-4" aria-hidden />
@@ -114,8 +115,8 @@ export function PricingPlans() {
           <ul className="mt-8 space-y-3">
             {FEATURES.map((f) => (
               <li key={f} className="flex items-start gap-3 text-sm text-white/80">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#6B2FB5]/20">
-                  <Check className="h-3 w-3 text-[#C9A8F5]" aria-hidden />
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#6366f1]/20">
+                  <Check className="h-3 w-3 text-[#c7d2fe]" aria-hidden />
                 </span>
                 {f}
               </li>

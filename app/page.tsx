@@ -37,31 +37,31 @@ const STEPS = [
 
 export default function LandingPage() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#180530] text-white grain">
+    <div className="relative min-h-screen overflow-hidden bg-[#15123a] text-white grain">
       {/* Ambient glow orbs */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-40 left-1/2 h-[36rem] w-[36rem] -translate-x-1/2 rounded-full bg-[#6B2FB5]/30 blur-[120px] animate-drift"
+        className="pointer-events-none absolute -top-40 left-1/2 h-[36rem] w-[36rem] -translate-x-1/2 rounded-full bg-[#6366f1]/30 blur-[120px] animate-drift"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute top-[28rem] -right-40 h-[28rem] w-[28rem] rounded-full bg-[#4311a0]/30 blur-[120px] animate-drift"
+        className="pointer-events-none absolute top-[28rem] -right-40 h-[28rem] w-[28rem] rounded-full bg-[#4338ca]/30 blur-[120px] animate-drift"
       />
 
       {/* Nav */}
-      <header className="relative z-20 border-b border-white/10 backdrop-blur-sm">
+      <header className="relative z-20 border-b border-black/5 bg-white shadow-sm">
         <div className="container flex h-16 items-center justify-between">
-          <Logo dark />
+          <Logo />
           <nav className="flex items-center gap-6">
             <Link
               href="/login"
-              className="text-sm font-medium text-white/70 transition-colors hover:text-white"
+              className="text-sm font-medium text-[#1e1b4b]/70 transition-colors hover:text-[#1e1b4b]"
             >
               Log in
             </Link>
             <Link
               href="/signup"
-              className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-[#2E0A52] transition-transform hover:scale-[1.03]"
+              className="rounded-full bg-[#6366f1] px-5 py-2 text-sm font-semibold text-white transition-transform hover:scale-[1.03] hover:bg-[#818cf8]"
             >
               Get Started
             </Link>
@@ -74,7 +74,7 @@ export default function LandingPage() {
         <div className="container py-24 text-center sm:py-32">
           <div className="mx-auto max-w-3xl">
             <div className="animate-rise inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/80">
-              <Instagram className="h-3.5 w-3.5 text-[#A974F0]" />
+              <Instagram className="h-3.5 w-3.5 text-[#a5b4fc]" />
               Always-on AI for Instagram &amp; Messenger
             </div>
 
@@ -85,7 +85,7 @@ export default function LandingPage() {
               Never miss a DM.
               <br />
               Never miss a{" "}
-              <span className="italic text-[#A974F0]">sale</span>.
+              <span className="italic text-[#a5b4fc]">sale</span>.
             </h1>
 
             <p
@@ -103,7 +103,7 @@ export default function LandingPage() {
             >
               <Link
                 href="/signup"
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#6B2FB5] px-7 font-semibold text-white shadow-lg shadow-[#6B2FB5]/30 transition-transform hover:scale-[1.03] hover:bg-[#7d3fce] sm:w-auto"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#6366f1] px-7 font-semibold text-white shadow-lg shadow-[#6366f1]/30 transition-transform hover:scale-[1.03] hover:bg-[#818cf8] sm:w-auto"
               >
                 Start now — $997/mo
                 <ArrowRight className="h-4 w-4" aria-hidden />
@@ -127,7 +127,7 @@ export default function LandingPage() {
                 { icon: Sparkles, stat: "100%", label: "in your voice" },
               ].map(({ icon: Icon, stat, label }) => (
                 <div key={label} className="flex flex-col items-center">
-                  <Icon className="mb-2 h-5 w-5 text-[#A974F0]" aria-hidden />
+                  <Icon className="mb-2 h-5 w-5 text-[#a5b4fc]" aria-hidden />
                   <div className="font-display text-2xl font-semibold tabular-nums">
                     {stat}
                   </div>
@@ -157,7 +157,7 @@ export default function LandingPage() {
                 key={title}
                 className="group rounded-2xl border border-white/10 bg-white/[0.03] p-7 transition-colors hover:border-white/20 hover:bg-white/[0.05]"
               >
-                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-[#6B2FB5]/20 text-[#A974F0]">
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-[#6366f1]/20 text-[#a5b4fc]">
                   <Icon className="h-6 w-6" aria-hidden />
                 </div>
                 <h3 className="mb-2 text-lg font-semibold">{title}</h3>
@@ -169,8 +169,8 @@ export default function LandingPage() {
           {/* Steps */}
           <div className="mt-16 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-3">
             {STEPS.map(({ n, title, body }) => (
-              <div key={n} className="bg-[#180530] p-7">
-                <div className="font-display text-3xl font-semibold text-[#6B2FB5]">
+              <div key={n} className="bg-[#15123a] p-7">
+                <div className="font-display text-3xl font-semibold text-[#6366f1]">
                   {n}
                 </div>
                 <h3 className="mt-3 font-semibold">{title}</h3>
@@ -199,10 +199,10 @@ export default function LandingPage() {
       {/* Final CTA */}
       <section className="relative z-10 border-t border-white/10">
         <div className="container py-20">
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#3a128a] to-[#2E0A52] p-10 text-center sm:p-16">
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#312e81] to-[#1e1b4b] p-10 text-center sm:p-16">
             <div
               aria-hidden
-              className="pointer-events-none absolute -left-20 top-0 h-64 w-64 rounded-full bg-[#6B2FB5]/40 blur-3xl"
+              className="pointer-events-none absolute -left-20 top-0 h-64 w-64 rounded-full bg-[#6366f1]/40 blur-3xl"
             />
             <div className="relative mx-auto max-w-xl">
               <h2 className="font-display text-3xl font-semibold sm:text-4xl">
@@ -213,7 +213,7 @@ export default function LandingPage() {
               </p>
               <Link
                 href="/signup"
-                className="mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white px-8 font-semibold text-[#2E0A52] transition-transform hover:scale-[1.03]"
+                className="mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white px-8 font-semibold text-[#1e1b4b] transition-transform hover:scale-[1.03]"
               >
                 Get started
                 <ArrowRight className="h-4 w-4" aria-hidden />

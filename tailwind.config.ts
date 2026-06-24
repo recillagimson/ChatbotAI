@@ -57,7 +57,7 @@ const config: Config = {
           "system-ui",
           "sans-serif",
         ],
-        display: ["var(--font-display)", "ui-serif", "Georgia", "serif"],
+        display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       borderRadius: {
         lg: "var(--radius)",

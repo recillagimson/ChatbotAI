@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Manrope } from "next/font/google";
+import { Sora, Manrope } from "next/font/google";
 import "./globals.css";
 
 // Body / UI font — clean, modern grotesque.
@@ -9,12 +9,13 @@ const manrope = Manrope({
   display: "swap",
 });
 
-// Display font — editorial serif with character, used for headlines.
-const fraunces = Fraunces({
+// Display font — heavy geometric sans for the high-velocity brand voice
+// (headlines + the SPEEDSETTR wordmark). Per the SpeedSettr brand blueprint.
+const sora = Sora({
   subsets: ["latin"],
   variable: "--font-display",
   display: "swap",
-  style: ["normal", "italic"],
+  weight: ["500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
@@ -38,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${fraunces.variable}`}>
+    <html lang="en" className={`${manrope.variable} ${sora.variable}`}>
       <body className="min-h-screen bg-background font-sans antialiased">
         {children}
       </body>

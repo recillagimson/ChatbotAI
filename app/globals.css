@@ -4,30 +4,30 @@
 
 @layer base {
   :root {
-    /* Brand: dark purple #2E0A52 + vibrant purple #6B2FB5 */
-    --background: 270 45% 99%; /* barely-there purple tint so white cards pop */
-    --foreground: 263 45% 12%; /* deep purple-indigo near-black */
+    /* Brand: deep navy #1e1b4b + primary indigo #6366f1 (SpeedSettr blueprint) */
+    --background: 226 60% 99%; /* barely-there indigo tint so white cards pop */
+    --foreground: 245 45% 15%; /* deep indigo-navy near-black */
     --card: 0 0% 100%;
-    --card-foreground: 263 45% 12%;
-    --primary: 267 59% 45%; /* vibrant purple #6B2FB5 — buttons, links, CTAs */
+    --card-foreground: 245 45% 15%;
+    --primary: 239 84% 67%; /* indigo #6366f1 — buttons, links, CTAs */
     --primary-foreground: 0 0% 100%;
-    --secondary: 270 44% 96%; /* light purple tint */
-    --secondary-foreground: 270 50% 22%;
-    --muted: 270 40% 96%;
-    --muted-foreground: 264 14% 46%;
-    --accent: 270 60% 95%; /* hover surface */
-    --accent-foreground: 270 55% 26%;
+    --secondary: 226 60% 96%; /* light indigo tint */
+    --secondary-foreground: 244 47% 25%;
+    --muted: 226 50% 96%;
+    --muted-foreground: 240 12% 46%;
+    --accent: 230 60% 95%; /* hover surface */
+    --accent-foreground: 240 50% 30%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 270 32% 90%;
-    --input: 270 32% 90%;
-    --ring: 267 59% 45%;
+    --border: 230 35% 90%;
+    --input: 230 35% 90%;
+    --ring: 239 84% 67%;
     --radius: 0.5rem;
 
-    /* Branded dashboard sidebar (dark purple) */
-    --sidebar: 270 78% 18%; /* #2E0A52 */
+    /* Branded dashboard sidebar (deep navy #1e1b4b) */
+    --sidebar: 244 47% 20%; /* #1e1b4b */
     --sidebar-foreground: 0 0% 100%;
-    --sidebar-active: 267 65% 58%; /* vibrant, slightly lifted for dark bg */
+    --sidebar-active: 239 89% 70%; /* indigo, lifted for the navy bg */
 
     /* Conversion health tokens */
     --conv-good: 152 58% 40%;   /* green  — healthy conversion */
@@ -35,32 +35,32 @@
     --conv-bad:  0 72% 55%;     /* red    — poor / zero */
 
     /* Chart series tokens */
-    --chart-1: 267 59% 45%;     /* brand purple (primary series) */
-    --chart-2: 267 45% 68%;     /* lighter purple (secondary series) */
+    --chart-1: 239 84% 67%;     /* brand indigo (primary series) */
+    --chart-2: 239 70% 78%;     /* lighter indigo (secondary series) */
   }
 
   .dark {
-    --background: 263 45% 7%;
+    --background: 244 45% 8%;
     --foreground: 0 0% 98%;
-    --card: 263 40% 11%;
+    --card: 244 40% 12%;
     --card-foreground: 0 0% 98%;
-    --primary: 267 70% 64%; /* lighter vibrant for contrast on dark */
+    --primary: 239 84% 70%; /* lighter indigo for contrast on dark */
     --primary-foreground: 0 0% 100%;
-    --secondary: 263 28% 18%;
+    --secondary: 244 28% 18%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 263 28% 18%;
-    --muted-foreground: 270 14% 70%;
-    --accent: 263 28% 22%;
+    --muted: 244 28% 18%;
+    --muted-foreground: 240 14% 70%;
+    --accent: 244 28% 22%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 45%;
     --destructive-foreground: 0 0% 98%;
-    --border: 263 28% 22%;
-    --input: 263 28% 22%;
-    --ring: 267 70% 64%;
+    --border: 244 28% 22%;
+    --input: 244 28% 22%;
+    --ring: 239 84% 70%;
 
-    --sidebar: 263 50% 9%;
+    --sidebar: 244 50% 9%;
     --sidebar-foreground: 0 0% 98%;
-    --sidebar-active: 267 70% 64%;
+    --sidebar-active: 239 84% 70%;
 
     /* Conversion health tokens (slightly lifted for dark bg contrast) */
     --conv-good: 152 55% 52%;
@@ -68,8 +68,8 @@
     --conv-bad:  0 72% 62%;
 
     /* Chart series tokens (lighter for dark bg) */
-    --chart-1: 267 70% 64%;
-    --chart-2: 267 50% 75%;
+    --chart-1: 239 84% 70%;
+    --chart-2: 239 60% 80%;
   }
 
   * { @apply border-border; }

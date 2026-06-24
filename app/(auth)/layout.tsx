@@ -16,10 +16,10 @@ export default function AuthLayout({
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-2">
       {/* Brand panel (desktop only) */}
-      <div className="relative hidden overflow-hidden bg-[#180530] text-white grain lg:flex lg:flex-col lg:justify-between lg:p-12">
+      <div className="relative hidden overflow-hidden bg-[#15123a] text-white grain lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div
           aria-hidden
-          className="pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full bg-[#6B2FB5]/30 blur-[120px] animate-drift"
+          className="pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full bg-[#6366f1]/30 blur-[120px] animate-drift"
         />
         <Link href="/" className="relative z-10" aria-label="SpeedSettr">
           <Logo dark />
@@ -28,13 +28,13 @@ export default function AuthLayout({
         <div className="relative z-10">
           <h2 className="font-display text-4xl font-semibold leading-[1.1]">
             Your AI teammate that never misses a{" "}
-            <span className="italic text-[#A974F0]">sale</span>.
+            <span className="italic text-[#a5b4fc]">sale</span>.
           </h2>
           <ul className="mt-8 space-y-4">
             {BULLETS.map((b) => (
               <li key={b} className="flex items-start gap-3 text-white/75">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#6B2FB5]/30">
-                  <Check className="h-3 w-3 text-[#A974F0]" aria-hidden />
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#6366f1]/30">
+                  <Check className="h-3 w-3 text-[#a5b4fc]" aria-hidden />
                 </span>
                 {b}
               </li>

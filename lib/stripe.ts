@@ -25,6 +25,21 @@ export function getStripe(): Stripe {
 
 export const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID!;
 
+/**
+ * Resolve the Stripe price id for a billing cycle. Read from env at call time
+ * (not a module const) so a missing annual price surfaces as a clean error
+ * rather than `undefined` baked in at import.
+ *   monthly → STRIPE_PRICE_ID
+ *   annual  → STRIPE_PRICE_ID_ANNUAL
+ */
+export function priceIdForCycle(
+  cycle: "monthly" | "annual"
+): string | undefined {
+  return cycle === "annual"
+    ? process.env.STRIPE_PRICE_ID_ANNUAL
+    : process.env.STRIPE_PRICE_ID;
+}
+
 export function getAppUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getStripe, STRIPE_PRICE_ID, getAppUrl } from "@/lib/stripe";
+import { getStripe, priceIdForCycle, getAppUrl } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function POST(req: Request) {
   const stripe = getStripe();
   const supabase = await createClient();
   const {
@@ -14,6 +14,22 @@ export async function POST() {
 
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // Billing cycle (defaults to monthly if no/invalid body).
+  let cycle: "monthly" | "annual" = "monthly";
+  try {
+    const body = await req.json();
+    if (body?.cycle === "annual") cycle = "annual";
+  } catch {
+    /* no JSON body → monthly */
+  }
+  const price = priceIdForCycle(cycle);
+  if (!price) {
+    return NextResponse.json(
+      { error: `No Stripe price configured for ${cycle} billing.` },
+      { status: 500 }
+    );
   }
 
   // Re-use stripe customer if we already created one
@@ -44,12 +60,12 @@ export async function POST() {
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
-    line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
+    line_items: [{ price, quantity: 1 }],
     success_url: `${getAppUrl()}/billing?status=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${getAppUrl()}/billing?status=cancelled`,
-    metadata: { supabase_user_id: user.id },
+    metadata: { supabase_user_id: user.id, cycle },
     subscription_data: {
-      metadata: { supabase_user_id: user.id },
+      metadata: { supabase_user_id: user.id, cycle },
     },
   });
 

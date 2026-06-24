@@ -1,1 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180"><rect width="180" height="180" rx="40" fill="#6B2FB5"></rect><g transform="translate(40 40)"><g transform="translate(6,0) skewX(-9)"><path d="M70 33 C70 23 32 23 32 37 C32 50 68 49 68 63 C68 77 30 77 30 67" fill="none" stroke="#fff" stroke-width="13" stroke-linecap="round"></path></g><path d="M83 13 C84.6 21.5 87.4 24.4 96 26 C87.4 27.6 84.6 30.5 83 39 C81.4 30.5 78.6 27.6 70 26 C78.6 24.4 81.4 21.5 83 13Z" fill="#2E0A52"></path></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="SpeedSettr">
+  <defs>
+    <linearGradient id="ssTile" x1="20" y1="104" x2="104" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#818cf8"/>
+      <stop offset="0.55" stop-color="#a5b4fc"/>
+      <stop offset="1" stop-color="#e0e7ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="28" fill="#1e1b4b"/>
+  <path d="M44 22 H82 A14 14 0 0 1 96 36 V62 A14 14 0 0 1 82 76 H62 L42 95 L50 76 H38 A14 14 0 0 1 24 62 V36 A14 14 0 0 1 38 22 Z"
+        fill="none" stroke="url(#ssTile)" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M55 30 L37 57 L49 57 L43 78 L66 49 L54 49 L61 30 Z" fill="url(#ssTile)"/>
+  <path d="M60 70 L84 46 M84 46 L71 46 M84 46 L84 59"
+        fill="none" stroke="url(#ssTile)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

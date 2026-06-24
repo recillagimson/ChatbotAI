@@ -18,3 +18,9 @@ tsconfig.tsbuildinfo
 scripts/
 docs/
 .sdd-briefs/
+
+# local env backups
+.env*.bak*
+
+# temp brand preview (not for deploy)
+public/brand-preview.html

@@ -58,7 +58,10 @@ export async function POST(request: NextRequest) {
     status: "new",
     attachments: attachments ?? [],
   });
-  if (error) return NextResponse.json({ error: "Could not send your feedback." }, { status: 500 });
+  if (error) {
+    console.error("[feedback] insert failed:", error.message);
+    return NextResponse.json({ error: "Could not send your feedback." }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }
