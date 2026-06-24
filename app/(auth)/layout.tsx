@@ -22,7 +22,7 @@ export default function AuthLayout({
           className="pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full bg-[#6366f1]/30 blur-[120px] animate-drift"
         />
         <Link href="/" className="relative z-10" aria-label="SpeedSettr">
-          <Logo dark />
+          <Logo white />
         </Link>
 
         <div className="relative z-10">

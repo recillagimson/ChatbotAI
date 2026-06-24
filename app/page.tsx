@@ -225,7 +225,7 @@ export default function LandingPage() {
 
       <footer className="relative z-10 border-t border-white/10">
         <div className="container flex flex-col items-center justify-between gap-4 py-8 text-sm text-white/45 sm:flex-row">
-          <Logo dark size="sm" />
+          <Logo white size="sm" />
           <span>
             &copy; {new Date().getFullYear()} SpeedSettr. All rights reserved.
           </span>
