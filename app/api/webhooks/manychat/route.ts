@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest, unstable_after as after } from "next/server";
 import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
 import {
@@ -299,115 +299,125 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 7. Fetch recent history. Order desc + limit so we get the newest 11
-  // (= 10 prior + the just-inserted user message), not the oldest.
-  const { data: history } = await supabase
-    .from("messages")
-    .select("role, content")
-    .eq("conversation_id", conversationId!)
-    .order("created_at", { ascending: false })
-    .limit(11)
-    .returns<Pick<Message, "role" | "content">[]>();
+  // 7–10. Heavy work runs AFTER we respond. ManyChat's External Request times
+  // out at ~10s, but our pipeline (Anthropic generation + human-paced multi-
+  // bubble delivery, ≈6s of deliberate gaps alone) routinely needs longer.
+  // Because the reply is DELIVERED BY PUSH (Send Content API), not rendered from
+  // this response body, we ack ManyChat instantly (step 11) and finish the work
+  // in the background — the function stays alive up to maxDuration (60s).
+  after(async () => {
+    try {
+      // 7. Fetch recent history. Order desc + limit so we get the newest 11
+      // (= 10 prior + the just-inserted user message), not the oldest.
+      const { data: history } = await supabase
+        .from("messages")
+        .select("role, content")
+        .eq("conversation_id", conversationId!)
+        .order("created_at", { ascending: false })
+        .limit(11)
+        .returns<Pick<Message, "role" | "content">[]>();
 
-  // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
-  const priorHistory = (history ?? []).slice(1).reverse();
+      // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
+      const priorHistory = (history ?? []).slice(1).reverse();
 
-  // 8. Resolve KB (adaptive: full-context or vector retrieval) then generate.
-  const kb = await buildKbBlock({
-    supabase,
-    chatbot,
-    history: priorHistory,
-    userMessage: body.message,
+      // 8. Resolve KB (adaptive: full-context or vector retrieval) then generate.
+      const kb = await buildKbBlock({
+        supabase,
+        chatbot,
+        history: priorHistory,
+        userMessage: body.message,
+      });
+
+      let replyText = "Thanks for the message, a teammate will follow up shortly.";
+      let tokens = 0;
+      try {
+        const { text, tokensUsed } = await generateReply({
+          chatbot,
+          kbBlock: kb.block,
+          history: priorHistory,
+          userMessage: body.message,
+        });
+        if (text) {
+          replyText = text;
+          tokens = tokensUsed;
+        }
+      } catch (err) {
+        console.error("[manychat-webhook] AI error", err);
+      }
+
+      // 9. Persist outbound + usage
+      console.log(
+        `[manychat-webhook] kb mode=${kb.mode} chunks=${kb.chunks} topSim=${kb.topSimilarity ?? "-"} bot=${chatbot.id}`
+      );
+      await Promise.all([
+        supabase.from("messages").insert({
+          conversation_id: conversationId!,
+          role: "assistant",
+          content: replyText,
+          ai_generated: true,
+          tokens_used: tokens,
+        }),
+        supabase.from("usage_log").insert({
+          user_id: chatbot.user_id,
+          chatbot_id: chatbot.id,
+          event_type: "ai_reply",
+          tokens_used: tokens,
+        }),
+        supabase.from("usage_log").insert({
+          user_id: chatbot.user_id,
+          chatbot_id: chatbot.id,
+          event_type: "kb_retrieval",
+          tokens_used: kb.chunks,
+        }),
+      ]);
+
+      // 10. Deliver the reply to the user via ManyChat's Send Content API.
+      // The ManyChat flow is a fire-and-forget External Request (no Send Message /
+      // dynamic-content node) because dynamic-content rendering is unreliable on
+      // Instagram. We push the reply here instead. A failure is non-fatal: the
+      // reply is already stored and visible in the dashboard inbox.
+      // Deliver as several short bubbles (one per burst) rather than one long
+      // message — the persona writes in bursts; this renders them separately.
+      // When apiKey is null the decrypt/no-key failure was already logged in 3b;
+      // the reply is still persisted above and visible in the inbox.
+      const bubbles = splitIntoMessages(replyText);
+      if (apiKey) {
+        try {
+          if (pacingEnabled() && bubbles.length > 1) {
+            // Drip the bubbles in with short, human-like gaps (each its own send).
+            await sendManychatMessagePaced({
+              subscriberId: body.subscriber_id,
+              bubbles,
+              startedAt,
+              apiKey,
+            });
+          } else {
+            // Single bubble (or pacing disabled): one call, as before.
+            await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles, apiKey });
+          }
+        } catch (err) {
+          console.error("[manychat-webhook] push send failed", err);
+          await logPushFailure(supabase, chatbot.user_id, chatbot.id);
+        }
+      }
+
+      // 10a. Update Redis side-state: cache for dedup echo + bump monthly counter.
+      // These are best-effort; failures only affect future cost-control accuracy.
+      await Promise.all([
+        cacheLastReply(chatbot.id, body.subscriber_id, replyText),
+        incrementMonthlyCount(chatbot.id),
+      ]);
+    } catch (err) {
+      // after() runs detached from the response — swallow so nothing crashes the
+      // background task; the inbound message is already persisted either way.
+      console.error("[manychat-webhook] background processing failed", err);
+    }
   });
 
-  let replyText = "Thanks for the message, a teammate will follow up shortly.";
-  let tokens = 0;
-  try {
-    const { text, tokensUsed } = await generateReply({
-      chatbot,
-      kbBlock: kb.block,
-      history: priorHistory,
-      userMessage: body.message,
-    });
-    if (text) {
-      replyText = text;
-      tokens = tokensUsed;
-    }
-  } catch (err) {
-    console.error("[manychat-webhook] AI error", err);
-  }
-
-  // 9. Persist outbound + usage
-  console.log(
-    `[manychat-webhook] kb mode=${kb.mode} chunks=${kb.chunks} topSim=${kb.topSimilarity ?? "-"} bot=${chatbot.id}`
-  );
-  await Promise.all([
-    supabase.from("messages").insert({
-      conversation_id: conversationId!,
-      role: "assistant",
-      content: replyText,
-      ai_generated: true,
-      tokens_used: tokens,
-    }),
-    supabase.from("usage_log").insert({
-      user_id: chatbot.user_id,
-      chatbot_id: chatbot.id,
-      event_type: "ai_reply",
-      tokens_used: tokens,
-    }),
-    supabase.from("usage_log").insert({
-      user_id: chatbot.user_id,
-      chatbot_id: chatbot.id,
-      event_type: "kb_retrieval",
-      tokens_used: kb.chunks,
-    }),
-  ]);
-
-  // 10. Deliver the reply to the user via ManyChat's Send Content API.
-  // The ManyChat flow is a fire-and-forget External Request (no Send Message /
-  // dynamic-content node) because dynamic-content rendering is unreliable on
-  // Instagram. We push the reply here instead. A failure is non-fatal: the
-  // reply is already stored and visible in the dashboard inbox.
-  // Deliver as several short bubbles (one per burst) rather than one long
-  // message — the persona writes in bursts; this renders them separately.
-  // When apiKey is null the decrypt/no-key failure was already logged in 3b; the
-  // reply is still persisted above and visible in the inbox, we just can't push.
-  const bubbles = splitIntoMessages(replyText);
-  if (apiKey) {
-    try {
-      if (pacingEnabled() && bubbles.length > 1) {
-        // Drip the bubbles in with short, human-like gaps (each its own send).
-        await sendManychatMessagePaced({
-          subscriberId: body.subscriber_id,
-          bubbles,
-          startedAt,
-          apiKey,
-        });
-      } else {
-        // Single bubble (or pacing disabled): one call, as before.
-        await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles, apiKey });
-      }
-    } catch (err) {
-      console.error("[manychat-webhook] push send failed", err);
-      await logPushFailure(supabase, chatbot.user_id, chatbot.id);
-    }
-  }
-
-  // 10a. Update Redis side-state: cache for dedup echo + bump monthly counter.
-  // These are best-effort; failures only affect future cost-control accuracy.
-  await Promise.all([
-    cacheLastReply(chatbot.id, body.subscriber_id, replyText),
-    incrementMonthlyCount(chatbot.id),
-  ]);
-
-  // 11. Return 200. Body kept in ManyChat format for backward-compat and local
-  // tooling (chat-test); the actual delivery happened via the push above.
-  // If we couldn't resolve a ManyChat key, the reply was persisted but not
-  // delivered — return an empty body so no inline-render path delivers it either.
-  if (!apiKey) {
-    return manychatReply("", { ai_skipped: true, reason: "manychat_key_unavailable" });
-  }
-  return manychatReply(replyText);
+  // 11. Ack ManyChat immediately so its ~10s External Request timeout never trips.
+  // Delivery happens via the push scheduled above. Empty content = nothing for
+  // ManyChat to render inline (replies arrive as pushed DMs a few seconds later).
+  return manychatReply("", { ai_queued: true });
 }
 
 export async function GET() {
