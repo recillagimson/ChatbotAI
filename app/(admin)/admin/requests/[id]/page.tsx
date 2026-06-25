@@ -42,23 +42,34 @@ export default async function AdminRequestReviewPage({
   if (!crData) notFound();
   const cr = crData as ChangeRequest;
 
-  // Sign the transcript's image paths server-side (admin "upload read" policy).
+  // Sign the transcript's image + document paths server-side (admin "upload read" policy).
   const transcript = (cr.transcript ?? []) as TranscriptMessage[];
   const transcriptView = await Promise.all(
-    transcript.map(async (m) =>
-      m.role === "user" && m.images?.length
-        ? {
-            role: m.role,
-            content: m.content,
-            images: await Promise.all(
-              m.images.map(async (im) => ({
-                name: im.name,
-                url: await signAttachment(supabase, im.path),
-              }))
-            ),
-          }
-        : { role: m.role, content: m.content }
-    )
+    transcript.map(async (m) => {
+      if (m.role !== "user") return { role: m.role, content: m.content };
+      const images = m.images?.length
+        ? await Promise.all(
+            m.images.map(async (im) => ({
+              name: im.name,
+              url: await signAttachment(supabase, im.path),
+            }))
+          )
+        : undefined;
+      const files = m.files?.length
+        ? await Promise.all(
+            m.files.map(async (f) => ({
+              name: f.name,
+              url: await signAttachment(supabase, f.path),
+            }))
+          )
+        : undefined;
+      return {
+        role: m.role,
+        content: m.content,
+        ...(images ? { images } : {}),
+        ...(files ? { files } : {}),
+      };
+    })
   );
 
   const { data: chatbotData } = await supabase

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { uploadAttachment, CLAUDE_IMAGE_TYPES } from "@/lib/storage";
+import { ALLOWED_DOC_EXT } from "@/lib/document-parser";
 import type { Attachment } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -11,6 +12,16 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_FILES = 5;
 // Images Claude can read + PDFs (PDFs are stored for the team, not sent to the model).
 const ALLOWED_TYPES = new Set<string>([...CLAUDE_IMAGE_TYPES, "application/pdf"]);
+
+/**
+ * Is this file allowed? Images/PDF are matched by MIME. For the request-changes
+ * chat (scope="request") we ALSO accept knowledge documents (DOCX/TXT/MD/CSV) by
+ * extension — their MIME types are unreliable across browsers/OSes.
+ */
+function isAllowedFile(file: File, scope: "feedback" | "request"): boolean {
+  if (ALLOWED_TYPES.has(file.type)) return true;
+  return scope === "request" && ALLOWED_DOC_EXT.test(file.name);
+}
 
 /**
  * POST /api/uploads
@@ -44,11 +55,12 @@ export async function POST(request: NextRequest) {
     if (f.size > MAX_FILE_BYTES) {
       return NextResponse.json({ error: `"${f.name}" is larger than 10 MB.` }, { status: 400 });
     }
-    if (!ALLOWED_TYPES.has(f.type)) {
-      return NextResponse.json(
-        { error: `"${f.name}" must be an image (PNG/JPG/WebP/GIF) or PDF.` },
-        { status: 400 }
-      );
+    if (!isAllowedFile(f, scope)) {
+      const allowed =
+        scope === "request"
+          ? "an image (PNG/JPG/WebP/GIF) or a document (PDF/DOCX/TXT/MD/CSV)"
+          : "an image (PNG/JPG/WebP/GIF) or PDF";
+      return NextResponse.json({ error: `"${f.name}" must be ${allowed}.` }, { status: 400 });
     }
   }
 

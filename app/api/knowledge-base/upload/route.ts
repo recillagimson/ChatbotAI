@@ -3,8 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { indexEntry } from "@/lib/retrieval";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
-import { extractText, getDocumentProxy } from "unpdf";
-import mammoth from "mammoth";
+import { extractTextFromFile, ALLOWED_DOC_EXT } from "@/lib/document-parser";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,24 +11,12 @@ export const maxDuration = 60;
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_TEXT_CHARS = 100_000; // protects the prompt token budget
-const ALLOWED = /\.(pdf|docx|txt|md|csv)$/i;
+const ALLOWED = ALLOWED_DOC_EXT;
 
 /** Extract plain text from a supported upload, server-side. */
 async function parseFile(file: File): Promise<string> {
-  const name = file.name.toLowerCase();
-  const buf = Buffer.from(await file.arrayBuffer());
-
-  if (name.endsWith(".pdf")) {
-    const pdf = await getDocumentProxy(new Uint8Array(buf));
-    const { text } = await extractText(pdf, { mergePages: true });
-    return text;
-  }
-  if (name.endsWith(".docx")) {
-    const { value } = await mammoth.extractRawText({ buffer: buf });
-    return value;
-  }
-  // .txt / .md / .csv → read as UTF-8
-  return buf.toString("utf-8");
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return extractTextFromFile({ buffer, name: file.name });
 }
 
 interface FileResult {

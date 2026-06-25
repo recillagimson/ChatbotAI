@@ -109,16 +109,18 @@ export default async function RequestsPage({
   const activeProjectName =
     projects.find((p) => p.id === activeProjectId)?.name ?? null;
 
-  // Sign user-message image paths for display in a loaded thread.
+  // Sign user-message image paths + carry doc file names for a loaded thread.
   type ViewMessage = {
     role: "user" | "assistant";
     content: string;
     images?: { name: string; url: string | null }[];
+    files?: { name: string }[];
   };
   let initialTranscript: ViewMessage[] = [];
   if (thread && Array.isArray(thread.transcript)) {
     initialTranscript = await Promise.all(
       thread.transcript.map(async (m): Promise<ViewMessage> => {
+        const files = m.files?.length ? m.files.map((f) => ({ name: f.name })) : undefined;
         if (m.role === "user" && m.images && m.images.length) {
           const images = await Promise.all(
             m.images.map(async (im) => ({
@@ -126,9 +128,9 @@ export default async function RequestsPage({
               url: await signAttachment(supabase, im.path),
             }))
           );
-          return { role: m.role, content: m.content, images };
+          return { role: m.role, content: m.content, images, ...(files ? { files } : {}) };
         }
-        return { role: m.role, content: m.content };
+        return { role: m.role, content: m.content, ...(files ? { files } : {}) };
       })
     );
   }

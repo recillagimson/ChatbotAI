@@ -2,10 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Mic, Square, ArrowUp, X, Loader2 } from "lucide-react";
+import { Plus, Mic, Square, ArrowUp, X, Loader2, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAX_FILES = 4;
+// Knowledge docs the assistant can read (mirrors lib/document-parser ALLOWED_DOC_EXT).
+const DOC_EXT = /\.(pdf|docx|txt|md|csv)$/i;
+const isImageFile = (f: File) => f.type.startsWith("image/");
+const isAllowedFile = (f: File) => isImageFile(f) || DOC_EXT.test(f.name);
 
 type ComposerPhase = "idle" | "uploading" | "recording" | "transcribing";
 
@@ -17,8 +21,11 @@ export function RequestComposer({
 }: {
   onSend: (
     message: string,
-    imagePaths: { path: string; name: string }[],
-    localPreviews: { name: string; url: string }[]
+    attachments: {
+      images: { path: string; name: string }[];
+      files: { path: string; name: string; type: string }[];
+    },
+    localPreviews: { images: { name: string; url: string }[]; fileNames: string[] }
   ) => Promise<void> | void;
   disabled?: boolean;
   sending?: boolean;
@@ -26,7 +33,8 @@ export function RequestComposer({
 }) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
+  // Parallel to `files`: an object-URL for images, null for documents (chip only).
+  const [previews, setPreviews] = useState<(string | null)[]>([]);
   const [phase, setPhase] = useState<ComposerPhase>("idle");
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -48,10 +56,10 @@ export function RequestComposer({
     );
   }, []);
 
-  // Revoke object URLs when previews change / on unmount.
+  // Revoke object URLs when previews change / on unmount (docs have null URLs).
   useEffect(() => {
     return () => {
-      previews.forEach((url) => URL.revokeObjectURL(url));
+      previews.forEach((url) => url && URL.revokeObjectURL(url));
     };
   }, [previews]);
 
@@ -76,25 +84,30 @@ export function RequestComposer({
   const busy = disabled || sending || phase !== "idle";
   const canSend = !busy && text.trim().length > 0;
 
+  // Build a previews array parallel to a file list: object-URL for images, null for docs.
+  function buildPreviews(list: File[]): (string | null)[] {
+    return list.map((f) => (isImageFile(f) ? URL.createObjectURL(f) : null));
+  }
+
   function addFiles(selected: FileList | null) {
     setError(null);
     if (!selected || selected.length === 0) return;
-    const incoming = Array.from(selected).filter((f) => f.type.startsWith("image/"));
+    const all = Array.from(selected);
+    const incoming = all.filter(isAllowedFile);
     if (incoming.length === 0) {
-      setError("Only image files can be attached here.");
+      setError("Attach an image or a document (PDF, DOCX, TXT, MD, or CSV).");
       if (fileInput.current) fileInput.current.value = "";
       return;
     }
+    if (incoming.length < all.length) {
+      setError("Some files were skipped — only images and PDF/DOCX/TXT/MD/CSV are supported.");
+    }
     setFiles((prev) => {
       const combined = [...prev, ...incoming];
-      if (combined.length > MAX_FILES) {
-        setError(`You can attach up to ${MAX_FILES} images.`);
-        const kept = combined.slice(0, MAX_FILES);
-        setPreviews(kept.map((f) => URL.createObjectURL(f)));
-        return kept;
-      }
-      setPreviews(combined.map((f) => URL.createObjectURL(f)));
-      return combined;
+      const kept = combined.length > MAX_FILES ? combined.slice(0, MAX_FILES) : combined;
+      if (combined.length > MAX_FILES) setError(`You can attach up to ${MAX_FILES} files.`);
+      setPreviews(buildPreviews(kept));
+      return kept;
     });
     if (fileInput.current) fileInput.current.value = "";
   }
@@ -193,10 +206,14 @@ export function RequestComposer({
     setError(null);
 
     let imagePaths: { path: string; name: string }[] = [];
-    const localPreviews = files.map((f, i) => ({
-      name: f.name,
-      url: previews[i] ?? URL.createObjectURL(f),
-    }));
+    let filePaths: { path: string; name: string; type: string }[] = [];
+
+    // Optimistic previews: image thumbnails + plain doc names for the user bubble.
+    const localImages = files
+      .map((f, i) => ({ f, url: previews[i] }))
+      .filter(({ f }) => isImageFile(f))
+      .map(({ f, url }) => ({ name: f.name, url: url ?? URL.createObjectURL(f) }));
+    const localFileNames = files.filter((f) => !isImageFile(f)).map((f) => f.name);
 
     try {
       if (files.length > 0) {
@@ -211,8 +228,13 @@ export function RequestComposer({
           setPhase("idle");
           return;
         }
-        const attachments: { path: string; name: string }[] = upData?.attachments ?? [];
-        imagePaths = attachments.map((a) => ({ path: a.path, name: a.name }));
+        // Server preserves upload order, so classify by the local File at each index.
+        const attachments: { path: string; name: string; type: string }[] = upData?.attachments ?? [];
+        attachments.forEach((a, i) => {
+          const src = files[i];
+          if (src && isImageFile(src)) imagePaths.push({ path: a.path, name: a.name });
+          else filePaths.push({ path: a.path, name: a.name, type: src?.type || a.type || "" });
+        });
       }
       setPhase("idle");
 
@@ -222,7 +244,7 @@ export function RequestComposer({
       setPreviews([]);
       if (fileInput.current) fileInput.current.value = "";
 
-      await onSend(message, imagePaths, localPreviews);
+      await onSend(message, { images: imagePaths, files: filePaths }, { images: localImages, fileNames: localFileNames });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send your message.");
       setPhase("idle");
@@ -263,16 +285,26 @@ export function RequestComposer({
           disabled && "opacity-60"
         )}
       >
-        {previews.length > 0 && (
+        {files.length > 0 && (
           <ul className="flex flex-wrap gap-2 px-1 pb-2 pt-1">
             {files.map((f, i) => (
               <li key={`${f.name}-${i}`} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={previews[i]}
-                  alt={`Attached image: ${f.name}`}
-                  className="h-16 w-16 rounded-lg border object-cover"
-                />
+                {previews[i] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previews[i] as string}
+                    alt={`Attached image: ${f.name}`}
+                    className="h-16 w-16 rounded-lg border object-cover"
+                  />
+                ) : (
+                  <span
+                    className="flex h-16 max-w-[10rem] items-center gap-2 rounded-lg border bg-muted px-3 text-xs text-muted-foreground"
+                    title={f.name}
+                  >
+                    <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{f.name}</span>
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => removeFile(i)}
@@ -291,7 +323,7 @@ export function RequestComposer({
           <input
             ref={fileInput}
             type="file"
-            accept="image/*"
+            accept="image/*,.pdf,.docx,.txt,.md,.csv"
             multiple
             className="hidden"
             onChange={(e) => addFiles(e.target.files)}
@@ -300,7 +332,7 @@ export function RequestComposer({
             type="button"
             onClick={() => fileInput.current?.click()}
             disabled={busy || files.length >= MAX_FILES}
-            aria-label="Attach image"
+            aria-label="Attach image or document"
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-40"
           >
             <Plus className="h-5 w-5" aria-hidden="true" />

@@ -154,5 +154,6 @@ export interface TranscriptMessage {
   role: "user" | "assistant";
   content: string;
   images?: { path: string; name: string }[];  // storage paths (user messages only)
+  files?: { path: string; name: string; type: string }[];  // document attachments read as text (user messages only)
   created_at: string;
 }

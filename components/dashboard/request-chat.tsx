@@ -14,7 +14,7 @@ import {
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { RequestComposer } from "@/components/dashboard/request-composer";
 import type { ChangeProposal } from "@/lib/types";
-import { Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { Sparkles, ChevronDown, ChevronUp, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type CrStatus = "draft" | "pending" | "approved" | "applied" | "rejected";
@@ -23,6 +23,7 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   images?: { name: string; url: string | null }[];
+  files?: { name: string }[];
 };
 
 export function RequestChat({
@@ -62,20 +63,26 @@ export function RequestChat({
 
   async function handleSend(
     message: string,
-    imagePaths: { path: string; name: string }[],
-    localPreviews: { name: string; url: string }[]
+    attachments: {
+      images: { path: string; name: string }[];
+      files: { path: string; name: string; type: string }[];
+    },
+    localPreviews: { images: { name: string; url: string }[]; fileNames: string[] }
   ) {
     if (!chatbotId) return;
     setError(null);
     setSending(true);
 
-    // 1. Optimistically append the user's message with local image previews.
+    // 1. Optimistically append the user's message with local image previews + doc names.
     setMessages((prev) => [
       ...prev,
       {
         role: "user",
         content: message,
-        ...(localPreviews.length ? { images: localPreviews } : {}),
+        ...(localPreviews.images.length ? { images: localPreviews.images } : {}),
+        ...(localPreviews.fileNames.length
+          ? { files: localPreviews.fileNames.map((name) => ({ name })) }
+          : {}),
       },
     ]);
 
@@ -87,7 +94,8 @@ export function RequestChat({
           chatbot_id: chatbotId,
           change_request_id: crId ?? undefined,
           message,
-          images: imagePaths.length ? imagePaths : undefined,
+          images: attachments.images.length ? attachments.images : undefined,
+          files: attachments.files.length ? attachments.files : undefined,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -148,7 +156,7 @@ export function RequestChat({
 
   const hint = noProject
     ? "Pick a project on the left to start."
-    : `Tell me what you'd like to change about ${projectName ?? "your bot"} — you can type, attach a screenshot, or use the mic.`;
+    : `Tell me what you'd like to change about ${projectName ?? "your bot"} — you can type, attach a screenshot or knowledge file (PDF/DOCX/TXT), or use the mic.`;
 
   return (
     <div className="flex min-h-[100dvh] flex-col">
@@ -202,6 +210,20 @@ export function RequestChat({
                             </span>
                           )
                         )}
+                      </div>
+                    )}
+                    {m.files && m.files.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        {m.files.map((f, j) => (
+                          <span
+                            key={j}
+                            className="inline-flex max-w-[12rem] items-center gap-1.5 rounded-lg border bg-muted px-2.5 py-1.5 text-xs text-muted-foreground"
+                            title={f.name}
+                          >
+                            <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span className="truncate">{f.name}</span>
+                          </span>
+                        ))}
                       </div>
                     )}
                     {m.content && <p className="whitespace-pre-wrap break-words">{m.content}</p>}

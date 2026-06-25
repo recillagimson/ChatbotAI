@@ -73,11 +73,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .maybeSingle();
     if (!chatbot) return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
     try {
-      const { data: kbRows } = await supabase.from("knowledge_base").select("title").eq("chatbot_id", cr.chatbot_id);
-      const kbTitles = (kbRows ?? []).map((r: { title: string }) => r.title).filter(Boolean);
+      const { data: kbRows } = await supabase.from("knowledge_base").select("title, content").eq("chatbot_id", cr.chatbot_id);
+      const kbEntries = (kbRows ?? [])
+        .map((r: { title: string; content: string }) => ({ title: r.title, content: r.content }))
+        .filter((e) => e.title && e.content);
       const { proposal, model } = await draftChangeRequest({
         chatbot: chatbot as Chatbot,
-        kbTitles,
+        kbEntries,
         requestText: cr.request_text,
         adminGuidance: body.adminGuidance,
       });

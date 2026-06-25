@@ -47,3 +47,14 @@ export async function downloadAsBase64(
   const buf = Buffer.from(await data.arrayBuffer());
   return { base64: buf.toString("base64"), mediaType: data.type || "application/octet-stream" };
 }
+
+/** Download a stored object as a raw Buffer (for extracting text from documents). */
+export async function downloadAsBuffer(
+  supabase: SupabaseClient,
+  path: string
+): Promise<{ buffer: Buffer; mediaType: string } | null> {
+  const { data, error } = await supabase.storage.from(UPLOAD_BUCKET).download(path);
+  if (error || !data) return null;
+  const buffer = Buffer.from(await data.arrayBuffer());
+  return { buffer, mediaType: data.type || "application/octet-stream" };
+}

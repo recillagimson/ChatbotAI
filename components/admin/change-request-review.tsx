@@ -32,6 +32,7 @@ export function ChangeRequestReview({
     role: "user" | "assistant";
     content: string;
     images?: { name: string; url: string | null }[];
+    files?: { name: string; url: string | null }[];
   }[];
 }) {
   const router = useRouter();
@@ -177,6 +178,27 @@ export function ChangeRequestReview({
                               className="text-xs text-muted-foreground"
                             >
                               {img.name} (unavailable)
+                            </span>
+                          )
+                        )}
+                      </div>
+                    )}
+                    {m.files && m.files.length > 0 && (
+                      <div className="mt-2 flex flex-col gap-1">
+                        {m.files.map((f, j) =>
+                          f.url ? (
+                            <a
+                              key={j}
+                              href={f.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs text-primary underline underline-offset-2"
+                            >
+                              📎 {f.name}
+                            </a>
+                          ) : (
+                            <span key={j} className="text-xs text-muted-foreground">
+                              {f.name} (unavailable)
                             </span>
                           )
                         )}
