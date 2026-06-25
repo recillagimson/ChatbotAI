@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { chatTurn, type ChatTurnMessage } from "@/lib/anthropic";
+import { chatTurn, type ChatTurnMessage } from "@/lib/openai-changes";
 import { downloadAsBase64, CLAUDE_IMAGE_TYPES } from "@/lib/storage";
 import type { Chatbot, ChangeRequest, TranscriptMessage } from "@/lib/types";
 

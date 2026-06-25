@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/admin";
-import { draftChangeRequest } from "@/lib/anthropic";
+import { draftChangeRequest } from "@/lib/openai-changes";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 import { indexEntry } from "@/lib/retrieval";
 import type { Chatbot, ChangeRequest, ChangeFinal } from "@/lib/types";
