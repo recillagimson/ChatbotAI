@@ -57,9 +57,15 @@ export async function POST(request: NextRequest) {
     created_at: nowIso,
   };
 
-  // Resolve or create the draft, persisting the user message first (so it's never lost).
-  let crId: string;
-  let transcript: TranscriptMessage[];
+  // Resolve the prior transcript WITHOUT persisting yet. We deliberately delay
+  // every write until AFTER the AI reply succeeds and persist the user + assistant
+  // messages ATOMICALLY (one insert/update). The old two-phase approach (save the
+  // user message, then the assistant message around a multi-second AI call) left
+  // the draft orphaned with only the user message whenever the AI call was
+  // interrupted (error, timeout, the client navigating away mid-generation), which
+  // is why History showed threads with no bot reply.
+  let crId: string | null = null;
+  let priorTranscript: TranscriptMessage[] = [];
   if (change_request_id) {
     const { data: existing } = await supabase
       .from("change_requests")
@@ -73,26 +79,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "This request was already submitted." }, { status: 400 });
     }
     crId = row.id;
-    transcript = [...(row.transcript ?? []), userMsg];
-    const { error } = await supabase.from("change_requests").update({ transcript }).eq("id", crId);
-    if (error) return NextResponse.json({ error: "Could not save your message." }, { status: 500 });
-  } else {
-    transcript = [userMsg];
-    const { data: inserted, error } = await supabase
-      .from("change_requests")
-      .insert({
-        chatbot_id,
-        user_id: user.id,
-        request_text: message,
-        status: "draft",
-        transcript,
-        title: message.slice(0, 80),
-      })
-      .select("id")
-      .single();
-    if (error || !inserted) return NextResponse.json({ error: "Could not start the request." }, { status: 500 });
-    crId = inserted.id;
+    priorTranscript = row.transcript ?? [];
   }
+  const transcript = [...priorTranscript, userMsg];
 
   // Build the model transcript. The assistant reads the bot's FULL current
   // knowledge (title + content), so it proposes changes grounded in what exists.
@@ -136,7 +125,9 @@ export async function POST(request: NextRequest) {
     modelMessages.push({ role: "user", content, ...(resolved.length ? { images: resolved } : {}) });
   }
 
-  // Run the scoped assistant turn.
+  // Run the scoped assistant turn FIRST. On failure we persist nothing new (no
+  // orphaned half-thread); the client keeps the message optimistically and can
+  // retry. For an existing draft, its prior transcript stays intact.
   let assistantText: string;
   let proposal;
   let model: string;
@@ -147,16 +138,53 @@ export async function POST(request: NextRequest) {
     model = out.model;
   } catch (err) {
     console.error("[change-requests/chat] chatTurn failed", err);
-    // The user message is already saved; let the client retry with a follow-up.
-    return NextResponse.json({ id: crId, error: "The assistant is unavailable right now. Please try again." }, { status: 502 });
+    return NextResponse.json(
+      { id: crId, error: "The assistant is unavailable right now. Please try again." },
+      { status: 502 }
+    );
   }
 
-  const assistantMsg: TranscriptMessage = { role: "assistant", content: assistantText, created_at: new Date().toISOString() };
+  // Atomic persistence: user + assistant messages saved together, only now.
+  const assistantMsg: TranscriptMessage = {
+    role: "assistant",
+    content: assistantText,
+    created_at: new Date().toISOString(),
+  };
   const finalTranscript = [...transcript, assistantMsg];
-  const update: Record<string, unknown> = { transcript: finalTranscript };
-  if (proposal) { update.proposed = proposal; update.model_used = model; }
-  const { error: upErr } = await supabase.from("change_requests").update(update).eq("id", crId);
-  if (upErr) return NextResponse.json({ error: "Could not save the reply." }, { status: 500 });
+
+  if (crId) {
+    // Existing draft: update transcript (+ proposal) in one write.
+    const update: Record<string, unknown> = { transcript: finalTranscript };
+    if (proposal) {
+      update.proposed = proposal;
+      update.model_used = model;
+    }
+    const { error: upErr } = await supabase.from("change_requests").update(update).eq("id", crId);
+    if (upErr) return NextResponse.json({ error: "Could not save the reply." }, { status: 500 });
+  } else {
+    // New draft: create the row only now, already containing the full exchange.
+    const insertRow: Record<string, unknown> = {
+      chatbot_id,
+      user_id: user.id,
+      request_text: message,
+      status: "draft",
+      transcript: finalTranscript,
+      title: message.slice(0, 80),
+    };
+    if (proposal) {
+      insertRow.proposed = proposal;
+      insertRow.model_used = model;
+    }
+    const { data: inserted, error } = await supabase
+      .from("change_requests")
+      .insert(insertRow)
+      .select("id")
+      .single();
+    if (error || !inserted) {
+      return NextResponse.json({ error: "Could not save the reply." }, { status: 500 });
+    }
+    crId = inserted.id;
+  }
 
   return NextResponse.json({ id: crId, transcript: finalTranscript, proposal: proposal ?? null });
 }
