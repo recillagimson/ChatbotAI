@@ -32,17 +32,34 @@ const nav = [
   { href: "/billing", label: "Billing", icon: CreditCard },
 ];
 
+// While an admin is "viewing as" a client, scope the sidebar to Overview →
+// Request Changes (hide Feedback, Settings, Billing) per the impersonation spec.
+const IMPERSONATION_HREFS = new Set([
+  "/dashboard",
+  "/chatbots",
+  "/conversations",
+  "/statistics",
+  "/knowledge-base",
+  "/requests",
+]);
+
 export function Sidebar({
   isSuperadmin = false,
+  impersonating = false,
 }: {
   isSuperadmin?: boolean;
+  impersonating?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const items = isSuperadmin
-    ? [...nav, { href: "/admin", label: "Admin", icon: ShieldCheck }]
+  const base = impersonating
+    ? nav.filter((item) => IMPERSONATION_HREFS.has(item.href))
     : nav;
+  const items =
+    isSuperadmin && !impersonating
+      ? [...base, { href: "/admin", label: "Admin", icon: ShieldCheck }]
+      : base;
 
   async function signOut() {
     const supabase = createClient();
@@ -82,16 +99,18 @@ export function Sidebar({
           );
         })}
       </nav>
-      <div className="p-3 border-t border-white/10">
-        <button
-          type="button"
-          onClick={signOut}
-          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-        >
-          <LogOut className="h-4 w-4" />
-          Sign out
-        </button>
-      </div>
+      {!impersonating && (
+        <div className="p-3 border-t border-white/10">
+          <button
+            type="button"
+            onClick={signOut}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          >
+            <LogOut className="h-4 w-4" />
+            Sign out
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

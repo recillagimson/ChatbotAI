@@ -2,7 +2,8 @@ import Link from "next/link";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { signAttachment } from "@/lib/storage";
 import { RequestChat } from "@/components/dashboard/request-chat";
-import type { ChangeProposal, TranscriptMessage } from "@/lib/types";
+import { sectionColumnFor } from "@/lib/change-categories";
+import type { ChangeCategory, ChangeProposal, Chatbot, TranscriptMessage } from "@/lib/types";
 import { Plus, FolderClosed, History as HistoryIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +49,7 @@ function greetingFor(name: string | null): string {
 export default async function RequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string; project?: string }>;
+  searchParams: Promise<{ id?: string; project?: string; category?: string }>;
 }) {
   const sp = await searchParams;
   const user = await getCurrentUser();
@@ -82,6 +83,7 @@ export default async function RequestsPage({
     id: string;
     chatbot_id: string;
     status: CrStatus;
+    category: ChangeCategory;
     transcript: TranscriptMessage[];
     proposed: ChangeProposal | null;
     title: string | null;
@@ -90,7 +92,7 @@ export default async function RequestsPage({
   if (sp.id) {
     const { data: cr } = await supabase
       .from("change_requests")
-      .select("id, chatbot_id, status, transcript, proposed, title")
+      .select("id, chatbot_id, status, category, transcript, proposed, title")
       .eq("id", sp.id)
       .eq("user_id", user!.id)
       .maybeSingle();
@@ -108,6 +110,32 @@ export default async function RequestsPage({
       : null;
   const activeProjectName =
     projects.find((p) => p.id === activeProjectId)?.name ?? null;
+
+  // Category: a loaded thread uses its stored category; a new request takes it
+  // from the ?category= deep-link (the "Request a change" CTAs), else defaults.
+  const isValidCategory = (v?: string): v is ChangeCategory =>
+    v === "personality" || v === "offers" || v === "rebuttals" || v === "other";
+  const activeCategory: ChangeCategory = thread
+    ? thread.category
+    : isValidCategory(sp.category)
+      ? sp.category
+      : "personality";
+
+  // Current text of the targeted section for the active project (the "before"
+  // side of the proposal review). Empty for "other" / no project / empty section.
+  let currentSection = "";
+  if (activeProjectId) {
+    const col = sectionColumnFor(activeCategory);
+    if (col) {
+      const { data: secBot } = await supabase
+        .from("chatbots")
+        .select("persona_section, offers_section, rebuttals_section")
+        .eq("id", activeProjectId)
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      currentSection = (secBot as Pick<Chatbot, typeof col> | null)?.[col] ?? "";
+    }
+  }
 
   // Sign user-message image paths + carry doc file names for a loaded thread.
   type ViewMessage = {
@@ -236,7 +264,7 @@ export default async function RequestsPage({
 
       {/* Center pane */}
       <RequestChat
-        key={thread ? thread.id : activeProjectId ?? "new"}
+        key={thread ? thread.id : `${activeProjectId ?? "new"}-${activeCategory}`}
         changeRequestId={thread ? thread.id : null}
         chatbotId={activeProjectId}
         projectName={activeProjectName}
@@ -244,6 +272,8 @@ export default async function RequestsPage({
         initialTranscript={initialTranscript}
         initialProposal={thread ? thread.proposed : null}
         initialStatus={thread ? thread.status : null}
+        initialCategory={activeCategory}
+        currentSection={currentSection}
         hasProjects={projects.length > 0}
       />
     </div>

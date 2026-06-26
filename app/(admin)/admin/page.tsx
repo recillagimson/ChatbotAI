@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
+import { ViewAsButton } from "@/components/admin/view-as-button";
 import type { Profile, Subscription } from "@/lib/types";
 
 type SubStatus = Subscription["status"];
@@ -94,6 +95,9 @@ export default async function AdminClientsPage() {
                 <th className="px-4 py-3 text-left text-xs uppercase text-muted-foreground font-medium">
                   Joined
                 </th>
+                <th className="px-4 py-3 text-right text-xs uppercase text-muted-foreground font-medium">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -117,6 +121,9 @@ export default async function AdminClientsPage() {
                   <td className="px-4 py-3 tabular-nums">{chatbotCount}</td>
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">
                     {new Date(profile.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <ViewAsButton clientId={profile.id} />
                   </td>
                 </tr>
               ))}

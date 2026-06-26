@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { ChangeRequestReview } from "@/components/admin/change-request-review";
 import { signAttachment } from "@/lib/storage";
+import { sectionColumnFor } from "@/lib/change-categories";
 import type {
   ChangeRequest,
   Chatbot,
@@ -75,7 +76,7 @@ export default async function AdminRequestReviewPage({
   const { data: chatbotData } = await supabase
     .from("chatbots")
     .select(
-      "id, name, system_prompt, business_description, tone, instagram_username, user_id"
+      "id, name, system_prompt, persona_section, offers_section, rebuttals_section, business_description, tone, instagram_username, user_id"
     )
     .eq("id", cr.chatbot_id)
     .maybeSingle();
@@ -84,11 +85,18 @@ export default async function AdminRequestReviewPage({
     | "id"
     | "name"
     | "system_prompt"
+    | "persona_section"
+    | "offers_section"
+    | "rebuttals_section"
     | "business_description"
     | "tone"
     | "instagram_username"
     | "user_id"
   > | null;
+
+  // Current text of the section this request targets (the "before" for review).
+  const sectionCol = sectionColumnFor(cr.category);
+  const currentSection = sectionCol && chatbot ? (chatbot[sectionCol] ?? "") : "";
 
   const { data: profileData } = await supabase
     .from("profiles")
@@ -144,6 +152,7 @@ export default async function AdminRequestReviewPage({
             name: chatbot.name,
             system_prompt: chatbot.system_prompt,
           }}
+          currentSection={currentSection}
           clientEmail={clientEmail}
           transcript={transcriptView}
         />

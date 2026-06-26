@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { CATEGORY_LABELS } from "@/lib/change-categories";
 import type { ChangeRequest } from "@/lib/types";
 
 type Action = "approve" | "reject" | "regenerate" | "publish";
@@ -22,11 +23,13 @@ type EditableKbEntry = { title: string; content: string; include: boolean };
 export function ChangeRequestReview({
   request,
   chatbot,
+  currentSection,
   clientEmail,
   transcript,
 }: {
   request: ChangeRequest;
   chatbot: { id: string; name: string; system_prompt: string | null };
+  currentSection: string;
   clientEmail: string | null;
   transcript: {
     role: "user" | "assistant";
@@ -38,8 +41,17 @@ export function ChangeRequestReview({
   const router = useRouter();
   const [, startTransition] = useTransition();
 
+  // Section categories edit a section's text; "other" (KB) only edits the legacy
+  // system_prompt when an old request carried one.
+  const isSection = request.category !== "other";
+  const sectionLabel = isSection ? CATEGORY_LABELS[request.category] : "System prompt";
+  const hasLegacyPrompt = !!request.proposed?.system_prompt;
+  const showPromptCard = isSection || hasLegacyPrompt;
+
   const [systemPrompt, setSystemPrompt] = useState(
-    request.proposed?.system_prompt ?? chatbot.system_prompt ?? ""
+    isSection
+      ? (request.proposed?.section_content ?? "")
+      : (request.proposed?.system_prompt ?? chatbot.system_prompt ?? "")
   );
   const [kbEntries, setKbEntries] = useState<EditableKbEntry[]>(
     (request.proposed?.kb_entries ?? []).map((e) => ({ ...e, include: true }))
@@ -84,11 +96,18 @@ export function ChangeRequestReview({
   }
 
   function handleApprove() {
+    const kb_entries = kbEntries
+      .filter((e) => e.include)
+      .map(({ title, content }) => ({ title, content }));
     run("approve", {
-      system_prompt: systemPrompt.trim() || undefined,
-      kb_entries: kbEntries
-        .filter((e) => e.include)
-        .map(({ title, content }) => ({ title, content })),
+      // Section categories publish into the section column; legacy "other" rows
+      // still carry system_prompt.
+      ...(isSection
+        ? { section_content: systemPrompt.trim() || undefined }
+        : hasLegacyPrompt
+          ? { system_prompt: systemPrompt.trim() || undefined }
+          : {}),
+      kb_entries,
       admin_note: adminNote || undefined,
     });
   }
@@ -236,32 +255,46 @@ export function ChangeRequestReview({
         </CardContent>
       </Card>
 
-      {/* 2. Proposed system prompt */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Proposed system prompt</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Label htmlFor="proposed-system-prompt" className="sr-only">
-            Proposed system prompt
-          </Label>
-          <Textarea
-            id="proposed-system-prompt"
-            rows={14}
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            disabled={readOnly}
-          />
-          <details className="text-sm">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-              Current live prompt
-            </summary>
-            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs">
-              {chatbot.system_prompt || "(none — generic mode)"}
-            </pre>
-          </details>
-        </CardContent>
-      </Card>
+      {/* 2. Proposed section / system prompt (before & after). Hidden for KB-only "other". */}
+      {showPromptCard && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Proposed {sectionLabel}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {isSection && (
+              <div>
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Current (before)
+                </p>
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                  {currentSection.trim() || "(empty — not written yet)"}
+                </pre>
+              </div>
+            )}
+            <Label htmlFor="proposed-system-prompt" className={isSection ? "text-xs font-medium uppercase tracking-wide text-muted-foreground" : "sr-only"}>
+              {isSection ? "Revised (after) — editable" : "Proposed system prompt"}
+            </Label>
+            <Textarea
+              id="proposed-system-prompt"
+              rows={14}
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              disabled={readOnly}
+            />
+            {!isSection && (
+              <details className="text-sm">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                  Current live prompt
+                </summary>
+                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs">
+                  {chatbot.system_prompt || "(none — generic mode)"}
+                </pre>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* 3. Knowledge-base additions */}
       <Card>
@@ -468,6 +501,14 @@ export function ChangeRequestReview({
                 : ""}
               . These changes are live on the client&apos;s bot.
             </p>
+            {request.final?.section_content && (
+              <div>
+                <p className="text-sm font-medium">{sectionLabel} that went live</p>
+                <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs">
+                  {request.final.section_content}
+                </pre>
+              </div>
+            )}
             {request.final?.system_prompt && (
               <div>
                 <p className="text-sm font-medium">System prompt that went live</p>

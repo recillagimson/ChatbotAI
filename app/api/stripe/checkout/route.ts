@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getImpersonation } from "@/lib/impersonation";
 import { getStripe, priceIdForCycle, getAppUrl } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  // An admin "viewing as" a client must not start a Stripe flow.
+  if ((await getImpersonation()).active) {
+    return NextResponse.json({ error: "Billing is disabled while viewing as a client." }, { status: 400 });
+  }
+
   const stripe = getStripe();
   const supabase = await createClient();
   const {

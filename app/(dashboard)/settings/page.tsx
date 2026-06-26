@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { getImpersonation } from "@/lib/impersonation";
 import {
   Card,
   CardContent,
@@ -10,6 +12,11 @@ import { SettingsForm } from "@/components/dashboard/settings-form";
 import { ChangePasswordForm } from "@/components/dashboard/change-password-form";
 
 export default async function SettingsPage() {
+  // Settings is out of scope for "view as client" (a client's profile/password
+  // isn't editable through the admin's session). Hidden from the sidebar; also
+  // redirect direct URL access so it isn't reachable while impersonating.
+  if ((await getImpersonation()).active) redirect("/dashboard");
+
   const supabase = await createClient();
   const user = await getCurrentUser();
   const { data: profile } = await supabase

@@ -40,7 +40,10 @@ export interface Chatbot {
   manychat_api_key_enc: string | null;  // AES-256-GCM ciphertext of the ManyChat API key; null = env fallback
   webhook_secret: string;               // per-chatbot inbound webhook secret (plaintext; NOT NULL in DB)
   instagram_username: string | null;
-  system_prompt: string | null;
+  system_prompt: string | null;        // legacy single prompt; used as fallback when the 3 sections are all empty
+  persona_section: string | null;      // 1. personality / tone (leads as identity)
+  offers_section: string | null;       // 2. offers & services / inclusions & exclusions / links
+  rebuttals_section: string | null;    // 3. rebuttals, FAQs
   is_active: boolean;
   retrieval_active: boolean;
   auto_followup_enabled: boolean;
@@ -101,15 +104,22 @@ export interface KbChunk {
   created_at: string;
 }
 
+// Which prompt section a request targets. "other" = knowledge-base / misc (no section).
+export type ChangeCategory = "personality" | "offers" | "rebuttals" | "other";
+
 export interface ChangeProposal {
-  system_prompt?: string;                          // omitted/empty = leave the prompt unchanged
+  section?: "persona_section" | "offers_section" | "rebuttals_section"; // column the section_content targets
+  section_content?: string;                        // FULL revised text for the targeted section
+  system_prompt?: string;                          // LEGACY — still honored for old rows; omitted/empty = no change
   kb_entries?: { title: string; content: string }[]; // NEW kb entries to add (may be omitted/empty)
   summary: string;                                 // plain-English "what changed and why" for the team
 }
 
 // The team-finalized payload chosen at Approve (no summary needed).
 export interface ChangeFinal {
-  system_prompt?: string;
+  section?: "persona_section" | "offers_section" | "rebuttals_section";
+  section_content?: string;
+  system_prompt?: string;                          // LEGACY fallback for old requests
   kb_entries?: { title: string; content: string }[];
 }
 
@@ -118,6 +128,7 @@ export interface ChangeRequest {
   chatbot_id: string;
   user_id: string;
   request_text: string;
+  category: ChangeCategory;
   status: "draft" | "pending" | "approved" | "applied" | "rejected";
   proposed: ChangeProposal | null;
   transcript: TranscriptMessage[];

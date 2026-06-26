@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/admin";
 import { draftChangeRequest } from "@/lib/openai-changes";
+import { sectionColumnFor } from "@/lib/change-categories";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 import { indexEntry } from "@/lib/retrieval";
 import type { Chatbot, ChangeRequest, ChangeFinal } from "@/lib/types";
@@ -15,7 +16,8 @@ const KbEntry = z.object({ title: z.string().min(1).max(200), content: z.string(
 const Body = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("approve"),
-    system_prompt: z.string().max(20_000).optional(),
+    section_content: z.string().max(20_000).optional(), // revised section text (section categories)
+    system_prompt: z.string().max(20_000).optional(),   // LEGACY: old requests still publish into system_prompt
     kb_entries: z.array(KbEntry).max(50).optional(),
     admin_note: z.string().max(4000).optional(),
   }),
@@ -50,8 +52,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   if (body.action === "approve") {
+    const sectionCol = sectionColumnFor(cr.category); // null for "other"
+    const sc = body.section_content?.trim();
     const sp = body.system_prompt?.trim();
     const final: ChangeFinal = {
+      // Section categories store the revised section + its target column. Legacy
+      // requests (no category section / old shape) keep system_prompt.
+      ...(sectionCol && sc ? { section: sectionCol, section_content: sc } : {}),
       ...(sp ? { system_prompt: sp } : {}),
       ...(body.kb_entries && body.kb_entries.length
         ? { kb_entries: body.kb_entries.map((e) => ({ title: e.title.trim(), content: e.content.trim() })) }
@@ -68,7 +75,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (body.action === "regenerate") {
     const { data: chatbot } = await supabase
       .from("chatbots")
-      .select("id, name, business_description, tone, system_prompt")
+      .select(
+        "id, name, business_description, tone, system_prompt, persona_section, offers_section, rebuttals_section"
+      )
       .eq("id", cr.chatbot_id)
       .maybeSingle();
     if (!chatbot) return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
@@ -77,11 +86,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const kbEntries = (kbRows ?? [])
         .map((r: { title: string; content: string }) => ({ title: r.title, content: r.content }))
         .filter((e) => e.title && e.content);
+      const regenCol = sectionColumnFor(cr.category);
+      const currentSection = regenCol ? ((chatbot as Chatbot)[regenCol] ?? "") : "";
       const { proposal, model } = await draftChangeRequest({
         chatbot: chatbot as Chatbot,
         kbEntries,
         requestText: cr.request_text,
         adminGuidance: body.adminGuidance,
+        category: cr.category,
+        currentSection,
       });
       const { error } = await supabase
         .from("change_requests")
@@ -120,7 +133,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   // Apply the prompt (live) — by id; admin RLS overlay authorizes it.
-  if (final.system_prompt && final.system_prompt.trim()) {
+  // Section categories write the revised text to the right section column; legacy
+  // requests (old shape, no section) still publish into system_prompt.
+  const publishCol = sectionColumnFor(cr.category);
+  if (publishCol && final.section_content && final.section_content.trim()) {
+    const { error } = await supabase
+      .from("chatbots").update({ [publishCol]: final.section_content.trim() }).eq("id", cr.chatbot_id);
+    if (error) return NextResponse.json({ error: "Could not update the chatbot section." }, { status: 500 });
+  } else if (final.system_prompt && final.system_prompt.trim()) {
     const { error } = await supabase
       .from("chatbots").update({ system_prompt: final.system_prompt.trim() }).eq("id", cr.chatbot_id);
     if (error) return NextResponse.json({ error: "Could not update the chatbot prompt." }, { status: 500 });

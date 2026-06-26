@@ -4,7 +4,8 @@ import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { chatTurn, type ChatTurnMessage } from "@/lib/openai-changes";
 import { downloadAsBase64, downloadAsBuffer, CLAUDE_IMAGE_TYPES } from "@/lib/storage";
 import { extractTextFromFile, MAX_DOC_CHARS } from "@/lib/document-parser";
-import type { Chatbot, ChangeRequest, TranscriptMessage } from "@/lib/types";
+import { sectionColumnFor } from "@/lib/change-categories";
+import type { Chatbot, ChangeCategory, ChangeRequest, TranscriptMessage } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,9 @@ export const maxDuration = 60;
 const Body = z.object({
   chatbot_id: z.string().uuid(),
   change_request_id: z.string().uuid().optional(),
+  // Which section this request targets. Set on a NEW thread; ignored for an
+  // existing thread (the category is fixed at creation). Defaults to "other".
+  category: z.enum(["personality", "offers", "rebuttals", "other"]).optional(),
   message: z.string().min(1).max(4000),
   images: z.array(z.object({ path: z.string(), name: z.string() })).max(5).optional(),
   files: z
@@ -27,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   const parsed = Body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid message." }, { status: 400 });
-  const { chatbot_id, change_request_id, message, images, files } = parsed.data;
+  const { chatbot_id, change_request_id, category, message, images, files } = parsed.data;
 
   // Defense-in-depth: every attachment path must be under the caller's own folder.
   if (
@@ -39,10 +43,12 @@ export async function POST(request: NextRequest) {
 
   const supabase = await createClient();
 
-  // Ownership + SAFE chatbot context (NEVER select *).
+  // Ownership + SAFE chatbot context (NEVER select * — that leaks secret columns).
   const { data: chatbot } = await supabase
     .from("chatbots")
-    .select("id, name, business_description, tone, system_prompt")
+    .select(
+      "id, name, business_description, tone, system_prompt, persona_section, offers_section, rebuttals_section"
+    )
     .eq("id", chatbot_id)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -66,22 +72,32 @@ export async function POST(request: NextRequest) {
   // is why History showed threads with no bot reply.
   let crId: string | null = null;
   let priorTranscript: TranscriptMessage[] = [];
+  // The category is fixed when a thread is created: an existing draft uses its
+  // stored category (the section context is bound to it); a new draft uses the
+  // body's category, defaulting to "other".
+  let effectiveCategory: ChangeCategory = category ?? "other";
   if (change_request_id) {
     const { data: existing } = await supabase
       .from("change_requests")
-      .select("id, status, transcript")
+      .select("id, status, transcript, category")
       .eq("id", change_request_id)
       .eq("user_id", user.id)
       .maybeSingle();
     if (!existing) return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
-    const row = existing as Pick<ChangeRequest, "id" | "status" | "transcript">;
+    const row = existing as Pick<ChangeRequest, "id" | "status" | "transcript" | "category">;
     if (row.status !== "draft") {
       return NextResponse.json({ error: "This request was already submitted." }, { status: 400 });
     }
     crId = row.id;
     priorTranscript = row.transcript ?? [];
+    effectiveCategory = row.category;
   }
   const transcript = [...priorTranscript, userMsg];
+
+  // Current text of the targeted section (the assistant revises THIS), or "" for
+  // "other" / an empty section.
+  const sectionCol = sectionColumnFor(effectiveCategory);
+  const currentSection = sectionCol ? ((chatbot as Chatbot)[sectionCol] ?? "") : "";
 
   // Build the model transcript. The assistant reads the bot's FULL current
   // knowledge (title + content), so it proposes changes grounded in what exists.
@@ -132,7 +148,13 @@ export async function POST(request: NextRequest) {
   let proposal;
   let model: string;
   try {
-    const out = await chatTurn({ chatbot: chatbot as Chatbot, kbEntries, messages: modelMessages });
+    const out = await chatTurn({
+      chatbot: chatbot as Chatbot,
+      kbEntries,
+      messages: modelMessages,
+      category: effectiveCategory,
+      currentSection,
+    });
     assistantText = out.assistantText;
     proposal = out.proposal;
     model = out.model;
@@ -167,6 +189,7 @@ export async function POST(request: NextRequest) {
       chatbot_id,
       user_id: user.id,
       request_text: message,
+      category: effectiveCategory,
       status: "draft",
       transcript: finalTranscript,
       title: message.slice(0, 80),

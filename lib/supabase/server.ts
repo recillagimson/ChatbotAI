@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { createClient as createServiceClientBase } from "@supabase/supabase-js";
+import { getViewAsTarget } from "@/lib/impersonation";
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -43,8 +44,12 @@ export async function createClient() {
  * revoked elsewhere stays usable until the token expires (~1h). The actual data
  * boundary is Postgres RLS (which verifies every query server-side), so this is
  * the sanctioned default — but don't use these claims as a hard revocation gate.
+ *
+ * NOTE: this is the REAL authenticated user (the actual JWT). Use it for
+ * authorization decisions (e.g. requireSuperadmin, the /admin gate) — NOT
+ * `getCurrentUser`, which may be an impersonated client (see below).
  */
-export const getCurrentUser = cache(async () => {
+export const getRealUser = cache(async () => {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const claims = data?.claims;
@@ -53,6 +58,19 @@ export const getCurrentUser = cache(async () => {
     id: claims.sub as string,
     email: (claims.email as string | undefined) ?? null,
   };
+});
+
+/**
+ * The EFFECTIVE acting user for data scoping. Normally the real user, but when a
+ * superadmin is impersonating a client ("View as client"), this returns the
+ * client's identity so the entire client dashboard — which scopes every query by
+ * this id — transparently shows/acts on the client's account. Authorization
+ * gates must NOT use this; use `getRealUser`. See lib/impersonation.ts.
+ */
+export const getCurrentUser = cache(async () => {
+  const target = await getViewAsTarget();
+  if (target) return target;
+  return getRealUser();
 });
 
 /** Service-role client — bypasses RLS. Use only in server routes (webhooks, admin). */

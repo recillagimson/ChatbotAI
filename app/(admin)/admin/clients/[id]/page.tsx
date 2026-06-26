@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AdminChatbotEditForm } from "@/components/admin/admin-chatbot-edit-form";
+import { ViewAsButton } from "@/components/admin/view-as-button";
 import type {
   Profile,
   Subscription,
@@ -67,6 +68,9 @@ type AdminChatbot = Pick<
   | "business_description"
   | "tone"
   | "system_prompt"
+  | "persona_section"
+  | "offers_section"
+  | "rebuttals_section"
   | "instagram_username"
   | "is_active"
   | "created_at"
@@ -107,7 +111,7 @@ export default async function AdminClientDetailPage({
     supabase
       .from("chatbots")
       .select(
-        "id, name, business_description, tone, system_prompt, instagram_username, is_active, created_at"
+        "id, name, business_description, tone, system_prompt, persona_section, offers_section, rebuttals_section, instagram_username, is_active, created_at"
       )
       .eq("user_id", id)
       .order("created_at", { ascending: false }),
@@ -132,75 +136,119 @@ export default async function AdminClientDetailPage({
   const requests = (requestsData ?? []) as ChangeRequest[];
   const feedback = (feedbackData ?? []) as Feedback[];
 
+  const openRequests = requests.filter((r) => r.status === "pending").length;
+
   return (
     <div>
-      <div className="mb-8">
-        <Link
-          href="/admin"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← All clients
-        </Link>
-        <h1 className="mt-2 text-3xl font-display font-semibold tracking-tight">
-          {profile.full_name || profile.email}
-        </h1>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <span>{profile.email}</span>
-          {profile.company_name && (
-            <>
-              <span>·</span>
-              <span>{profile.company_name}</span>
-            </>
-          )}
-          <span>·</span>
-          {subBadge(subscription?.status ?? null)}
-          <span>·</span>
-          <span>
-            Joined {new Date(profile.created_at).toLocaleDateString()}
-          </span>
-        </div>
-      </div>
+      <Link
+        href="/admin"
+        className="text-sm text-muted-foreground hover:text-foreground"
+      >
+        ← All clients
+      </Link>
 
-      <section className="mb-10">
-        <h2 className="mb-4 text-xl font-display font-semibold tracking-tight">
-          Chatbots ({chatbots.length})
-        </h2>
-        {chatbots.length === 0 ? (
-          <p className="text-muted-foreground">
-            This client has no chatbots yet.
-          </p>
-        ) : (
-          <div className="space-y-6">
-            {chatbots.map((bot) => (
-              <Card key={bot.id}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                  <CardTitle>{bot.name}</CardTitle>
-                  {bot.is_active ? (
-                    <Badge variant="success">Active</Badge>
-                  ) : (
-                    <Badge variant="secondary">Paused</Badge>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <AdminChatbotEditForm
-                    chatbot={{
-                      id: bot.id,
-                      name: bot.name,
-                      business_description: bot.business_description,
-                      tone: bot.tone,
-                      system_prompt: bot.system_prompt,
-                      instagram_username: bot.instagram_username,
-                      is_active: bot.is_active,
-                    }}
-                  />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
+      <div className="mt-4 lg:grid lg:grid-cols-[300px_1fr] lg:gap-8">
+        {/* Identifier — pinned to the side so it's always clear whose account this is. */}
+        <aside className="mb-8 lg:mb-0 lg:sticky lg:top-8 lg:self-start">
+          <Card>
+            <CardHeader>
+              <CardTitle className="break-words">
+                {profile.full_name || profile.email}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Email</p>
+                <p className="break-words">{profile.email}</p>
+              </div>
+              {profile.company_name && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Company</p>
+                  <p className="break-words">{profile.company_name}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Subscription</p>
+                <div className="mt-1">{subBadge(subscription?.status ?? null)}</div>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Joined</p>
+                <p className="tabular-nums">
+                  {new Date(profile.created_at).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="border-t pt-3">
+                <ViewAsButton clientId={profile.id} label="Open client dashboard" variant="button" />
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  See and act in their dashboard as them.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 border-t pt-3 text-center">
+                <div>
+                  <p className="text-lg font-semibold tabular-nums">{chatbots.length}</p>
+                  <p className="text-xs text-muted-foreground">Chatbots</p>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold tabular-nums">{openRequests}</p>
+                  <p className="text-xs text-muted-foreground">Open req.</p>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold tabular-nums">{feedback.length}</p>
+                  <p className="text-xs text-muted-foreground">Feedback</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </aside>
 
-      <section className="mb-10">
+        {/* Main column */}
+        <div className="min-w-0">
+          <h1 className="mb-6 text-3xl font-display font-semibold tracking-tight lg:sr-only">
+            {profile.full_name || profile.email}
+          </h1>
+
+          <section className="mb-10">
+            <h2 className="mb-4 text-xl font-display font-semibold tracking-tight">
+              Chatbots ({chatbots.length})
+            </h2>
+            {chatbots.length === 0 ? (
+              <p className="text-muted-foreground">
+                This client has no chatbots yet.
+              </p>
+            ) : (
+              <div className="space-y-6">
+                {chatbots.map((bot) => (
+                  <Card key={bot.id}>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                      <CardTitle>{bot.name}</CardTitle>
+                      {bot.is_active ? (
+                        <Badge variant="success">Active</Badge>
+                      ) : (
+                        <Badge variant="secondary">Paused</Badge>
+                      )}
+                    </CardHeader>
+                    <CardContent>
+                      <AdminChatbotEditForm
+                        chatbot={{
+                          id: bot.id,
+                          name: bot.name,
+                          instagram_username: bot.instagram_username,
+                          is_active: bot.is_active,
+                          persona_section: bot.persona_section,
+                          offers_section: bot.offers_section,
+                          rebuttals_section: bot.rebuttals_section,
+                          system_prompt: bot.system_prompt,
+                          business_description: bot.business_description,
+                        }}
+                      />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="mb-10">
         <h2 className="mb-4 text-xl font-display font-semibold tracking-tight">
           Change requests ({requests.length})
         </h2>
@@ -261,7 +309,9 @@ export default async function AdminClientDetailPage({
             ))}
           </div>
         )}
-      </section>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

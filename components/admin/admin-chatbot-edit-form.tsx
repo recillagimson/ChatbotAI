@@ -6,20 +6,27 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import type { Chatbot } from "@/lib/types";
+import { SectionField } from "@/components/dashboard/section-field";
 
-type Tone = Chatbot["tone"];
-
+/**
+ * Admin editor for a client's chatbot. Mirrors the client's prompts view (the
+ * three sections, same order/labels) but — unlike the client, who can only edit
+ * Personality — the admin can edit ALL THREE sections (Personality, Offers,
+ * Rebuttals). Saves directly to the live bot via the superadmin "admin all
+ * chatbots" RLS overlay (browser createClient), no approval step.
+ */
 type AdminEditableChatbot = {
   id: string;
   name: string;
-  business_description: string | null;
-  tone: Tone;
-  system_prompt: string | null;
   instagram_username: string | null;
   is_active: boolean;
+  persona_section: string | null;
+  offers_section: string | null;
+  rebuttals_section: string | null;
+  // legacy fallback, only used to seed Personality if persona_section is empty
+  system_prompt: string | null;
+  business_description: string | null;
 };
 
 export function AdminChatbotEditForm({
@@ -30,15 +37,15 @@ export function AdminChatbotEditForm({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [name, setName] = useState(chatbot.name);
-  const [description, setDescription] = useState(
-    chatbot.business_description ?? ""
-  );
-  const [tone, setTone] = useState<Tone>(chatbot.tone);
-  const [systemPrompt, setSystemPrompt] = useState(chatbot.system_prompt ?? "");
   const [instagramUsername, setInstagramUsername] = useState(
     chatbot.instagram_username ?? ""
   );
   const [isActive, setIsActive] = useState(chatbot.is_active);
+  const [persona, setPersona] = useState(
+    chatbot.persona_section ?? chatbot.system_prompt ?? chatbot.business_description ?? ""
+  );
+  const [offers, setOffers] = useState(chatbot.offers_section ?? "");
+  const [rebuttals, setRebuttals] = useState(chatbot.rebuttals_section ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -57,11 +64,11 @@ export function AdminChatbotEditForm({
       .from("chatbots")
       .update({
         name: name.trim(),
-        business_description: description.trim() || null,
-        tone,
-        system_prompt: systemPrompt.trim() || null,
         instagram_username: instagramUsername.trim() || null,
         is_active: isActive,
+        persona_section: persona.trim() || null,
+        offers_section: offers.trim() || null,
+        rebuttals_section: rebuttals.trim() || null,
       })
       .eq("id", chatbot.id);
     setSaving(false);
@@ -74,9 +81,10 @@ export function AdminChatbotEditForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <p className="text-xs text-muted-foreground">
-        You&apos;re editing this on the client&apos;s behalf.
+        You&apos;re editing this on the client&apos;s behalf. Changes save directly
+        to the live bot — no review needed.
       </p>
 
       <div className="flex items-center justify-between rounded-md border p-3">
@@ -124,66 +132,43 @@ export function AdminChatbotEditForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor={`edit-description-${chatbot.id}`}>
-          Business description / AI instructions
-        </Label>
-        <Textarea
-          id={`edit-description-${chatbot.id}`}
-          rows={6}
-          placeholder="We're a specialty coffee shop in Austin TX, open 7am–6pm daily..."
-          value={description}
-          onChange={(e) => {
-            setDescription(e.target.value);
-            setSaved(false);
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          This is the core instruction the AI uses to introduce itself and stay
-          on-brand. Detailed facts (hours, pricing, policies) go in the
-          knowledge base.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor={`edit-tone-${chatbot.id}`}>Reply tone</Label>
-        <select
-          id={`edit-tone-${chatbot.id}`}
-          value={tone}
-          onChange={(e) => {
-            setTone(e.target.value as Tone);
-            setSaved(false);
-          }}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          <option value="friendly">Friendly</option>
-          <option value="professional">Professional</option>
-          <option value="casual">Casual</option>
-          <option value="enthusiastic">Enthusiastic</option>
-        </select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor={`edit-system-prompt-${chatbot.id}`}>
-          System prompt / persona (advanced)
-        </Label>
-        <Textarea
-          id={`edit-system-prompt-${chatbot.id}`}
-          rows={10}
-          placeholder="Paste a full persona prompt here (e.g. a named character with its own voice and rules)."
-          value={systemPrompt}
-          onChange={(e) => {
-            setSystemPrompt(e.target.value);
-            setSaved(false);
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          When set, this overrides the business description and reply tone above
-          and becomes the bot&apos;s full instructions. The knowledge base is
-          still appended automatically. Leave blank to use the description and
-          tone instead.
-        </p>
-      </div>
+      {/* Three sections — same order/labels as the client prompts view, all editable. */}
+      <SectionField
+        id={`edit-persona-${chatbot.id}`}
+        label="Personality / Tone"
+        value={persona}
+        onChange={(next) => {
+          setPersona(next);
+          setSaved(false);
+        }}
+        rows={10}
+        placeholder="Who the bot is and how it sounds — its name, voice, tone, and personality."
+        helper="The bot's voice and identity. Safety rules and the knowledge base are added automatically."
+      />
+      <SectionField
+        id={`edit-offers-${chatbot.id}`}
+        label="Offers & services / inclusions & exclusions / links"
+        value={offers}
+        onChange={(next) => {
+          setOffers(next);
+          setSaved(false);
+        }}
+        rows={8}
+        placeholder="What the business offers — services, packages, inclusions/exclusions, prices, and links."
+        helper="Clients can't edit this directly — only the team can."
+      />
+      <SectionField
+        id={`edit-rebuttals-${chatbot.id}`}
+        label="Rebuttals & FAQs"
+        value={rebuttals}
+        onChange={(next) => {
+          setRebuttals(next);
+          setSaved(false);
+        }}
+        rows={8}
+        placeholder="How the bot handles objections and frequently-asked questions."
+        helper="Clients can't edit this directly — only the team can."
+      />
 
       {error && (
         <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded">

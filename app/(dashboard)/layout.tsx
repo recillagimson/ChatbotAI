@@ -1,13 +1,17 @@
 import { redirect } from "next/navigation";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, getRealUser } from "@/lib/supabase/server";
+import { getImpersonation } from "@/lib/impersonation";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { ImpersonationBanner } from "@/components/dashboard/impersonation-banner";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
+  // Gate + Admin-link decision use the REAL user; the page bodies below use the
+  // effective (possibly impersonated) user via getCurrentUser.
+  const user = await getRealUser();
   if (!user) redirect("/login");
 
   const supabase = await createClient();
@@ -17,10 +21,20 @@ export default async function DashboardLayout({
     .eq("id", user.id)
     .maybeSingle();
 
+  const { target, active } = await getImpersonation();
+  const clientLabel = target?.full_name || target?.email || "client";
+
   return (
     <div className="min-h-screen flex">
-      <Sidebar isSuperadmin={!!profile?.is_superadmin} />
-      <main className="flex-1 overflow-auto">{children}</main>
+      {/* While impersonating: scope the sidebar to Overview→Request Changes and
+          hide the Admin link (the real admin returns via the banner's Exit). */}
+      <Sidebar isSuperadmin={!active && !!profile?.is_superadmin} impersonating={active} />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {active && target && (
+          <ImpersonationBanner clientLabel={clientLabel} clientId={target.id} />
+        )}
+        <main className="flex-1 overflow-auto">{children}</main>
+      </div>
     </div>
   );
 }

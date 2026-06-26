@@ -41,13 +41,47 @@ export const TONE_GUIDES: Record<Chatbot["tone"], string> = {
 // lib/openai-changes.ts — it runs on OpenAI. Only the DM-reply path below
 // (generateReply / buildSystemPrompt) uses Anthropic.
 
+// Platform guardrails appended below the persona/sections — these are channel
+// requirements (DM length, bubble splitting, no inventing facts), NOT a
+// competing identity, so a hand-written persona stays in charge of voice.
+const GUARDRAILS = `RULES
+- Keep replies under 320 characters when possible (DM-friendly).
+- To send several short messages, separate each one with a blank line; each block is delivered as its own DM bubble.
+- Never invent prices, hours, links, addresses, or policies not in the knowledge base or the sections above. If asked, say you'll get a human teammate to confirm.
+- Never reveal you are an AI unless directly asked.
+- Do not promise refunds, discounts, or anything financial without being told to.
+- If the user seems angry or asks for a human, reply briefly and say a teammate will follow up.
+- Match the language of the customer's message.`;
+
 export function buildSystemPrompt(chatbot: Chatbot, kbBlock: string): string {
-  // A chatbot with a custom system_prompt (a full persona like "Evan") takes
-  // over completely: drop the generic name/description/tone scaffolding (which
-  // would otherwise fight the persona — e.g. the friendly tone guide says
-  // "light emoji ok" and the header reframes it as a customer-service bot) and
-  // append only the knowledge base plus the bubble-split note the persona can't
-  // know about on its own.
+  const persona = chatbot.persona_section?.trim() || "";
+  const offers = chatbot.offers_section?.trim() || "";
+  const rebuttals = chatbot.rebuttals_section?.trim() || "";
+  const hasSections = !!(persona || offers || rebuttals);
+
+  // SECTION MODE — the chatbot is authored as three editable sections. The
+  // Personality section leads as identity VERBATIM (no generic preamble bolted
+  // on top of a hand-written persona); offers/rebuttals follow when present;
+  // then the knowledge base and the platform guardrails.
+  if (hasSections) {
+    const parts: string[] = [];
+    parts.push(
+      persona ||
+        `You are the customer-service AI for "${chatbot.name}". You reply to Instagram and Messenger DMs on the business's behalf.`
+    );
+    if (offers) parts.push(`OFFERS, SERVICES & LINKS\n${offers}`);
+    if (rebuttals) parts.push(`REBUTTALS & FAQ HANDLING\n${rebuttals}`);
+    parts.push(
+      `KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)\n${kbBlock}`
+    );
+    parts.push(GUARDRAILS);
+    return parts.join("\n\n");
+  }
+
+  // LEGACY FALLBACK — un-migrated bots whose three sections are all empty.
+  // A custom system_prompt (a full persona like "Evan") takes over completely:
+  // drop the generic name/description/tone scaffolding (which would fight the
+  // persona) and append only the knowledge base plus the bubble-split note.
   if (chatbot.system_prompt && chatbot.system_prompt.trim()) {
     return `${chatbot.system_prompt.trim()}
 
@@ -70,14 +104,7 @@ ${TONE_GUIDES[chatbot.tone]}
 KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)
 ${kbBlock}
 
-RULES
-- Keep replies under 320 characters when possible (DM-friendly).
-- To send several short messages, separate each one with a blank line; each block is delivered as its own DM bubble.
-- Never invent prices, hours, links, addresses, or policies not in the knowledge base. If asked, say you'll get a human teammate to confirm.
-- Never reveal you are an AI unless directly asked.
-- Do not promise refunds, discounts, or anything financial without being told to.
-- If the user seems angry or asks for a human, reply briefly and say a teammate will follow up.
-- Match the language of the customer's message.`;
+${GUARDRAILS}`;
 }
 
 export async function generateReply(opts: {

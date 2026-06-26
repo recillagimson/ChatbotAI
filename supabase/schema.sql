@@ -665,3 +665,60 @@ create index if not exists conversations_platform_idx
 -- Teardown:
 -- drop index if exists public.conversations_platform_idx;
 -- alter table public.conversations drop column if exists platform;
+
+-- ===========================================================================
+-- Three-section prompt authoring + category-aware Request Change
+-- ===========================================================================
+-- A chatbot's behavior is authored as three independent, editable sections.
+-- buildSystemPrompt (lib/anthropic.ts) assembles them (persona leads as
+-- identity, then offers, then rebuttals, then KB + guardrails) and falls back
+-- to the legacy system_prompt / business_description+tone path only when all
+-- three sections are empty. system_prompt / business_description / tone are
+-- kept for that fallback and for in-flight legacy change requests.
+alter table public.chatbots
+  add column if not exists persona_section    text,  -- 1. personality / tone (leads as identity)
+  add column if not exists offers_section     text,  -- 2. offers & services / inclusions & exclusions / links
+  add column if not exists rebuttals_section  text;  -- 3. rebuttals, FAQs
+
+-- One-time backfill: seed Personality from the existing hand-crafted prompt so
+-- persona bots keep their voice. Idempotent (only when the section is empty).
+update public.chatbots
+   set persona_section = coalesce(nullif(trim(system_prompt), ''),
+                                  nullif(trim(business_description), ''))
+ where persona_section is null
+   and coalesce(nullif(trim(system_prompt), ''), nullif(trim(business_description), '')) is not null;
+
+-- Request Change category: which section a request targets (or 'other' = KB/misc).
+-- Personality auto-applies (client, no admin); offers/rebuttals/other need approval.
+alter table public.change_requests
+  add column if not exists category text not null default 'other'
+    check (category in ('personality','offers','rebuttals','other'));
+create index if not exists change_requests_category_idx
+  on public.change_requests (category, status, created_at desc);
+
+-- Teardown:
+-- drop index if exists public.change_requests_category_idx;
+-- alter table public.change_requests drop column if exists category;
+-- alter table public.chatbots drop column if exists persona_section, drop column if exists offers_section, drop column if exists rebuttals_section;
+
+-- ===========================================================================
+-- Admin "View as client" impersonation — superadmin storage write
+-- ===========================================================================
+-- While a superadmin is "viewing as" a client, uploads (KB upload, request-chat
+-- attachments) are written under the CLIENT's {user_id}/ folder, but the admin's
+-- real auth.uid() is the admin — so the owner-only "own upload write" INSERT
+-- policy would reject it. Mirror the existing "admin upload read" with a
+-- superadmin INSERT (and UPDATE, for upserts) policy so impersonated uploads
+-- land under the client's folder. (No new columns; RLS only.)
+drop policy if exists "admin upload write" on storage.objects;
+create policy "admin upload write" on storage.objects for insert to authenticated
+  with check (bucket_id = 'request-uploads' and public.is_superadmin());
+
+drop policy if exists "admin upload update" on storage.objects;
+create policy "admin upload update" on storage.objects for update to authenticated
+  using (bucket_id = 'request-uploads' and public.is_superadmin())
+  with check (bucket_id = 'request-uploads' and public.is_superadmin());
+
+-- Teardown:
+-- drop policy if exists "admin upload write"  on storage.objects;
+-- drop policy if exists "admin upload update" on storage.objects;

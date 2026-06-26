@@ -2,26 +2,25 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { SectionField } from "@/components/dashboard/section-field";
 import type { Chatbot } from "@/lib/types";
-
-type Tone = Chatbot["tone"];
 
 export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [name, setName] = useState(chatbot.name);
-  const [description, setDescription] = useState(
-    chatbot.business_description ?? ""
-  );
-  const [tone, setTone] = useState<Tone>(chatbot.tone);
-  const [systemPrompt, setSystemPrompt] = useState(chatbot.system_prompt ?? "");
   const [instagramUsername, setInstagramUsername] = useState(
     chatbot.instagram_username ?? ""
+  );
+  // Personality is the only section the owner edits directly. Fall back to the
+  // legacy prompt fields if the backfill hasn't populated persona_section yet.
+  const [persona, setPersona] = useState(
+    chatbot.persona_section ?? chatbot.system_prompt ?? chatbot.business_description ?? ""
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,10 +40,8 @@ export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
       .from("chatbots")
       .update({
         name: name.trim(),
-        business_description: description.trim() || null,
-        tone,
-        system_prompt: systemPrompt.trim() || null,
         instagram_username: instagramUsername.trim() || null,
+        persona_section: persona.trim() || null,
       })
       .eq("id", chatbot.id);
     setSaving(false);
@@ -57,7 +54,7 @@ export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
         <Label htmlFor="edit-name">Chatbot name</Label>
         <Input
@@ -84,64 +81,31 @@ export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="edit-description">Business description / AI instructions</Label>
-        <Textarea
-          id="edit-description"
-          rows={6}
-          placeholder="We're a specialty coffee shop in Austin TX, open 7am–6pm daily..."
-          value={description}
-          onChange={(e) => {
-            setDescription(e.target.value);
-            setSaved(false);
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          This is the core instruction the AI uses to introduce itself and stay
-          on-brand. Detailed facts (hours, pricing, policies) go in the
-          knowledge base.
-        </p>
-      </div>
+      {/* 1. Personality / Tone — directly editable. */}
+      <SectionField
+        id="edit-persona"
+        label="Personality / Tone"
+        value={persona}
+        onChange={(next) => {
+          setPersona(next);
+          setSaved(false);
+        }}
+        rows={10}
+        placeholder="Who the bot is and how it sounds — its name, voice, tone, and personality. e.g. 'You are Max, a warm, upbeat concierge for Acme…'"
+        helper="This defines the bot's voice and identity. Upload a file (PDF, Word, or text) to drop its contents in, then edit. Safety rules and the knowledge base are added automatically."
+      />
 
-      <div className="space-y-2">
-        <Label htmlFor="edit-tone">Reply tone</Label>
-        <select
-          id="edit-tone"
-          value={tone}
-          onChange={(e) => {
-            setTone(e.target.value as Tone);
-            setSaved(false);
-          }}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          <option value="friendly">Friendly</option>
-          <option value="professional">Professional</option>
-          <option value="casual">Casual</option>
-          <option value="enthusiastic">Enthusiastic</option>
-        </select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="edit-system-prompt">
-          System prompt / persona (advanced)
-        </Label>
-        <Textarea
-          id="edit-system-prompt"
-          rows={10}
-          placeholder="Paste a full persona prompt here (e.g. a named character with its own voice and rules)."
-          value={systemPrompt}
-          onChange={(e) => {
-            setSystemPrompt(e.target.value);
-            setSaved(false);
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          When set, this overrides the business description and reply tone above
-          and becomes the bot&apos;s full instructions. The knowledge base is
-          still appended automatically. Leave blank to use the description and
-          tone instead.
-        </p>
-      </div>
+      {/* 2 & 3. Offers and Rebuttals — read-only here; changed via Request Change (team-reviewed). */}
+      <ReadOnlySection
+        title="Offers & services / inclusions & exclusions / links"
+        value={chatbot.offers_section}
+        category="offers"
+      />
+      <ReadOnlySection
+        title="Rebuttals & FAQs"
+        value={chatbot.rebuttals_section}
+        category="rebuttals"
+      />
 
       {error && (
         <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded">
@@ -155,5 +119,38 @@ export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
         {saved && <span className="text-sm text-green-600">Saved ✓</span>}
       </div>
     </form>
+  );
+}
+
+/**
+ * Offers and Rebuttals are not editable here on purpose: those changes carry
+ * commercial/factual risk and go through the team-reviewed Request Change flow.
+ * We show the current content read-only with a CTA that opens a request
+ * pre-scoped to this section.
+ */
+function ReadOnlySection({
+  title,
+  value,
+  category,
+}: {
+  title: string;
+  value: string | null;
+  category: "offers" | "rebuttals";
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label>{title}</Label>
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/requests?category=${category}`}>Request a change</Link>
+        </Button>
+      </div>
+      <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap min-h-[5rem] text-muted-foreground">
+        {value?.trim() || "Not set yet — use “Request a change” to have the team add this section."}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Edited through the team-reviewed Request Change flow, not here.
+      </p>
+    </div>
   );
 }

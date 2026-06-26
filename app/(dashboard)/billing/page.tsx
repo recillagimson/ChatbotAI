@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { getImpersonation } from "@/lib/impersonation";
 import { Badge } from "@/components/ui/badge";
 import { BillingButtons } from "@/components/dashboard/billing-buttons";
 import { reconcileFromCheckoutSession } from "@/lib/billing";
@@ -39,6 +41,10 @@ export default async function BillingPage({
 }: {
   searchParams: Promise<{ status?: string; session_id?: string }>;
 }) {
+  // Billing is out of scope for "view as client" (admins must not touch a
+  // client's Stripe). Hidden from the sidebar; also redirect direct URL access.
+  if ((await getImpersonation()).active) redirect("/dashboard");
+
   const { status, session_id } = await searchParams;
   const supabase = await createClient();
   const user = await getCurrentUser();

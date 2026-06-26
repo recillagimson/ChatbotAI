@@ -10,9 +10,9 @@
 //                          multimodal images, scoped + credential-refusing prompt)
 //
 // The DM-reply path (generateReply) stays on Anthropic — see lib/anthropic.ts.
-import type { Chatbot, ChangeProposal } from "./types";
-import { TONE_GUIDES } from "./anthropic";
+import type { Chatbot, ChangeProposal, ChangeCategory } from "./types";
 import { buildFullContextBlock, type KbEntryLite } from "./retrieval";
+import { SECTION_BY_CATEGORY, CATEGORY_LABELS } from "./change-categories";
 
 /**
  * Most efficient OpenAI model that reliably handles this task — multi-turn chat,
@@ -30,49 +30,77 @@ export const CHANGE_AI_MODEL = process.env.OPENAI_CHANGE_MODEL || "gpt-4.1-mini"
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 const REQUEST_TIMEOUT_MS = 30_000; // chat routes have maxDuration=60s
 
-/** Provider-neutral JSON Schema for the propose_changes tool arguments. */
-const PROPOSE_CHANGES_PARAMETERS = {
-  type: "object",
-  properties: {
-    system_prompt: {
-      type: "string",
-      description:
-        "The FULL revised system prompt / persona for the bot. Omit (or leave empty) if no prompt change is needed.",
-    },
-    kb_entries: {
-      type: "array",
-      description: "NEW knowledge-base entries to add. Omit/empty if none.",
-      items: {
+/**
+ * The propose_changes tool, shaped for the request's category. For a prompt
+ * section (personality/offers/rebuttals) the model returns the FULL revised
+ * `section_content`; for "other" it returns `kb_entries`. The category is fixed
+ * per request and supplied here so the model can't target the wrong field.
+ */
+function buildProposeTool(category: ChangeCategory) {
+  const sectionMode = category !== "other";
+  const label = sectionMode ? CATEGORY_LABELS[category] : "";
+  return {
+    type: "function" as const,
+    function: {
+      name: "propose_changes",
+      description: sectionMode
+        ? `Return the FULL revised content for the bot's "${label}" section, for the SpeedSettr team to review.`
+        : "Return NEW knowledge-base entries for the bot, for the SpeedSettr team to review.",
+      parameters: {
         type: "object",
         properties: {
-          title: { type: "string" },
-          content: { type: "string" },
+          ...(sectionMode
+            ? {
+                section_content: {
+                  type: "string",
+                  description: `The COMPLETE revised text for the ${label} section (a full replacement, not a diff).`,
+                },
+              }
+            : {}),
+          kb_entries: {
+            type: "array",
+            description: "NEW knowledge-base entries to add. Omit/empty if none.",
+            items: {
+              type: "object",
+              properties: { title: { type: "string" }, content: { type: "string" } },
+              required: ["title", "content"],
+            },
+          },
+          summary: {
+            type: "string",
+            description:
+              "A concise plain-English explanation of what you changed and why, for the human reviewer.",
+          },
         },
-        required: ["title", "content"],
+        required: sectionMode ? ["section_content", "summary"] : ["summary"],
       },
     },
-    summary: {
-      type: "string",
-      description:
-        "A concise plain-English explanation of what you changed and why, for the human reviewer.",
-    },
-  },
-  required: ["summary"],
-} as const;
+  };
+}
 
-/** OpenAI tool definition wrapping the shared schema. */
-const PROPOSE_CHANGES_TOOL = {
-  type: "function" as const,
-  function: {
-    name: "propose_changes",
-    description:
-      "Return proposed updates to the Instagram DM chatbot for the SpeedSettr team to review.",
-    parameters: PROPOSE_CHANGES_PARAMETERS,
-  },
-};
+/** Clean a raw kb_entries array into validated {title, content} pairs (or undefined). */
+function cleanKbEntries(raw: unknown): { title: string; content: string }[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const cleaned = raw
+    .filter(
+      (e): e is { title: string; content: string } =>
+        !!e &&
+        typeof e === "object" &&
+        typeof (e as Record<string, unknown>).title === "string" &&
+        typeof (e as Record<string, unknown>).content === "string"
+    )
+    .map((e) => ({ title: e.title.trim(), content: e.content.trim() }))
+    .filter((e) => e.title && e.content);
+  return cleaned.length ? cleaned : undefined;
+}
 
-/** Normalize/guard a propose_changes tool input into a ChangeProposal. Throws on unusable input. */
-export function parseProposalInput(input: unknown): ChangeProposal {
+/**
+ * Normalize/guard a propose_changes tool input into a ChangeProposal for the
+ * given category. Throws on unusable input. For section categories the result
+ * carries `section` (the target column) + `section_content` (tolerating a legacy
+ * `system_prompt` field from older models); for "other" it carries kb_entries.
+ */
+export function parseProposalInput(input: unknown, category: ChangeCategory): ChangeProposal {
   if (!input || typeof input !== "object") {
     throw new Error("propose_changes returned no object input");
   }
@@ -80,27 +108,25 @@ export function parseProposalInput(input: unknown): ChangeProposal {
   const summary = typeof obj.summary === "string" ? obj.summary.trim() : "";
   if (!summary) throw new Error("propose_changes returned no summary");
 
-  const system_prompt =
-    typeof obj.system_prompt === "string" && obj.system_prompt.trim()
-      ? obj.system_prompt.trim()
-      : undefined;
+  const kb_entries = cleanKbEntries(obj.kb_entries);
 
-  let kb_entries: { title: string; content: string }[] | undefined;
-  if (Array.isArray(obj.kb_entries)) {
-    const cleaned = obj.kb_entries
-      .filter(
-        (e): e is { title: string; content: string } =>
-          !!e &&
-          typeof e === "object" &&
-          typeof (e as Record<string, unknown>).title === "string" &&
-          typeof (e as Record<string, unknown>).content === "string"
-      )
-      .map((e) => ({ title: e.title.trim(), content: e.content.trim() }))
-      .filter((e) => e.title && e.content);
-    if (cleaned.length) kb_entries = cleaned;
+  if (category === "other") {
+    return { summary, ...(kb_entries ? { kb_entries } : {}) };
   }
 
-  return { summary, ...(system_prompt ? { system_prompt } : {}), ...(kb_entries ? { kb_entries } : {}) };
+  // Section category: require the full revised section text. Tolerate a legacy
+  // `system_prompt` field in case an older model emits the old shape.
+  const fromSection = typeof obj.section_content === "string" ? obj.section_content.trim() : "";
+  const fromLegacy = typeof obj.system_prompt === "string" ? obj.system_prompt.trim() : "";
+  const section_content = fromSection || fromLegacy;
+  if (!section_content) throw new Error("propose_changes returned no section_content");
+
+  return {
+    summary,
+    section: SECTION_BY_CATEGORY[category],
+    section_content,
+    ...(kb_entries ? { kb_entries } : {}),
+  };
 }
 
 // --- OpenAI Chat Completions transport -------------------------------------
@@ -178,29 +204,65 @@ export interface ChatTurnMessage {
   images?: { base64: string; mediaType: string }[]; // pre-resolved (user messages only)
 }
 
-/** PURE: the scoped, security-hardened system prompt for the change assistant. */
-export function buildChatSystemPrompt(
-  chatbot: Pick<Chatbot, "name" | "business_description" | "tone" | "system_prompt">,
-  kbEntries: KbEntryLite[]
-): string {
-  const currentBehavior =
-    chatbot.system_prompt && chatbot.system_prompt.trim()
-      ? chatbot.system_prompt.trim()
-      : `Generic customer-service bot for "${chatbot.name}".
-Business description: ${chatbot.business_description || "(none provided)"}
-Tone: ${TONE_GUIDES[chatbot.tone]}`;
+/** Per-section guidance for the change assistant (what each section covers). */
+const SECTION_GUIDE: Record<
+  Exclude<ChangeCategory, "other">,
+  { label: string; covers: string }
+> = {
+  personality: {
+    label: "PERSONALITY / TONE",
+    covers: "the bot's voice, persona, and tone — how it sounds, not the facts it cites",
+  },
+  offers: {
+    label: "OFFERS, SERVICES & LINKS",
+    covers:
+      "what the business offers — services, packages, inclusions/exclusions, prices, and links",
+  },
+  rebuttals: {
+    label: "REBUTTALS & FAQ HANDLING",
+    covers: "how the bot answers objections and frequently-asked questions",
+  },
+};
 
+/**
+ * PURE: the scoped, security-hardened system prompt for the change assistant,
+ * focused on ONE category. `currentSection` is the live text of the targeted
+ * section (or "" for "other"/empty sections).
+ */
+export function buildChatSystemPrompt(
+  chatbot: Pick<Chatbot, "name">,
+  kbEntries: KbEntryLite[],
+  category: ChangeCategory,
+  currentSection: string
+): string {
   const kbTopics = kbEntries.map((e) => e.title).filter(Boolean);
   const kbBlock = kbEntries.length ? buildFullContextBlock(kbEntries) : "(none yet)";
 
-  return `You are the SpeedSettr change assistant. You help ONE client refine ONE of their Instagram/Messenger DM chatbots — "the project". Through a short, friendly conversation you figure out what behavior / persona / knowledge change they want, then propose it for the SpeedSettr team to review.
+  const guide = category === "other" ? null : SECTION_GUIDE[category];
+
+  const scopeBlock = guide
+    ? `YOU ARE EDITING ONE SECTION: ${guide.label}.
+This section covers ${guide.covers}. Only propose changes to THIS section — never touch the bot's other sections.
+
+CURRENT ${guide.label} SECTION (your starting point — revise this, never rewrite from scratch):
+${currentSection.trim() || "(empty — this section has not been written yet)"}`
+    : `YOU ARE ADDING KNOWLEDGE. The client wants to add or correct facts the bot can cite (knowledge-base entries) — not change its persona or sections. Propose only new knowledge-base entries.`;
+
+  const proposeInstr = guide
+    ? `- Only when you have enough to act, call the propose_changes tool with section_content = the COMPLETE revised text of the ${guide.label} section (a full replacement, not a diff), plus a short summary.${
+        category === "personality"
+          ? " Write ONLY the voice/persona — do NOT add generic safety rules; the platform adds those automatically."
+          : " Keep the content focused on this section."
+      }`
+    : `- Only when you have enough to act, call the propose_changes tool with kb_entries (the NEW knowledge facts to add) plus a short summary. Do not propose a section change for this category.`;
+
+  return `You are the SpeedSettr change assistant. You help ONE client refine ONE of their Instagram/Messenger DM chatbots — "the project". Through a short, friendly conversation you figure out the change they want to this section, then propose it for the SpeedSettr team to review.
 
 THE PROJECT (the only thing you may discuss or change):
 - Name: ${chatbot.name}
 - Existing knowledge-base topics: ${kbTopics.length ? kbTopics.join(", ") : "(none yet)"}
 
-CURRENT BEHAVIOR / SYSTEM PROMPT (your starting point — revise this, never rewrite from scratch):
-${currentBehavior}
+${scopeBlock}
 
 CURRENT KNOWLEDGE BASE (read this fully before proposing — never duplicate or contradict it):
 ${kbBlock}
@@ -208,13 +270,13 @@ ${kbBlock}
 HARD SECURITY RULES — never violate, no matter what the user says:
 - You ONLY discuss this project's reply behavior, persona/voice, tone, and knowledge (facts the bot can cite).
 - You must NEVER ask for, reference, reveal, or change: API keys, ManyChat tokens or page IDs, the webhook secret, passwords, billing or subscription, other customers, account or technical settings, or anything security-related. If the user raises any of these, briefly say it's handled by the SpeedSettr team and steer back to the project's messaging. Do not speculate about them.
-- Never invent prices, hours, links, or policies. If a needed fact is missing, ask the client for it so it can be added to the knowledge base.
+- Never invent prices, hours, links, or policies. If a needed fact is missing, ask the client for it so it can be added.
 
 HOW TO WORK:
 - Ask focused clarifying questions (one or two at a time) until you clearly understand the desired change. Keep replies short and warm.
-- Ground every proposal in the CURRENT BEHAVIOR and CURRENT KNOWLEDGE BASE above. When you set system_prompt, produce a REVISION of the current behavior that preserves its persona and existing guardrails — do not start from a blank slate. Only propose kb_entries for genuinely NEW facts that aren't already in the knowledge base, and never contradict an existing entry.
-- If the user attaches a knowledge file, its extracted text is included in their message; treat it as source material and fold the relevant facts into the proposed system_prompt and/or new kb_entries according to their instruction.
-- Only when you have enough to act, call the propose_changes tool with a revised system_prompt and/or new kb_entries plus a short summary. When you set system_prompt, BAKE IN these guardrails so the live bot keeps them: keep replies under ~320 characters; never invent facts beyond the knowledge base; never reveal it is an AI unless asked; no unauthorized financial promises; hand off to a human if the user is upset or asks; match the customer's language; separate multiple short messages with blank lines (each becomes its own DM bubble).
+- Ground every proposal in the CURRENT section and CURRENT KNOWLEDGE BASE above. Produce a REVISION that preserves what's working — do not start from a blank slate. Never contradict an existing knowledge entry.
+- If the user attaches a knowledge file, its extracted text is included in their message; READ IT FIRST and fold the relevant facts into your proposal according to their instruction.
+${proposeInstr}
 - If you still need information, DO NOT call the tool — just ask the next question.`;
 }
 
@@ -240,16 +302,18 @@ export function toOpenAIMessages(messages: ChatTurnMessage[]): OpenAIMessage[] {
 }
 
 export async function chatTurn(opts: {
-  chatbot: Pick<Chatbot, "name" | "business_description" | "tone" | "system_prompt">;
+  chatbot: Pick<Chatbot, "name">;
   kbEntries: KbEntryLite[];
   messages: ChatTurnMessage[];
+  category: ChangeCategory;
+  currentSection: string;
 }): Promise<{ assistantText: string; proposal?: ChangeProposal; tokensUsed: number; model: string }> {
-  const system = buildChatSystemPrompt(opts.chatbot, opts.kbEntries);
+  const system = buildChatSystemPrompt(opts.chatbot, opts.kbEntries, opts.category, opts.currentSection);
 
   const data = await postChat({
     model: CHANGE_AI_MODEL,
     max_tokens: 1500,
-    tools: [PROPOSE_CHANGES_TOOL],
+    tools: [buildProposeTool(opts.category)],
     tool_choice: "auto", // reply with a question OR propose when ready
     messages: [{ role: "system", content: system }, ...toOpenAIMessages(opts.messages)],
   });
@@ -261,7 +325,7 @@ export async function chatTurn(opts: {
   const callArgs = extractProposalCall(message);
   if (callArgs) {
     try {
-      proposal = parseProposalInput(callArgs);
+      proposal = parseProposalInput(callArgs, opts.category);
     } catch {
       /* malformed → ignore, treat as no proposal */
     }
@@ -276,47 +340,55 @@ export async function chatTurn(opts: {
 
 // --- Admin one-shot draft (forced tool call) -------------------------------
 
-/** PURE: build the system + user prompts for the admin auto-draft. */
+/** PURE: build the system + user prompts for the admin auto-draft, scoped to the request's category. */
 export function buildDraftPrompts(opts: {
   chatbot: Chatbot;
   kbEntries: KbEntryLite[];
   requestText: string;
   adminGuidance?: string;
+  category: ChangeCategory;
+  currentSection: string;
 }): { system: string; userContent: string } {
-  const { chatbot, kbEntries, requestText, adminGuidance } = opts;
-
-  const currentBehavior =
-    chatbot.system_prompt && chatbot.system_prompt.trim()
-      ? chatbot.system_prompt.trim()
-      : `Generic customer-service bot for "${chatbot.name}".
-Business description: ${chatbot.business_description || "(none provided)"}
-Tone: ${TONE_GUIDES[chatbot.tone]}`;
-
+  const { kbEntries, requestText, adminGuidance, category, currentSection } = opts;
   const kbBlock = kbEntries.length ? buildFullContextBlock(kbEntries) : "(none)";
+  const guide = category === "other" ? null : SECTION_GUIDE[category];
+  const guidanceTail = adminGuidance
+    ? `\n\nADDITIONAL GUIDANCE FROM THE SPEEDSETTR TEAM (takes priority):\n${adminGuidance}`
+    : "";
 
-  const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change to their bot. Produce a revised system prompt and/or new knowledge-base entries that fulfill the request.
+  if (guide) {
+    const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change to the ${guide.label} section of their bot (this section covers ${guide.covers}). Produce the FULL revised ${guide.label} section that fulfills the request.
 
-Ground your work in the bot's CURRENT BEHAVIOR and CURRENT KNOWLEDGE BASE provided below: revise the existing prompt rather than rewriting it from scratch (preserve its persona), and propose kb_entries ONLY for genuinely new facts not already present — never duplicate or contradict an existing entry.
+Ground your work in the CURRENT ${guide.label} SECTION below: revise it rather than rewriting from scratch, and keep the content focused on this section only.${
+      category === "personality"
+        ? " Write ONLY the voice/persona — do not add generic safety rules; the platform adds those automatically."
+        : ""
+    }
 
-CRITICAL: whenever you set system_prompt, BAKE IN these non-negotiable safety guardrails (the platform relies on them and will otherwise lose them):
-- Keep replies under ~320 characters when possible (Instagram DM-friendly).
-- Never invent prices, hours, links, addresses, or policies that aren't in the knowledge base; offer to get a human teammate to confirm.
-- Never reveal it is an AI unless directly asked.
-- Never promise refunds, discounts, or anything financial unless explicitly instructed.
-- If the user is angry or asks for a human, reply briefly and say a teammate will follow up.
-- Match the language of the customer's message.
-- To send several short messages, separate each one with a blank line (each becomes its own DM bubble).
+Respond by calling the propose_changes tool with section_content (the complete revised section) plus a concise summary for the reviewer.`;
 
-Only set system_prompt if the request warrants a prompt change. Always include a concise summary for the reviewer. Respond by calling the propose_changes tool.`;
+    const userContent = `CURRENT ${guide.label} SECTION (your starting point — revise, don't rewrite):
+${currentSection.trim() || "(empty — this section has not been written yet)"}
 
-  const userContent = `CURRENT BOT BEHAVIOR / SYSTEM PROMPT (your starting point — revise, don't rewrite):
-${currentBehavior}
-
-CURRENT KNOWLEDGE BASE (read fully; only add NEW facts, never duplicate or contradict):
+CURRENT KNOWLEDGE BASE (for context; do not duplicate):
 ${kbBlock}
 
 CLIENT'S CHANGE REQUEST:
-${requestText}${adminGuidance ? `\n\nADDITIONAL GUIDANCE FROM THE SPEEDSETTR TEAM (takes priority):\n${adminGuidance}` : ""}`;
+${requestText}${guidanceTail}`;
+
+    return { system, userContent };
+  }
+
+  // "other" → knowledge-base entries only.
+  const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested new knowledge for their bot. Propose NEW knowledge-base entries (kb_entries) for genuinely new facts not already present — never duplicate or contradict an existing entry.
+
+Respond by calling the propose_changes tool with kb_entries plus a concise summary for the reviewer.`;
+
+  const userContent = `CURRENT KNOWLEDGE BASE (read fully; only add NEW facts, never duplicate or contradict):
+${kbBlock}
+
+CLIENT'S CHANGE REQUEST:
+${requestText}${guidanceTail}`;
 
   return { system, userContent };
 }
@@ -326,13 +398,15 @@ export async function draftChangeRequest(opts: {
   kbEntries: KbEntryLite[];
   requestText: string;
   adminGuidance?: string;
+  category: ChangeCategory;
+  currentSection: string;
 }): Promise<{ proposal: ChangeProposal; tokensUsed: number; model: string }> {
   const { system, userContent } = buildDraftPrompts(opts);
 
   const data = await postChat({
     model: CHANGE_AI_MODEL,
     max_tokens: 2500,
-    tools: [PROPOSE_CHANGES_TOOL],
+    tools: [buildProposeTool(opts.category)],
     tool_choice: { type: "function", function: { name: "propose_changes" } }, // forced
     messages: [
       { role: "system", content: system },
@@ -343,6 +417,6 @@ export async function draftChangeRequest(opts: {
   const callArgs = extractProposalCall(data.choices?.[0]?.message);
   if (!callArgs) throw new Error("Model did not return a propose_changes tool call");
 
-  const proposal = parseProposalInput(callArgs);
+  const proposal = parseProposalInput(callArgs, opts.category);
   return { proposal, tokensUsed: data.usage?.total_tokens ?? 0, model: CHANGE_AI_MODEL };
 }
