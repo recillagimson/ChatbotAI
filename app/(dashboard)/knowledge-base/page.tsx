@@ -1,13 +1,6 @@
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { KnowledgeBaseForm } from "@/components/dashboard/kb-form";
-import { KnowledgeBaseList } from "@/components/dashboard/kb-list";
+import { Card, CardContent } from "@/components/ui/card";
+import { KnowledgeBaseManager } from "@/components/dashboard/kb-manager";
 
 export default async function KnowledgeBasePage() {
   const supabase = await createClient();
@@ -43,22 +36,7 @@ export default async function KnowledgeBasePage() {
           </CardContent>
         </Card>
       ) : (
-        <>
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Add knowledge</CardTitle>
-              <CardDescription>
-                Each entry is a chunk of info — a single FAQ, a policy section,
-                a product description, etc.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <KnowledgeBaseForm chatbots={chatbots} />
-            </CardContent>
-          </Card>
-
-          <KnowledgeBaseList entries={entries ?? []} />
-        </>
+        <KnowledgeBaseManager chatbots={chatbots} entries={entries ?? []} />
       )}
     </div>
   );

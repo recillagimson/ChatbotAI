@@ -8,13 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 export function KnowledgeBaseForm({
-  chatbots,
+  chatbotId,
 }: {
-  chatbots: { id: string; name: string }[];
+  // The selected chatbot is owned by the parent (KnowledgeBaseManager) so the
+  // file list and this form stay in sync. The chatbot selector lives there, not here.
+  chatbotId: string;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [chatbotId, setChatbotId] = useState(chatbots[0]?.id ?? "");
 
   // Paste-text entry
   const [title, setTitle] = useState("");
@@ -105,23 +106,6 @@ export function KnowledgeBaseForm({
 
   return (
     <div className="space-y-6">
-      {/* Shared: which chatbot this knowledge belongs to */}
-      <div className="space-y-2">
-        <Label htmlFor="chatbot">For chatbot</Label>
-        <select
-          id="chatbot"
-          value={chatbotId}
-          onChange={(e) => setChatbotId(e.target.value)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          {chatbots.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
       <p className="text-sm text-muted-foreground">
         Add knowledge in <b>one</b> of two ways — you only need to do one.
       </p>
