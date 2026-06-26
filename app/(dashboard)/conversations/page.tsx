@@ -5,28 +5,78 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
+import { PlatformBadge } from "@/components/dashboard/platform-badge";
+import { formatDate, cn } from "@/lib/utils";
 import { MessageSquare } from "lucide-react";
+import { PLATFORMS, PLATFORM_META, isPlatform } from "@/lib/platforms";
 
-export default async function ConversationsPage() {
+export default async function ConversationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ platform?: string }>;
+}) {
+  const sp = await searchParams;
+  const platform = isPlatform(sp.platform) ? sp.platform : null;
+
   const supabase = await createClient();
   const user = await getCurrentUser();
 
-  const { data: conversations } = await supabase
+  let query = supabase
     .from("conversations")
     .select("*, chatbots(name)")
-    .eq("user_id", user!.id)
+    .eq("user_id", user!.id);
+  if (platform) query = query.eq("platform", platform);
+  const { data: conversations } = await query
     .order("last_message_at", { ascending: false })
     .limit(100);
 
+  // Which platforms does this user actually have threads on? (for tab visibility)
+  const { data: distinctRows } = await supabase
+    .from("conversations")
+    .select("platform")
+    .eq("user_id", user!.id)
+    .limit(1000);
+  const present = new Set((distinctRows ?? []).map((r) => r.platform));
+  // Always offer tabs for channels in use; if none recorded yet, show Instagram.
+  const tabPlatforms = PLATFORMS.filter((p) => present.has(p));
+  const tabs: { value: string | null; label: string }[] = [
+    { value: null, label: "All" },
+    ...(tabPlatforms.length ? tabPlatforms : ["instagram"]).map((p) => ({
+      value: p,
+      label: PLATFORM_META[p as keyof typeof PLATFORM_META].label,
+    })),
+  ];
+
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-3xl font-display font-semibold tracking-tight">Conversations</h1>
         <p className="text-muted-foreground">
-          Every DM thread across your chatbots. Click in to view or take over.
+          Every DM thread across your chatbots and channels. Click in to view or take over.
         </p>
       </div>
+
+      {/* Platform tabs */}
+      <nav aria-label="Filter by platform" className="mb-6 flex flex-wrap gap-2">
+        {tabs.map((t) => {
+          const active = platform === t.value || (!platform && t.value === null);
+          return (
+            <Link
+              key={t.value ?? "all"}
+              href={t.value ? `/conversations?platform=${t.value}` : "/conversations"}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                active
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-input bg-background hover:bg-accent"
+              )}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
 
       {!conversations?.length ? (
         <Card>
@@ -34,7 +84,9 @@ export default async function ConversationsPage() {
             <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="font-medium mb-1">No conversations yet</p>
             <p className="text-sm text-muted-foreground">
-              Once a real customer DMs you, the thread will show up here.
+              {platform
+                ? `No ${PLATFORM_META[platform].label} conversations yet.`
+                : "Once a real customer DMs you, the thread will show up here."}
             </p>
           </CardContent>
         </Card>
@@ -57,6 +109,7 @@ export default async function ConversationsPage() {
                     <p className="font-medium truncate">
                       {c.contact_name || c.contact_username || "Unknown"}
                     </p>
+                    <PlatformBadge platform={c.platform} showLabel={false} />
                     {c.unread_count > 0 && (
                       <Badge variant="default">{c.unread_count}</Badge>
                     )}

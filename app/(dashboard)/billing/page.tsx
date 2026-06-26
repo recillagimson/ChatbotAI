@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 const FEATURES = [
-  "Unlimited AI replies on Instagram & Messenger",
+  "Unlimited AI replies on Instagram, Facebook, WhatsApp, Telegram & TikTok",
   "Custom knowledge base & training",
   "Conversation inbox with manual takeover",
   "Multiple chatbots & connected accounts",

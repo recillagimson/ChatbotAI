@@ -17,6 +17,7 @@
 import { createHash, timingSafeEqual } from "crypto";
 import { sanitizeReply } from "./sanitize";
 import { decryptSecret } from "./crypto";
+import { type Platform, PLATFORM_META, DEFAULT_PLATFORM } from "./platforms";
 
 /** Thrown when a chatbot's ManyChat API key can't be resolved. */
 export class ManychatKeyError extends Error {
@@ -103,8 +104,18 @@ export async function sendManychatMessage(opts: {
   messageTag?: string;
   /** ManyChat API key to authenticate the send (resolved per-chatbot by the caller). */
   apiKey: string;
+  /** Channel the contact is on; sets ManyChat's content.type. Defaults to Instagram. */
+  platform?: Platform;
 }) {
   const { apiKey } = opts;
+  // content.type is the ManyChat channel key (instagram/messenger/whatsapp/telegram).
+  // Channels with no send API (manychatType=null, e.g. TikTok) must never reach here.
+  const contentType = PLATFORM_META[opts.platform ?? DEFAULT_PLATFORM].manychatType;
+  if (!contentType) {
+    throw new Error(
+      `ManyChat has no send API for platform "${opts.platform}" — deliver via the webhook response instead.`
+    );
+  }
 
   // Normalize to a list of non-empty bubbles. Nothing to send → no-op (also
   // avoids posting a blank message when an empty string is passed).
@@ -121,7 +132,7 @@ export async function sendManychatMessage(opts: {
     data: {
       version: "v2",
       content: {
-        type: "instagram",
+        type: contentType,
         messages: texts.map((t) => ({ type: "text", text: t })),
       },
     },
@@ -216,6 +227,8 @@ export async function sendManychatMessagePaced(opts: {
   startedAt?: number; // performance.now() at request start, for the deadline guard
   /** ManyChat API key to authenticate each send (resolved per-chatbot by the caller). */
   apiKey: string;
+  /** Channel the contact is on; forwarded to each sendContent call. */
+  platform?: Platform;
 }): Promise<void> {
   const bubbles = opts.bubbles.map((b) => (b ?? "").trim()).filter(Boolean);
   if (bubbles.length === 0) return;
@@ -244,6 +257,7 @@ export async function sendManychatMessagePaced(opts: {
         text: bubbles[i],
         messageTag: opts.messageTag,
         apiKey: opts.apiKey,
+        platform: opts.platform,
       });
     } catch (err) {
       anyFailed = true;

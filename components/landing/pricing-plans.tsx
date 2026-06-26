@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { PRICING } from "@/lib/pricing";
 
 const FEATURES = [
-  "Unlimited AI replies on Instagram & Messenger",
+  "Unlimited AI replies on Instagram, Facebook, WhatsApp, Telegram & TikTok",
   "Trained on your business, voice & FAQ",
   "Conversation inbox with manual takeover",
   "Human-like reply pacing & auto follow-ups",

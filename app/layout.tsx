@@ -20,13 +20,13 @@ const sora = Sora({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.speedsettr.com"),
-  title: "SpeedSettr — AI replies for Instagram & Messenger DMs",
+  title: "SpeedSettr — AI replies for Instagram, Facebook, WhatsApp, Telegram & TikTok DMs",
   description:
     "Connect your Instagram and let AI answer your DMs 24/7 — trained on your business, in your voice. Never miss a sale.",
   openGraph: {
-    title: "SpeedSettr — AI replies for Instagram & Messenger DMs",
+    title: "SpeedSettr — AI replies for Instagram, Facebook, WhatsApp, Telegram & TikTok DMs",
     description:
-      "Your AI teammate that answers Instagram and Messenger DMs 24/7, in your voice.",
+      "Your AI teammate that answers Instagram, Facebook, WhatsApp, Telegram & TikTok DMs 24/7, in your voice.",
     url: "https://www.speedsettr.com",
     siteName: "SpeedSettr",
     type: "website",

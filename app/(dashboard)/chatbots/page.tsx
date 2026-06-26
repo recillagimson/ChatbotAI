@@ -26,7 +26,7 @@ export default async function ChatbotsPage() {
         <div>
           <h1 className="text-3xl font-display font-semibold tracking-tight">Chatbots</h1>
           <p className="text-muted-foreground">
-            One chatbot per Instagram or Messenger page you want to automate.
+            One chatbot per business — connect Instagram, Facebook, WhatsApp, Telegram &amp; TikTok through ManyChat.
           </p>
         </div>
         <Button asChild>
@@ -61,7 +61,7 @@ export default async function ChatbotsPage() {
                     <CardDescription>
                       {c.instagram_username
                         ? `@${c.instagram_username}`
-                        : "Not connected to Instagram yet"}
+                        : "No channels connected yet"}
                     </CardDescription>
                   </div>
                   <Badge variant={c.is_active ? "success" : "secondary"}>

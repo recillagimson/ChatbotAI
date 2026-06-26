@@ -75,7 +75,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-3xl">
             <div className="animate-rise inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/80">
               <Instagram className="h-3.5 w-3.5 text-[#a5b4fc]" />
-              Always-on AI for Instagram &amp; Messenger
+              Always-on AI for Instagram, Facebook, WhatsApp, Telegram &amp; TikTok
             </div>
 
             <h1
@@ -92,9 +92,9 @@ export default function LandingPage() {
               className="animate-rise mx-auto mt-6 max-w-xl text-lg leading-relaxed text-white/65"
               style={{ animationDelay: "160ms" }}
             >
-              SpeedSettr is your AI teammate that answers Instagram and
-              Messenger DMs 24/7 — trained on your business, your tone, and your
-              FAQ. Closing leads while you sleep.
+              SpeedSettr is your AI teammate that answers Instagram, Facebook,
+              WhatsApp, Telegram &amp; TikTok DMs 24/7 — trained on your business,
+              your tone, and your FAQ. Closing leads while you sleep.
             </p>
 
             <div

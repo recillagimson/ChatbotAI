@@ -160,12 +160,16 @@ Credentials are now **per-chatbot**: after you create a chatbot (step 7), the ch
 
 > **One-time global fallback only:** if you are migrating the original single-bot setup and have not yet saved a per-chatbot secret, the old `MANYCHAT_WEBHOOK_SECRET` env var is still honoured as a fallback. New bots do not need it.
 
-### 5c. Build the AI Reply flow in ManyChat
-1. **Automation → New Flow → Start from scratch**. Name it `AI Reply`.
-2. Trigger: **+ → Default Reply** (this fires for any incoming message that doesn't match another trigger). For Instagram-only also add **Instagram → DM** trigger.
+### 5c. Build the AI Reply flow in ManyChat (one flow per channel)
+Repeat this for each channel you've connected in ManyChat (Instagram, Facebook
+Messenger, WhatsApp, Telegram, TikTok). The only thing that changes per channel is
+the `platform` value (and that channel's username variable).
+
+1. **Automation → New Flow → Start from scratch**. Name it e.g. `AI Reply — Instagram`.
+2. Trigger: **+ → Default Reply** for that channel (fires for any incoming message that doesn't match another trigger).
 3. Add an action: **+ → Actions → External Request**.
    - Method: **POST**
-   - URL: `http://localhost:3000/api/webhooks/manychat` (for testing — switch to your production URL once deployed)
+   - URL: `https://www.speedsettr.com/api/webhooks/manychat` (use the production URL; `localhost` is unreachable from ManyChat)
    - Headers (click **Add Header**):
      - Key: `x-manychat-secret`
      - Value: *(paste the webhook secret shown on the chatbot page — see step 5b)*
@@ -175,17 +179,21 @@ Credentials are now **per-chatbot**: after you create a chatbot (step 7), the ch
      ```json
      {
        "chatbot_id": "PASTE_CHATBOT_ID_FROM_DASHBOARD",
+       "platform": "instagram",
        "subscriber_id": "{{user_id}}",
        "username": "{{ig_username}}",
        "first_name": "{{first_name}}",
        "message": "{{last_input_text}}"
      }
      ```
-   - In **Response Mapping**: map the JSON field `reply` to a new custom field called `ai_reply` (text).
-4. After the External Request, add a **Send Message** action that posts the value of the `ai_reply` custom field as a text message.
+   - Set `platform` to the channel this flow runs on: `instagram`, `messenger` (Facebook), `whatsapp`, `telegram`, or `tiktok`. Use that channel's username variable (e.g. `{{ig_username}}` on Instagram, `{{user_name}}` elsewhere).
+4. **Delivery:**
+   - **Instagram / Facebook / WhatsApp / Telegram:** the reply is **pushed automatically** by the app — no extra step (the External Request returns instantly with `ai_queued`).
+   - **TikTok:** ManyChat has no TikTok sending API yet, so in **Response Mapping** map the JSON field `reply` to a custom field `ai_reply` (text), then add a **Send Message** action that posts `ai_reply`.
 5. **Publish** the flow.
 
-> The `chatbot_id` comes from `/chatbots/[id]` in your dashboard — copy the UUID after creating a chatbot in step 7.
+> The `chatbot_id` comes from `/chatbots/[id]` in your dashboard — copy the UUID after creating a chatbot in step 7. The same `chatbot_id` + secret is reused across all of that bot's channel flows.
+> Note: TikTok messaging is in beta and unavailable for accounts in the EU/UK.
 
 ### 5d. ManyChat API key (per-chatbot, in-app)
 Each customer enters their ManyChat API key on their chatbot page (**Chatbots → [your bot]**). The app validates the key against ManyChat and stores it encrypted — no `.env` entry needed per customer.

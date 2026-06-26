@@ -1,13 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { sendManychatMessage, resolveManychatApiKey } from "@/lib/manychat";
+import { toPlatform, canPushPlatform, platformLabel } from "@/lib/platforms";
 
 export const runtime = "nodejs";
 
-const MAX_LEN = 1000; // ManyChat/Instagram per-message ceiling
+const MAX_LEN = 1000; // ManyChat per-message ceiling
 
 /**
- * Human-agent reply: send a manual message to the contact on Instagram via
+ * Human-agent reply: send a manual message to the contact on their channel via
  * ManyChat, and record it in the thread as a `human_agent` message.
  *
  * Used by the conversation composer when the owner has paused the AI to take
@@ -44,12 +45,24 @@ export async function POST(
   // filter is belt-and-suspenders and gives a clean 404 instead of an RLS empty.
   const { data: conversation, error } = await supabase
     .from("conversations")
-    .select("id, manychat_subscriber_id, chatbot_id")
+    .select("id, manychat_subscriber_id, chatbot_id, platform")
     .eq("id", id)
     .eq("user_id", user.id)
     .single();
   if (error || !conversation) {
     return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+  }
+
+  const platform = toPlatform(conversation.platform);
+  // Channels with no ManyChat send API (TikTok) can't be delivered to from here.
+  // Don't leave a phantom "sent" bubble — tell the agent to reply in that app.
+  if (!canPushPlatform(platform)) {
+    return NextResponse.json(
+      {
+        error: `${platformLabel(platform)} replies can't be sent from here yet — ManyChat has no ${platformLabel(platform)} sending API. Reply to this contact directly in the ${platformLabel(platform)} app.`,
+      },
+      { status: 422 }
+    );
   }
 
   // Resolve the ManyChat API key for the conversation's chatbot (RLS lets the
@@ -71,18 +84,19 @@ export async function POST(
     );
   }
 
-  // Deliver to Instagram first — if ManyChat rejects it, don't leave a phantom
-  // "You" bubble in the thread that never actually reached the contact.
+  // Deliver to the contact's channel first — if ManyChat rejects it, don't leave a
+  // phantom "You" bubble in the thread that never actually reached the contact.
   try {
     await sendManychatMessage({
       subscriberId: conversation.manychat_subscriber_id,
       text,
       apiKey,
+      platform,
     });
   } catch (err) {
     console.error("[conversation-reply] ManyChat send failed", err);
     return NextResponse.json(
-      { error: "Couldn't deliver the message to Instagram. Please try again." },
+      { error: `Couldn't deliver the message to ${platformLabel(platform)}. Please try again.` },
       { status: 502 }
     );
   }

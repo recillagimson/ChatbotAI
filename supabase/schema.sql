@@ -649,3 +649,19 @@ grant execute on function public.analytics_stage_conversations(text, timestamptz
 -- Teardown (down-migration), if the statistics feature is pulled:
 -- drop function if exists public.analytics_overview(timestamptz, timestamptz, uuid);
 -- drop function if exists public.analytics_stage_conversations(text, timestamptz, timestamptz, uuid, int, int);
+
+-- ===========================================================================
+-- Multi-channel support (Instagram + Messenger + WhatsApp + Telegram + TikTok)
+-- ===========================================================================
+-- Each conversation records which platform it came from (set by the ManyChat
+-- webhook from the per-flow `platform` field). Existing rows default to
+-- 'instagram' (all there was before). Outbound replies use this to pick the
+-- ManyChat content.type; the inbox tabs filter on it.
+alter table public.conversations
+  add column if not exists platform text not null default 'instagram';   -- instagram|messenger|whatsapp|telegram|tiktok
+create index if not exists conversations_platform_idx
+  on public.conversations (chatbot_id, platform, last_message_at desc);
+
+-- Teardown:
+-- drop index if exists public.conversations_platform_idx;
+-- alter table public.conversations drop column if exists platform;

@@ -21,7 +21,7 @@ All responses are JSON.
 
 ## `POST /api/webhooks/manychat`
 
-The entry point for every Instagram or Messenger message routed through ManyChat. Called by ManyChat's **External Request** action. Returns an AI-generated reply that ManyChat sends back to the user.
+The entry point for every message routed through ManyChat, across all channels (Instagram, Facebook Messenger, WhatsApp, Telegram, TikTok). Called by ManyChat's **External Request** action — one flow per channel, each sending its own `platform`. For push-capable channels the reply is delivered out-of-band via the ManyChat Send Content API and the response returns instantly (`ai_queued`); for TikTok (no send API) the reply is returned in the response body for the flow to send.
 
 ### Headers
 | Header                 | Required | Description                                            |
@@ -33,11 +33,12 @@ The entry point for every Instagram or Messenger message routed through ManyChat
 ```json
 {
   "chatbot_id": "uuid",            // identifies which chatbot answers
+  "platform": "string",            // (optional) instagram|messenger|whatsapp|telegram|tiktok (default instagram)
   "subscriber_id": "string",       // ManyChat subscriber id
-  "page_id": "string",             // (optional) ManyChat page id
+  "page_id": "string",             // (optional) ManyChat page id (no longer used to gate; auth is the secret)
   "first_name": "string|null",     // (optional) for personalization
   "last_name": "string|null",      // (optional)
-  "username": "string|null",       // (optional) IG handle
+  "username": "string|null",       // (optional) the channel's username/handle
   "message": "string"              // the user's latest message, max 4000 chars
 }
 ```

@@ -1,3 +1,5 @@
+import type { Platform } from "./platforms";
+
 export type SubscriptionStatus =
   | "active"
   | "trialing"
@@ -67,6 +69,7 @@ export interface Conversation {
   chatbot_id: string;
   user_id: string;
   manychat_subscriber_id: string;
+  platform: Platform;
   contact_name: string | null;
   contact_username: string | null;
   status: "active" | "ai_paused" | "closed";

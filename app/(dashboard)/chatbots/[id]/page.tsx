@@ -131,7 +131,9 @@ export default async function ChatbotDetailPage({
         <CardHeader>
           <CardTitle>Connect ManyChat to this chatbot</CardTitle>
           <CardDescription>
-            Paste these values into your ManyChat External Request action.
+            Paste these values into your ManyChat External Request action. Build one
+            flow per channel (Instagram, Facebook, WhatsApp, Telegram, TikTok) and set
+            the <code className="bg-muted px-1 rounded">platform</code> value in each.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -146,16 +148,31 @@ export default async function ChatbotDetailPage({
             label="JSON body fields to send"
             value={`{
   "chatbot_id": "${chatbot.id}",
+  "platform": "instagram",
   "subscriber_id": "{{user_id}}",
-  "username": "{{ig_username}}",
+  "username": "{{user_name}}",
   "first_name": "{{first_name}}",
   "message": "{{last_input_text}}"
 }`}
           />
           <p className="text-sm text-muted-foreground">
-            The reply will be returned in the JSON response as{" "}
-            <code className="bg-muted px-1 rounded">reply</code>. Map that to a
-            ManyChat custom field and send it back in the next step.
+            Set <code className="bg-muted px-1 rounded">platform</code> to the channel
+            this flow runs on — one of{" "}
+            <code className="bg-muted px-1 rounded">instagram</code>,{" "}
+            <code className="bg-muted px-1 rounded">messenger</code> (Facebook),{" "}
+            <code className="bg-muted px-1 rounded">whatsapp</code>,{" "}
+            <code className="bg-muted px-1 rounded">telegram</code>, or{" "}
+            <code className="bg-muted px-1 rounded">tiktok</code>. Use that channel&apos;s
+            username variable (e.g. <code className="bg-muted px-1 rounded">{"{{ig_username}}"}</code> on
+            Instagram).
+          </p>
+          <p className="text-sm text-muted-foreground">
+            For Instagram, Facebook, WhatsApp &amp; Telegram the reply is delivered
+            automatically — no extra step needed.{" "}
+            <span className="font-medium">TikTok</span> can&apos;t receive API pushes yet,
+            so for the TikTok flow map the response field{" "}
+            <code className="bg-muted px-1 rounded">reply</code> to a custom field and add
+            a Send Message step.
           </p>
         </CardContent>
       </Card>

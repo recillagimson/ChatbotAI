@@ -33,6 +33,7 @@ type CandidateRow = Pick<
   | "manychat_subscriber_id"
   | "contact_name"
   | "status"
+  | "platform"
   | "last_message_at"
   | "last_followup_at"
   | "followup_count"
@@ -56,7 +57,7 @@ async function run() {
   const { data, error } = await supabase
     .from("conversations")
     .select(
-      "id, manychat_subscriber_id, contact_name, status, last_message_at, last_followup_at, followup_count, " +
+      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, " +
         "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_repeat, auto_followup_max, auto_followup_template, manychat_api_key_enc)"
     )
     .eq("status", "active")

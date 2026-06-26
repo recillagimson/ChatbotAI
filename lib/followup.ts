@@ -9,13 +9,13 @@
  */
 import type { Chatbot, Conversation } from "@/lib/types";
 import { sendManychatMessage } from "@/lib/manychat";
+import { type Platform, PLATFORM_META, toPlatform, canPushPlatform } from "@/lib/platforms";
 import type { createServiceClient } from "@/lib/supabase/server";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Instagram won't deliver messages sent more than this many days after the
- * user's last inbound message (even with the HUMAN_AGENT tag). */
-export const IG_WINDOW_DAYS = 7;
+/** Instagram's out-of-window cap (days). Per-platform windows live in PLATFORM_META. */
+export const IG_WINDOW_DAYS = PLATFORM_META.instagram.followupWindowDays ?? 7;
 
 /**
  * Feature flag — auto follow-up is PARKED (delivery not yet possible).
@@ -59,7 +59,7 @@ export type FollowupChatbot = Pick<
 export type FollowupConversation = Pick<
   Conversation,
   "status" | "last_message_at" | "last_followup_at" | "followup_count"
->;
+> & { platform?: Platform };
 
 export interface FollowupDecision {
   due: boolean;
@@ -68,7 +68,8 @@ export interface FollowupDecision {
     | "disabled"
     | "no_template"
     | "not_active"
-    | "ig_window_closed"
+    | "channel_unsupported"
+    | "window_closed"
     | "max_reached"
     | "not_due_yet";
 }
@@ -88,14 +89,21 @@ export function evaluateFollowup(
   if (conversation.status !== "active")
     return { due: false, reason: "not_active" };
 
+  // Channels with no ManyChat send API (TikTok) can't receive follow-ups.
+  const platform = toPlatform(conversation.platform);
+  if (!canPushPlatform(platform))
+    return { due: false, reason: "channel_unsupported" };
+
   const nowMs = now.getTime();
   const lastMsgMs = new Date(conversation.last_message_at).getTime();
 
-  // Hard Instagram cap: can't message past the 7-day window. This also bounds
-  // how many repeats can ever fire, since the window never reopens until the
-  // user replies (which resets last_message_at via the webhook).
-  if (nowMs - lastMsgMs >= IG_WINDOW_DAYS * DAY_MS)
-    return { due: false, reason: "ig_window_closed" };
+  // Per-platform out-of-window cap: can't message past the channel's window
+  // (e.g. IG/Messenger 7d, WhatsApp 1d). null = no window cap (e.g. Telegram).
+  // This also bounds repeats, since the window never reopens until the user
+  // replies (which resets last_message_at via the webhook).
+  const windowDays = PLATFORM_META[platform].followupWindowDays;
+  if (windowDays != null && nowMs - lastMsgMs >= windowDays * DAY_MS)
+    return { due: false, reason: "window_closed" };
 
   const maxSends = chatbot.auto_followup_repeat
     ? Math.max(1, chatbot.auto_followup_max)
@@ -126,18 +134,21 @@ export async function sendFollowup(
   conversation: Pick<
     Conversation,
     "id" | "manychat_subscriber_id" | "contact_name" | "followup_count"
-  >,
+  > & { platform?: Platform },
   template: string,
   now: Date,
   apiKey: string
 ): Promise<string> {
   const text = renderTemplate(template, { name: conversation.contact_name });
+  const platform = toPlatform(conversation.platform);
 
   await sendManychatMessage({
     subscriberId: conversation.manychat_subscriber_id,
     text,
-    messageTag: "HUMAN_AGENT",
+    // HUMAN_AGENT is an Instagram-only tag; other channels don't accept tags.
+    messageTag: platform === "instagram" ? "HUMAN_AGENT" : undefined,
     apiKey,
+    platform,
   });
 
   await Promise.all([

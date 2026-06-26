@@ -20,6 +20,7 @@ import {
   incrementMonthlyCount,
   getTrivialReply,
 } from "@/lib/limits";
+import { type Platform, toPlatform, canPushPlatform } from "@/lib/platforms";
 import type { Chatbot, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -30,6 +31,10 @@ const BodySchema = z.object({
   chatbot_id: z.string().uuid(),
   subscriber_id: z.union([z.string(), z.number()]).transform(String),
   page_id: z.union([z.string(), z.number()]).transform(String).optional(),
+  // Channel this flow runs on. One ManyChat flow per channel sends a literal value
+  // ("instagram"|"messenger"|"whatsapp"|"telegram"|"tiktok"). Coerced to a known
+  // Platform below; the legacy IG flow omits it and defaults to instagram.
+  platform: z.union([z.string(), z.number()]).transform(String).optional(),
   first_name: z.string().optional().nullable(),
   last_name: z.string().optional().nullable(),
   username: z.string().optional().nullable(),
@@ -91,8 +96,12 @@ async function persistAndPush(
   text: string,
   userId: string,
   chatbotId: string,
-  apiKey: string | null
+  apiKey: string | null,
+  platform: Platform
 ): Promise<void> {
+  // Push only on channels with a ManyChat send API; on non-pushable channels
+  // (TikTok) the caller delivers the same `text` via the webhook response body.
+  const push = apiKey && canPushPlatform(platform);
   await Promise.all([
     supabase.from("messages").insert({
       conversation_id: conversationId,
@@ -101,8 +110,8 @@ async function persistAndPush(
       ai_generated: false,
       tokens_used: 0,
     }),
-    apiKey
-      ? sendManychatMessage({ subscriberId, text, apiKey }).catch(async (err) => {
+    push
+      ? sendManychatMessage({ subscriberId, text, apiKey, platform }).catch(async (err) => {
           console.error("[manychat-webhook] push send failed", err);
           await logPushFailure(supabase, userId, chatbotId);
         })
@@ -130,17 +139,19 @@ export async function POST(request: NextRequest) {
     );
   }
   const body = parsed.data;
+  const platform = toPlatform(body.platform);
   const supabase = createServiceClient();
 
-  // 3. Look up chatbot + verify subscription is active
-  let chatbotQuery = supabase
+  // 3. Look up chatbot + verify subscription is active.
+  // Auth is the per-chatbot webhook_secret (verified in 3a). We no longer hard-
+  // match page_id: a single chatbot now spans channels (IG/Messenger/etc.) each
+  // with its OWN ManyChat page_id, so a single stored page_id can't gate them all.
+  const { data: chatbot } = await supabase
     .from("chatbots")
     .select("*")
     .eq("id", body.chatbot_id)
-    .eq("is_active", true);
-  // Cross-tenant guard: if ManyChat sent a page_id, it MUST match this chatbot.
-  if (body.page_id) chatbotQuery = chatbotQuery.eq("manychat_page_id", body.page_id);
-  const { data: chatbot } = await chatbotQuery.maybeSingle<Chatbot>();
+    .eq("is_active", true)
+    .maybeSingle<Chatbot>();
 
   // 3a. Authenticate: verify the secret against THIS chatbot's webhook_secret
   // (legacy env secret as fallback for un-migrated bots). A missing chatbot and
@@ -213,6 +224,7 @@ export async function POST(request: NextRequest) {
           chatbot_id: chatbot.id,
           user_id: chatbot.user_id,
           manychat_subscriber_id: body.subscriber_id,
+          platform,
           contact_name: displayName,
           contact_username: body.username ?? null,
         },
@@ -274,7 +286,7 @@ export async function POST(request: NextRequest) {
   // in-voice reply from the persona instead of a generic canned line.
   const trivial = chatbot.system_prompt ? null : getTrivialReply(body.message);
   if (trivial) {
-    await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial, chatbot.user_id, chatbot.id, apiKey);
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial, chatbot.user_id, chatbot.id, apiKey, platform);
     return manychatReply(trivial, { ai_skipped: true, reason: "trivial_ack" });
   }
 
@@ -282,7 +294,7 @@ export async function POST(request: NextRequest) {
   const dup = await checkDuplicate(chatbot.id, body.subscriber_id, body.message);
   if (dup.isDuplicate) {
     const echo = dup.lastReply ?? "Still on that, give me just a sec!";
-    await persistAndPush(supabase, conversationId!, body.subscriber_id, echo, chatbot.user_id, chatbot.id, apiKey);
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, echo, chatbot.user_id, chatbot.id, apiKey, platform);
     return manychatReply(echo, { ai_skipped: true, reason: "duplicate" });
   }
 
@@ -290,7 +302,7 @@ export async function POST(request: NextRequest) {
   const cap = await checkMonthlyCap(chatbot.id);
   if (!cap.ok) {
     const text = "Thanks for your message! We'll get back to you shortly.";
-    await persistAndPush(supabase, conversationId!, body.subscriber_id, text, chatbot.user_id, chatbot.id, apiKey);
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, text, chatbot.user_id, chatbot.id, apiKey, platform);
     return manychatReply(text, {
       ai_skipped: true,
       reason: "monthly_cap_reached",
@@ -299,125 +311,128 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 7–10. Heavy work runs AFTER we respond. ManyChat's External Request times
-  // out at ~10s, but our pipeline (Anthropic generation + human-paced multi-
-  // bubble delivery, ≈6s of deliberate gaps alone) routinely needs longer.
-  // Because the reply is DELIVERED BY PUSH (Send Content API), not rendered from
-  // this response body, we ack ManyChat instantly (step 11) and finish the work
-  // in the background — the function stays alive up to maxDuration (60s).
-  after(async () => {
+  // 7–9. Generate the AI reply, persist it + usage, and update Redis side-state.
+  // Returns the reply text. Shared by both delivery paths below.
+  const generateAndPersistReply = async (): Promise<string> => {
+    // 7. Fetch recent history. Order desc + limit so we get the newest 11
+    // (= 10 prior + the just-inserted user message), not the oldest.
+    const { data: history } = await supabase
+      .from("messages")
+      .select("role, content")
+      .eq("conversation_id", conversationId!)
+      .order("created_at", { ascending: false })
+      .limit(11)
+      .returns<Pick<Message, "role" | "content">[]>();
+
+    // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
+    const priorHistory = (history ?? []).slice(1).reverse();
+
+    // 8. Resolve KB (adaptive: full-context or vector retrieval) then generate.
+    const kb = await buildKbBlock({
+      supabase,
+      chatbot,
+      history: priorHistory,
+      userMessage: body.message,
+    });
+
+    let replyText = "Thanks for the message, a teammate will follow up shortly.";
+    let tokens = 0;
     try {
-      // 7. Fetch recent history. Order desc + limit so we get the newest 11
-      // (= 10 prior + the just-inserted user message), not the oldest.
-      const { data: history } = await supabase
-        .from("messages")
-        .select("role, content")
-        .eq("conversation_id", conversationId!)
-        .order("created_at", { ascending: false })
-        .limit(11)
-        .returns<Pick<Message, "role" | "content">[]>();
-
-      // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
-      const priorHistory = (history ?? []).slice(1).reverse();
-
-      // 8. Resolve KB (adaptive: full-context or vector retrieval) then generate.
-      const kb = await buildKbBlock({
-        supabase,
+      const { text, tokensUsed } = await generateReply({
         chatbot,
+        kbBlock: kb.block,
         history: priorHistory,
         userMessage: body.message,
       });
-
-      let replyText = "Thanks for the message, a teammate will follow up shortly.";
-      let tokens = 0;
-      try {
-        const { text, tokensUsed } = await generateReply({
-          chatbot,
-          kbBlock: kb.block,
-          history: priorHistory,
-          userMessage: body.message,
-        });
-        if (text) {
-          replyText = text;
-          tokens = tokensUsed;
-        }
-      } catch (err) {
-        console.error("[manychat-webhook] AI error", err);
+      if (text) {
+        replyText = text;
+        tokens = tokensUsed;
       }
+    } catch (err) {
+      console.error("[manychat-webhook] AI error", err);
+    }
 
-      // 9. Persist outbound + usage
-      console.log(
-        `[manychat-webhook] kb mode=${kb.mode} chunks=${kb.chunks} topSim=${kb.topSimilarity ?? "-"} bot=${chatbot.id}`
-      );
-      await Promise.all([
-        supabase.from("messages").insert({
-          conversation_id: conversationId!,
-          role: "assistant",
-          content: replyText,
-          ai_generated: true,
-          tokens_used: tokens,
-        }),
-        supabase.from("usage_log").insert({
-          user_id: chatbot.user_id,
-          chatbot_id: chatbot.id,
-          event_type: "ai_reply",
-          tokens_used: tokens,
-        }),
-        supabase.from("usage_log").insert({
-          user_id: chatbot.user_id,
-          chatbot_id: chatbot.id,
-          event_type: "kb_retrieval",
-          tokens_used: kb.chunks,
-        }),
-      ]);
+    // 9. Persist outbound + usage
+    console.log(
+      `[manychat-webhook] kb mode=${kb.mode} chunks=${kb.chunks} topSim=${kb.topSimilarity ?? "-"} bot=${chatbot.id} platform=${platform}`
+    );
+    await Promise.all([
+      supabase.from("messages").insert({
+        conversation_id: conversationId!,
+        role: "assistant",
+        content: replyText,
+        ai_generated: true,
+        tokens_used: tokens,
+      }),
+      supabase.from("usage_log").insert({
+        user_id: chatbot.user_id,
+        chatbot_id: chatbot.id,
+        event_type: "ai_reply",
+        tokens_used: tokens,
+      }),
+      supabase.from("usage_log").insert({
+        user_id: chatbot.user_id,
+        chatbot_id: chatbot.id,
+        event_type: "kb_retrieval",
+        tokens_used: kb.chunks,
+      }),
+    ]);
 
-      // 10. Deliver the reply to the user via ManyChat's Send Content API.
-      // The ManyChat flow is a fire-and-forget External Request (no Send Message /
-      // dynamic-content node) because dynamic-content rendering is unreliable on
-      // Instagram. We push the reply here instead. A failure is non-fatal: the
-      // reply is already stored and visible in the dashboard inbox.
-      // Deliver as several short bubbles (one per burst) rather than one long
-      // message — the persona writes in bursts; this renders them separately.
-      // When apiKey is null the decrypt/no-key failure was already logged in 3b;
-      // the reply is still persisted above and visible in the inbox.
-      const bubbles = splitIntoMessages(replyText);
-      if (apiKey) {
+    // Redis side-state: cache for dedup echo + bump monthly counter (best-effort).
+    await Promise.all([
+      cacheLastReply(chatbot.id, body.subscriber_id, replyText),
+      incrementMonthlyCount(chatbot.id),
+    ]);
+
+    return replyText;
+  };
+
+  // 10. Deliver. Two paths depending on whether the channel has a ManyChat send API:
+  if (canPushPlatform(platform) && apiKey) {
+    // PUSH channels (Instagram/Messenger/WhatsApp/Telegram): generate + push in
+    // the background and ack instantly so ManyChat's ~10s External Request timeout
+    // never trips. Delivery is via the Send Content API on the right channel.
+    after(async () => {
+      try {
+        const replyText = await generateAndPersistReply();
+        const bubbles = splitIntoMessages(replyText);
         try {
           if (pacingEnabled() && bubbles.length > 1) {
-            // Drip the bubbles in with short, human-like gaps (each its own send).
             await sendManychatMessagePaced({
               subscriberId: body.subscriber_id,
               bubbles,
               startedAt,
               apiKey,
+              platform,
             });
           } else {
-            // Single bubble (or pacing disabled): one call, as before.
-            await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles, apiKey });
+            await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles, apiKey, platform });
           }
         } catch (err) {
           console.error("[manychat-webhook] push send failed", err);
           await logPushFailure(supabase, chatbot.user_id, chatbot.id);
         }
+      } catch (err) {
+        // after() runs detached — swallow so nothing crashes the background task.
+        console.error("[manychat-webhook] background processing failed", err);
       }
+    });
+    return manychatReply("", { ai_queued: true });
+  }
 
-      // 10a. Update Redis side-state: cache for dedup echo + bump monthly counter.
-      // These are best-effort; failures only affect future cost-control accuracy.
-      await Promise.all([
-        cacheLastReply(chatbot.id, body.subscriber_id, replyText),
-        incrementMonthlyCount(chatbot.id),
-      ]);
-    } catch (err) {
-      // after() runs detached from the response — swallow so nothing crashes the
-      // background task; the inbound message is already persisted either way.
-      console.error("[manychat-webhook] background processing failed", err);
-    }
-  });
-
-  // 11. Ack ManyChat immediately so its ~10s External Request timeout never trips.
-  // Delivery happens via the push scheduled above. Empty content = nothing for
-  // ManyChat to render inline (replies arrive as pushed DMs a few seconds later).
-  return manychatReply("", { ai_queued: true });
+  // RESPONSE channels (TikTok — no ManyChat send API yet) OR no API key: ManyChat
+  // can't be pushed to, so generate synchronously and RETURN the reply in the body
+  // for the client's flow to deliver (map `reply`/render the dynamic content). This
+  // shares the ~10s timeout risk we avoid for push channels, but TikTok replies are
+  // short. Auto-upgrades to the push path once PLATFORM_META gives the channel a
+  // sendContent type (canPush=true).
+  let replyText = "Thanks for the message, a teammate will follow up shortly.";
+  try {
+    replyText = await generateAndPersistReply();
+  } catch (err) {
+    console.error("[manychat-webhook] sync processing failed", err);
+  }
+  return manychatReply(replyText, { ai_delivery: "response", platform });
 }
 
 export async function GET() {
