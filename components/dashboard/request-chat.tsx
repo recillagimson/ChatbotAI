@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { RequestComposer } from "@/components/dashboard/request-composer";
+import { DiffView } from "@/components/dashboard/diff-view";
 import { CATEGORY_LABELS } from "@/lib/change-categories";
 import type { ChangeCategory, ChangeProposal } from "@/lib/types";
 import { Sparkles, FileText } from "lucide-react";
@@ -342,9 +343,9 @@ export function RequestChat({
                 <CardContent className="space-y-4">
                   <p className="whitespace-pre-wrap break-words text-sm">{proposal.summary}</p>
 
-                  {/* Section change → before / after. */}
+                  {/* Section change → highlighted diff (removed red / added green). */}
                   {proposal.section_content && proposal.section_content.trim() && (
-                    <BeforeAfter
+                    <DiffView
                       label={CATEGORY_LABELS[category]}
                       before={currentSection}
                       after={proposal.section_content}
@@ -353,7 +354,7 @@ export function RequestChat({
 
                   {/* Legacy proposals (old shape) still show the system prompt. */}
                   {!proposal.section_content && proposal.system_prompt && proposal.system_prompt.trim() && (
-                    <BeforeAfter label="System prompt" before="" after={proposal.system_prompt} />
+                    <DiffView label="System prompt" before="" after={proposal.system_prompt} />
                   )}
 
                   {proposal.kb_entries && proposal.kb_entries.length > 0 && (
@@ -446,31 +447,6 @@ export function RequestChat({
               Create a chatbot first to request changes.
             </p>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Side-by-side (stacked on mobile) before/after of a section's text. */
-function BeforeAfter({ label, before, after }: { label: string; before: string; after: string }) {
-  return (
-    <div>
-      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {label} — before &amp; after
-      </p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <div className="rounded-md border bg-muted/40">
-          <p className="border-b px-3 py-1.5 text-xs font-medium text-muted-foreground">Before</p>
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words px-3 py-2 text-xs text-muted-foreground">
-            {before.trim() || "(empty)"}
-          </pre>
-        </div>
-        <div className="rounded-md border border-primary/30 bg-primary/5">
-          <p className="border-b border-primary/20 px-3 py-1.5 text-xs font-medium text-primary">After</p>
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words px-3 py-2 text-xs">
-            {after}
-          </pre>
         </div>
       </div>
     </div>

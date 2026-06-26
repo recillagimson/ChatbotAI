@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { DiffView } from "@/components/dashboard/diff-view";
 import { CATEGORY_LABELS } from "@/lib/change-categories";
 import type { ChangeRequest } from "@/lib/types";
 
@@ -263,14 +264,11 @@ export function ChangeRequestReview({
           </CardHeader>
           <CardContent className="space-y-3">
             {isSection && (
-              <div>
-                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Current (before)
-                </p>
-                <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                  {currentSection.trim() || "(empty — not written yet)"}
-                </pre>
-              </div>
+              <DiffView
+                label={sectionLabel}
+                before={currentSection}
+                after={systemPrompt}
+              />
             )}
             <Label htmlFor="proposed-system-prompt" className={isSection ? "text-xs font-medium uppercase tracking-wide text-muted-foreground" : "sr-only"}>
               {isSection ? "Revised (after) — editable" : "Proposed system prompt"}
