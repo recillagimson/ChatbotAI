@@ -192,14 +192,20 @@ export async function sendManychatMessage(opts: {
 // ---------------------------------------------------------------------------
 // Human-like bubble pacing
 // ---------------------------------------------------------------------------
-// Tunables (env-overridable; sane defaults). Total pacing is hard-capped so it
-// never threatens the 60s webhook budget or a ManyChat External Request timeout.
+// We delay before EVERY bubble (including a lone single-bubble reply) so a reply
+// never lands the instant the AI finishes — it arrives like a person who read the
+// DM, then typed. The pause before each bubble scales with that bubble's length
+// (you type a longer message longer). Tunables are env-overridable with sane
+// defaults. Total pacing is hard-capped so it never threatens the 60s webhook
+// budget or a ManyChat External Request timeout.
 const PACING_ENABLED = process.env.BUBBLE_PACING_ENABLED !== "false"; // default on
-const LEAD_IN_MS = 600; // brief "composing" pause before the first bubble
-const PER_CHAR_MS = 22; // typing-speed feel
-const MIN_GAP_MS = 600;
-const MAX_GAP_MS = 2_200;
-const MAX_TOTAL_PACING_MS = 6_000; // lead-in + gaps; scaled down if exceeded
+const READ_MS = 900; // base "saw the DM and started typing" pause before bubble 1
+const PER_CHAR_MS = 24; // typing-speed feel (~per character)
+const FIRST_MIN_MS = 1_200; // a real reply never lands instantly
+const FIRST_MAX_MS = 4_000; // cap composing time even for a long first bubble
+const MIN_GAP_MS = 700; // floor for gaps before later bubbles
+const MAX_GAP_MS = 2_500; // ceiling for gaps before later bubbles
+const MAX_TOTAL_PACING_MS = 9_000; // sum of all delays; scaled down if exceeded
 const PACING_DEADLINE_MS = 45_000; // if the request is already this old, stop sleeping
 
 /** True if bubble pacing is on (default). Set BUBBLE_PACING_ENABLED=false to disable. */
@@ -211,14 +217,33 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 /**
- * Deliver a multi-bubble reply with short, human-like gaps so messages "drip in"
- * instead of landing all at once. Each bubble is its own sendContent call (reusing
- * sendManychatMessage for per-call sanitize + retry). Gaps are scaled to bubble
- * length, clamped, and the total is capped at MAX_TOTAL_PACING_MS; sleeps are
- * skipped once the request passes PACING_DEADLINE_MS so we never blow the 60s
- * budget. Every bubble is always attempted — a single failure is logged and the
- * rest still send; throws once at the end if any failed so the caller can record
- * push_failed.
+ * Pure: compute the "typing" delay (ms) to wait BEFORE sending each bubble.
+ * - Bubble 0 gets a read pause + length-scaled composing time (FIRST_MIN..FIRST_MAX),
+ *   so even a single-bubble reply has a believable typing delay.
+ * - Later bubbles get a length-scaled gap (MIN_GAP..MAX_GAP) so they drip in.
+ * The total is scaled down proportionally to stay within MAX_TOTAL_PACING_MS.
+ * Exported for unit testing (deterministic, no I/O).
+ */
+export function computeBubbleDelays(bubbles: string[]): number[] {
+  const lens = bubbles.map((b) => (b ?? "").trim().length);
+  const raw = lens.map((len, i) =>
+    i === 0
+      ? clamp(READ_MS + len * PER_CHAR_MS, FIRST_MIN_MS, FIRST_MAX_MS)
+      : clamp(len * PER_CHAR_MS, MIN_GAP_MS, MAX_GAP_MS)
+  );
+  const total = raw.reduce((a, b) => a + b, 0);
+  const scale = total > MAX_TOTAL_PACING_MS ? MAX_TOTAL_PACING_MS / total : 1;
+  return raw.map((g) => Math.round(g * scale));
+}
+
+/**
+ * Deliver a reply with short, human-like typing delays so it "drips in" instead
+ * of landing all at once the instant the AI finishes. Each bubble is its own
+ * sendContent call (reusing sendManychatMessage for per-call sanitize + retry).
+ * Delays come from computeBubbleDelays (length-scaled, capped); sleeps are skipped
+ * once the request passes PACING_DEADLINE_MS so we never blow the 60s budget.
+ * Every bubble is always attempted — a single failure is logged and the rest still
+ * send; throws once at the end if any failed so the caller can record push_failed.
  */
 export async function sendManychatMessagePaced(opts: {
   subscriberId: string;
@@ -233,14 +258,7 @@ export async function sendManychatMessagePaced(opts: {
   const bubbles = opts.bubbles.map((b) => (b ?? "").trim()).filter(Boolean);
   if (bubbles.length === 0) return;
 
-  // Pre-compute lead-in + per-bubble gaps, then scale down if the sum exceeds the
-  // cap so total pacing stays bounded regardless of bubble count.
-  const rawGaps = bubbles.map((b, i) =>
-    i === 0 ? LEAD_IN_MS : clamp(b.length * PER_CHAR_MS, MIN_GAP_MS, MAX_GAP_MS)
-  );
-  const total = rawGaps.reduce((a, b) => a + b, 0);
-  const scale = total > MAX_TOTAL_PACING_MS ? MAX_TOTAL_PACING_MS / total : 1;
-  const gaps = rawGaps.map((g) => Math.round(g * scale));
+  const gaps = computeBubbleDelays(bubbles);
 
   const startedAt = opts.startedAt ?? performance.now();
   let anyFailed = false;

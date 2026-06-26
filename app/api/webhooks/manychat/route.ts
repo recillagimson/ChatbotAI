@@ -397,7 +397,9 @@ export async function POST(request: NextRequest) {
         const replyText = await generateAndPersistReply();
         const bubbles = splitIntoMessages(replyText);
         try {
-          if (pacingEnabled() && bubbles.length > 1) {
+          if (pacingEnabled() && bubbles.length > 0) {
+            // Paced even for a single bubble: a human-like typing delay before the
+            // reply lands (see computeBubbleDelays), then drip-in for extra bubbles.
             await sendManychatMessagePaced({
               subscriberId: body.subscriber_id,
               bubbles,
