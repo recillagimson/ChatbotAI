@@ -136,17 +136,20 @@ export default async function StatisticsPage({
   const tab = sp.tab === "events" ? "events" : "funnel";
 
   // ── Events query (only when tab=events and overview is loaded) ───────────────
-  const eventsResult =
-    tab === "events" && overview !== null
-      ? await supabase
-          .from("usage_log")
-          .select("id, event_type, tokens_used, created_at, chatbots(name)")
-          .eq("user_id", user!.id)
-          .gte("created_at", from)
-          .lt("created_at", to)
-          .order("created_at", { ascending: false })
-          .limit(50)
-      : null;
+  let eventsResult = null;
+  if (tab === "events" && overview !== null) {
+    let eventsQuery = supabase
+      .from("usage_log")
+      .select("id, event_type, tokens_used, created_at, chatbots(name)")
+      .eq("user_id", user!.id)
+      .gte("created_at", from)
+      .lt("created_at", to);
+    // Scope events to the selected chatbot (matches the funnel/overview filter).
+    if (chatbotId) eventsQuery = eventsQuery.eq("chatbot_id", chatbotId);
+    eventsResult = await eventsQuery
+      .order("created_at", { ascending: false })
+      .limit(50);
+  }
 
   const rawEvents = eventsResult?.data ?? [];
 

@@ -69,13 +69,13 @@ export function Sidebar({
   }
 
   return (
-    <aside className="w-64 flex flex-col bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))]">
-      <div className="h-16 flex items-center px-6 border-b border-white/10">
+    <aside className="w-64 shrink-0 h-full flex flex-col bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))]">
+      <div className="h-16 shrink-0 flex items-center px-6 border-b border-white/10">
         <Link href="/dashboard" aria-label="SpeedSettr">
           <Logo white />
         </Link>
       </div>
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
         {items.map((item) => {
           const active =
             pathname === item.href ||
@@ -100,7 +100,7 @@ export function Sidebar({
         })}
       </nav>
       {!impersonating && (
-        <div className="p-3 border-t border-white/10">
+        <div className="shrink-0 p-3 border-t border-white/10">
           <button
             type="button"
             onClick={signOut}

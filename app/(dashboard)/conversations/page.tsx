@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PlatformBadge } from "@/components/dashboard/platform-badge";
+import { ConversationFilter } from "@/components/dashboard/conversation-filter";
 import { formatDate, cn } from "@/lib/utils";
 import { MessageSquare } from "lucide-react";
 import { PLATFORMS, PLATFORM_META, isPlatform } from "@/lib/platforms";
@@ -13,7 +14,7 @@ import { PLATFORMS, PLATFORM_META, isPlatform } from "@/lib/platforms";
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ platform?: string }>;
+  searchParams: Promise<{ platform?: string; chatbot?: string }>;
 }) {
   const sp = await searchParams;
   const platform = isPlatform(sp.platform) ? sp.platform : null;
@@ -21,14 +22,37 @@ export default async function ConversationsPage({
   const supabase = await createClient();
   const user = await getCurrentUser();
 
+  // This user's chatbots, for the filter dropdown.
+  const { data: chatbots } = await supabase
+    .from("chatbots")
+    .select("id, name")
+    .eq("user_id", user!.id)
+    .order("created_at");
+  // Only honor a chatbot param that belongs to this user.
+  const chatbotId =
+    sp.chatbot && chatbots?.some((c) => c.id === sp.chatbot) ? sp.chatbot : null;
+
   let query = supabase
     .from("conversations")
     .select("*, chatbots(name)")
     .eq("user_id", user!.id);
   if (platform) query = query.eq("platform", platform);
+  if (chatbotId) query = query.eq("chatbot_id", chatbotId);
   const { data: conversations } = await query
     .order("last_message_at", { ascending: false })
     .limit(100);
+
+  // Build a conversations URL preserving both filters (so platform tabs keep the
+  // active chatbot, and vice-versa).
+  const hrefWith = (next: { platform?: string | null; chatbot?: string | null }) => {
+    const params = new URLSearchParams();
+    const p = next.platform === undefined ? platform : next.platform;
+    const c = next.chatbot === undefined ? chatbotId : next.chatbot;
+    if (p) params.set("platform", p);
+    if (c) params.set("chatbot", c);
+    const qs = params.toString();
+    return qs ? `/conversations?${qs}` : "/conversations";
+  };
 
   // Which platforms does this user actually have threads on? (for tab visibility)
   const { data: distinctRows } = await supabase
@@ -56,27 +80,36 @@ export default async function ConversationsPage({
         </p>
       </div>
 
-      {/* Platform tabs */}
-      <nav aria-label="Filter by platform" className="mb-6 flex flex-wrap gap-2">
-        {tabs.map((t) => {
-          const active = platform === t.value || (!platform && t.value === null);
-          return (
-            <Link
-              key={t.value ?? "all"}
-              href={t.value ? `/conversations?platform=${t.value}` : "/conversations"}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                active
-                  ? "bg-primary text-primary-foreground"
-                  : "border border-input bg-background hover:bg-accent"
-              )}
-            >
-              {t.label}
-            </Link>
-          );
-        })}
-      </nav>
+      {/* Filters: platform tabs (left) + chatbot selector (right) */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <nav aria-label="Filter by platform" className="flex flex-wrap gap-2">
+          {tabs.map((t) => {
+            const active = platform === t.value || (!platform && t.value === null);
+            return (
+              <Link
+                key={t.value ?? "all"}
+                href={hrefWith({ platform: t.value })}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-input bg-background hover:bg-accent"
+                )}
+              >
+                {t.label}
+              </Link>
+            );
+          })}
+        </nav>
+        {(chatbots?.length ?? 0) > 0 && (
+          <ConversationFilter
+            chatbots={chatbots ?? []}
+            chatbotId={chatbotId}
+            platform={platform}
+          />
+        )}
+      </div>
 
       {!conversations?.length ? (
         <Card>
@@ -84,8 +117,12 @@ export default async function ConversationsPage({
             <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="font-medium mb-1">No conversations yet</p>
             <p className="text-sm text-muted-foreground">
-              {platform
-                ? `No ${PLATFORM_META[platform].label} conversations yet.`
+              {chatbotId || platform
+                ? `No conversations${
+                    chatbotId
+                      ? ` for ${chatbots?.find((c) => c.id === chatbotId)?.name ?? "this chatbot"}`
+                      : ""
+                  }${platform ? ` on ${PLATFORM_META[platform].label}` : ""} yet.`
                 : "Once a real customer DMs you, the thread will show up here."}
             </p>
           </CardContent>
