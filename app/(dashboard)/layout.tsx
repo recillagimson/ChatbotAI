@@ -25,11 +25,14 @@ export default async function DashboardLayout({
   const clientLabel = target?.full_name || target?.email || "client";
 
   return (
-    <div className="min-h-screen flex">
+    // Pin the shell to the viewport so the SIDEBAR stays put and only the main
+    // content scrolls. (min-h-screen let the row grow with content, which pushed
+    // the page — and the sidebar — into a scroll.)
+    <div className="flex h-[100dvh] overflow-hidden">
       {/* While impersonating: scope the sidebar to Overview→Request Changes and
           hide the Admin link (the real admin returns via the banner's Exit). */}
       <Sidebar isSuperadmin={!active && !!profile?.is_superadmin} impersonating={active} />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         {active && target && (
           <ImpersonationBanner clientLabel={clientLabel} clientId={target.id} />
         )}
