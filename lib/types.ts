@@ -90,6 +90,8 @@ export interface Message {
   content: string;
   ai_generated: boolean;
   tokens_used: number | null;
+  media_url: string | null;   // inbound attachment: storage path (request-uploads) or URL; null = text only
+  media_type: string | null;  // inbound attachment MIME type; null = text only
   created_at: string;
 }
 

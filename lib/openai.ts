@@ -6,9 +6,14 @@
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 
+/** A multimodal content part — text or an image (data: URL or https URL). */
+export type OpenAIContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface OpenAIChatMessage {
   role: "user" | "assistant";
-  content: string;
+  content: string | OpenAIContentPart[];
 }
 
 /**

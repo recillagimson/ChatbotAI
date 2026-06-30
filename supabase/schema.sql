@@ -104,6 +104,8 @@ create table if not exists public.messages (
   content text not null,
   ai_generated boolean not null default false,
   tokens_used int,
+  media_url text,                -- inbound attachment: storage path (request-uploads) or URL; null = text only
+  media_type text,               -- inbound attachment MIME type (image/jpeg, audio/m4a, ...); null = text only
   created_at timestamptz not null default now()
 );
 create index if not exists messages_conv_idx on public.messages(conversation_id, created_at);

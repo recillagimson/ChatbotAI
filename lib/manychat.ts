@@ -207,10 +207,24 @@ const MIN_GAP_MS = 700; // floor for gaps before later bubbles
 const MAX_GAP_MS = 2_500; // ceiling for gaps before later bubbles
 const MAX_TOTAL_PACING_MS = 9_000; // sum of all delays; scaled down if exceeded
 const PACING_DEADLINE_MS = 45_000; // if the request is already this old, stop sleeping
+// "Thinking" pause: the first reply bubble lands at least this long after the
+// customer's message, so the bot reads as a person who paused to think. Measured
+// from request start, so AI-generation time counts toward it (no stacking).
+// Env-overridable; set REPLY_THINKING_MS=0 to disable.
+const THINKING_MS = Number(process.env.REPLY_THINKING_MS ?? 5_000);
 
 /** True if bubble pacing is on (default). Set BUBBLE_PACING_ENABLED=false to disable. */
 export function pacingEnabled(): boolean {
   return PACING_ENABLED;
+}
+
+/**
+ * Pure: extra ms to wait before the first bubble so the reply lands ~thinkingMs
+ * after the customer's message, accounting for time already elapsed (mostly AI
+ * generation). Never negative. Exported for unit testing.
+ */
+export function thinkingDelayMs(elapsedMs: number, thinkingMs: number = THINKING_MS): number {
+  return Math.max(0, thinkingMs - elapsedMs);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -264,10 +278,15 @@ export async function sendManychatMessagePaced(opts: {
   let anyFailed = false;
 
   for (let i = 0; i < bubbles.length; i++) {
+    // Bubble 0 also waits out the "thinking" pause so the reply lands ~THINKING_MS
+    // after the customer's message (minus time already spent generating). Later
+    // bubbles just use their length-scaled drip gap.
+    const elapsed = performance.now() - startedAt;
+    const wait = i === 0 ? Math.max(gaps[i], thinkingDelayMs(elapsed)) : gaps[i];
     // Skip the pause if the request is already old (protect the 60s budget);
     // we still send every bubble, just without the gap.
-    if (gaps[i] > 0 && performance.now() - startedAt < PACING_DEADLINE_MS) {
-      await sleep(gaps[i]);
+    if (wait > 0 && elapsed < PACING_DEADLINE_MS) {
+      await sleep(wait);
     }
     try {
       await sendManychatMessage({

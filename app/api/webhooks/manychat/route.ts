@@ -22,6 +22,11 @@ import {
 } from "@/lib/limits";
 import { type Platform, toPlatform, canPushPlatform } from "@/lib/platforms";
 import { cleanContactField } from "@/lib/contact";
+import {
+  normalizeMediaItems,
+  processInboundMedia,
+  composeUserMessage,
+} from "@/lib/inbound-media";
 import type { Chatbot, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -44,7 +49,18 @@ const BodySchema = z.object({
   username: z.string().optional().nullable(),
   ig_username: z.string().optional().nullable(),
   user_name: z.string().optional().nullable(),
-  message: z.string().min(1).max(4000),
+  // Optional now: a photo/voice-only DM has no text. Either text or media is required.
+  message: z.string().max(4000).optional().nullable(),
+  // Inbound media. ManyChat flows map the attachment URL under different field
+  // names depending on the setup, so we accept any of these (normalizeMediaItems
+  // sorts them out). attachment_urls is a comma/space-separated list.
+  attachment_url: z.string().optional().nullable(),
+  attachment_type: z.string().optional().nullable(),
+  attachment_urls: z.string().optional().nullable(),
+  image_url: z.string().optional().nullable(),
+  audio_url: z.string().optional().nullable(),
+  video_url: z.string().optional().nullable(),
+  file_url: z.string().optional().nullable(),
 });
 
 /**
@@ -147,6 +163,11 @@ export async function POST(request: NextRequest) {
   const body = parsed.data;
   const platform = toPlatform(body.platform);
   const supabase = createServiceClient();
+
+  // Inbound media + the typed text. Either may be empty; we require at least one.
+  const mediaItems = normalizeMediaItems(body as unknown as Record<string, unknown>);
+  const hasMedia = mediaItems.length > 0;
+  const baseText = (body.message ?? "").trim();
 
   // 3. Look up chatbot + verify subscription is active.
   // Auth is the per-chatbot webhook_secret (verified in 3a). We no longer hard-
@@ -270,12 +291,25 @@ export async function POST(request: NextRequest) {
       .eq("id", existing.id);
   }
 
-  // 5. Record inbound message
-  await supabase.from("messages").insert({
-    conversation_id: conversationId!,
-    role: "user",
-    content: body.message,
-  });
+  // 4.5. Nothing to act on (no text and no media): ack without a reply.
+  if (!baseText && !hasMedia) {
+    return manychatReply("", { ai_skipped: true, reason: "empty_message" });
+  }
+
+  // 5. Record inbound message. For media we store a provisional label now and
+  // backfill the readable content + durable media pointer after processing
+  // (which runs in the background to keep the fast-ack quick).
+  const provisionalContent = baseText || "📎 Attachment…";
+  const { data: inboundMsg } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: conversationId!,
+      role: "user",
+      content: provisionalContent,
+    })
+    .select("id")
+    .single();
+  const inboundId = inboundMsg?.id as string | undefined;
 
   // 6. If human took over, do not generate AI reply
   if (conversationStatus === "ai_paused") {
@@ -297,18 +331,22 @@ export async function POST(request: NextRequest) {
   // 6b. Trivial-input shortcut: "thanks" / "ok" / 👍 → static ack, no AI.
   // Persona bots (custom system_prompt) skip this so even a "thanks" gets an
   // in-voice reply from the persona instead of a generic canned line.
-  const trivial = chatbot.system_prompt ? null : getTrivialReply(body.message);
+  const trivial =
+    chatbot.system_prompt || hasMedia ? null : getTrivialReply(baseText);
   if (trivial) {
     await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial, chatbot.user_id, chatbot.id, apiKey, platform);
     return manychatReply(trivial, { ai_skipped: true, reason: "trivial_ack" });
   }
 
-  // 6c. Duplicate-message dedup: same message inside 30s → echo prior reply.
-  const dup = await checkDuplicate(chatbot.id, body.subscriber_id, body.message);
-  if (dup.isDuplicate) {
-    const echo = dup.lastReply ?? "Still on that, give me just a sec!";
-    await persistAndPush(supabase, conversationId!, body.subscriber_id, echo, chatbot.user_id, chatbot.id, apiKey, platform);
-    return manychatReply(echo, { ai_skipped: true, reason: "duplicate" });
+  // 6c. Duplicate-message dedup: same TEXT inside 30s → echo prior reply. Skipped
+  // when media is attached (two different photos can share empty/identical text).
+  if (!hasMedia) {
+    const dup = await checkDuplicate(chatbot.id, body.subscriber_id, baseText);
+    if (dup.isDuplicate) {
+      const echo = dup.lastReply ?? "Still on that, give me just a sec!";
+      await persistAndPush(supabase, conversationId!, body.subscriber_id, echo, chatbot.user_id, chatbot.id, apiKey, platform);
+      return manychatReply(echo, { ai_skipped: true, reason: "duplicate" });
+    }
   }
 
   // 6d. Per-chatbot monthly cap. Over → static fallback, no AI.
@@ -327,6 +365,46 @@ export async function POST(request: NextRequest) {
   // 7–9. Generate the AI reply, persist it + usage, and update Redis side-state.
   // Returns the reply text. Shared by both delivery paths below.
   const generateAndPersistReply = async (): Promise<string> => {
+    // 6e. Process any inbound media (network): transcribe audio/video, read
+    // documents, encode images for vision. Runs here (background for push
+    // channels) so the fast-ack isn't blocked by downloads/transcription.
+    let images: { base64: string; mediaType: string }[] = [];
+    const textParts: string[] = [];
+    if (hasMedia) {
+      const media = await processInboundMedia(mediaItems, {
+        supabase,
+        userId: chatbot.user_id,
+      });
+      images = media.images;
+      textParts.push(...media.textParts);
+      // Backfill the inbound row: readable content + durable media pointer.
+      if (inboundId) {
+        await supabase
+          .from("messages")
+          .update({
+            content: composeUserMessage({ text: baseText, textParts }),
+            media_url: media.stored[0]?.url ?? null,
+            media_type: media.stored[0]?.type ?? null,
+          })
+          .eq("id", inboundId);
+      }
+      // Observability: how many attachments came in (free-text event_type).
+      await supabase
+        .from("usage_log")
+        .insert({
+          user_id: chatbot.user_id,
+          chatbot_id: chatbot.id,
+          event_type: "media_in",
+          tokens_used: mediaItems.length,
+        })
+        .then(
+          () => {},
+          () => {}
+        );
+    }
+    // The text the AI reasons over: typed text + transcripts/doc text/notes.
+    const effectiveMessage = composeUserMessage({ text: baseText, textParts });
+
     // 7. Fetch recent history. Order desc + limit so we get the newest 11
     // (= 10 prior + the just-inserted user message), not the oldest.
     const { data: history } = await supabase
@@ -345,7 +423,7 @@ export async function POST(request: NextRequest) {
       supabase,
       chatbot,
       history: priorHistory,
-      userMessage: body.message,
+      userMessage: effectiveMessage,
     });
 
     let replyText = "Thanks for the message, a teammate will follow up shortly.";
@@ -355,7 +433,8 @@ export async function POST(request: NextRequest) {
         chatbot,
         kbBlock: kb.block,
         history: priorHistory,
-        userMessage: body.message,
+        userMessage: effectiveMessage,
+        images,
       });
       if (text) {
         replyText = text;

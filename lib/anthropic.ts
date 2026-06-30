@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Chatbot, Message } from "./types";
 import { sanitizeReply } from "./sanitize";
-import { openaiChat } from "./openai";
+import { openaiChat, type OpenAIChatMessage } from "./openai";
 
 let _anthropic: Anthropic | null = null;
 
@@ -120,24 +120,42 @@ export async function generateReply(opts: {
   kbBlock: string;
   history: Pick<Message, "role" | "content">[];
   userMessage: string;
+  // Images the contact just sent (base64 + MIME). Attached to the current turn
+  // for the vision model; prior history stays text-only.
+  images?: { base64: string; mediaType: string }[];
 }) {
   const systemText = buildSystemPrompt(opts.chatbot, opts.kbBlock);
+  const images = opts.images ?? [];
 
   // ~10 turns is plenty of context for a DM thread; keeps tokens predictable.
   const trimmed = opts.history.slice(-10).map((m) => ({
     role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
     content: m.content,
   }));
-  const messages = [...trimmed, { role: "user" as const, content: opts.userMessage }];
 
   // OpenAI (ChatGPT) — the default DM engine. Same system prompt + history; the
   // return shape matches the Anthropic path (cache fields are 0, OpenAI has no
   // prompt-cache token accounting here).
   if (DM_AI_PROVIDER !== "anthropic") {
+    // gpt-4.1-mini is multimodal: send images as data-URL image_url parts on the
+    // current turn alongside the text.
+    const currentTurn: OpenAIChatMessage = images.length
+      ? {
+          role: "user",
+          content: [
+            ...images.map((img) => ({
+              type: "image_url" as const,
+              image_url: { url: `data:${img.mediaType};base64,${img.base64}` },
+            })),
+            { type: "text" as const, text: opts.userMessage || "(see attached image)" },
+          ],
+        }
+      : { role: "user", content: opts.userMessage };
+
     const { text, tokensUsed } = await openaiChat({
       model: OPENAI_DM_MODEL,
       system: systemText,
-      messages,
+      messages: [...trimmed, currentTurn],
       maxTokens: 400,
     });
     return {
@@ -147,6 +165,26 @@ export async function generateReply(opts: {
       cacheWriteTokens: 0,
     };
   }
+
+  // Anthropic current turn: image blocks (base64 source) + a text block.
+  const currentContent: Anthropic.MessageParam["content"] = images.length
+    ? [
+        ...images.map((img) => ({
+          type: "image" as const,
+          source: {
+            type: "base64" as const,
+            media_type: img.mediaType as
+              | "image/jpeg"
+              | "image/png"
+              | "image/gif"
+              | "image/webp",
+            data: img.base64,
+          },
+        })),
+        { type: "text" as const, text: opts.userMessage || "(see attached image)" },
+      ]
+    : opts.userMessage;
+  const messages = [...trimmed, { role: "user" as const, content: currentContent }];
 
   // Mark the system prompt as ephemeral-cacheable. The persona + knowledge
   // base are identical across every reply for a given chatbot, so the next

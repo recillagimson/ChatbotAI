@@ -11,6 +11,7 @@ import { ConversationReplyBox } from "@/components/dashboard/conversation-reply-
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { PlatformBadge } from "@/components/dashboard/platform-badge";
 import { contactDisplayName, contactHandle } from "@/lib/contact";
+import { signAttachment } from "@/lib/storage";
 
 export default async function ConversationDetailPage({
   params,
@@ -35,6 +36,18 @@ export default async function ConversationDetailPage({
     .select("*")
     .eq("conversation_id", id)
     .order("created_at", { ascending: true });
+
+  // Resolve a viewable URL for each message that carries media. media_url holds a
+  // storage path in the private request-uploads bucket (sign it), unless it's
+  // already an absolute URL. Signed links are short-lived but fine for this view.
+  const mediaUrls = new Map<string, string>();
+  for (const m of messages ?? []) {
+    if (!m.media_url) continue;
+    const url = /^https?:\/\//.test(m.media_url)
+      ? m.media_url
+      : await signAttachment(supabase, m.media_url);
+    if (url) mediaUrls.set(m.id, url);
+  }
 
   // mark read
   if (conversation.unread_count > 0) {
@@ -125,7 +138,47 @@ export default async function ConversationDetailPage({
                         : "bg-primary text-primary-foreground"
                   )}
                 >
-                  <p className="text-sm whitespace-pre-wrap">{m.content}</p>
+                  {m.media_url && mediaUrls.get(m.id) && (
+                    <div className="mb-1.5">
+                      {(() => {
+                        const url = mediaUrls.get(m.id)!;
+                        const t = m.media_type ?? "";
+                        if (t.startsWith("image/")) {
+                          return (
+                            <a href={url} target="_blank" rel="noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={url}
+                                alt="attachment"
+                                className="rounded-md max-h-60 max-w-full object-cover"
+                              />
+                            </a>
+                          );
+                        }
+                        if (t.startsWith("audio/")) {
+                          return <audio controls src={url} className="max-w-full" />;
+                        }
+                        if (t.startsWith("video/")) {
+                          return (
+                            <video controls src={url} className="rounded-md max-h-60 max-w-full" />
+                          );
+                        }
+                        return (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-xs underline"
+                          >
+                            📎 Attachment
+                          </a>
+                        );
+                      })()}
+                    </div>
+                  )}
+                  {m.content && m.content !== "(media message)" && (
+                    <p className="text-sm whitespace-pre-wrap">{m.content}</p>
+                  )}
                   <p
                     className={cn(
                       "text-[10px] mt-1 opacity-70",
