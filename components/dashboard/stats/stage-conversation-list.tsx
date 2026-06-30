@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Users } from "lucide-react";
 import type { StageConversation } from "@/lib/analytics";
+import { cleanContactField, contactHandle } from "@/lib/contact";
 
 interface StageConversationListProps {
   rows: StageConversation[];
@@ -10,10 +11,12 @@ interface StageConversationListProps {
   emptyLabel?: string;
 }
 
-/** Short display label for a conversation contact */
+/** Short display label for a conversation contact (placeholder-tolerant). */
 function contactLabel(row: StageConversation): string {
-  if (row.contact_name) return row.contact_name;
-  if (row.contact_username) return `@${row.contact_username}`;
+  const name = cleanContactField(row.contact_name);
+  if (name) return name;
+  const handle = contactHandle(row.contact_username);
+  if (handle) return `@${handle}`;
   return "Unknown";
 }
 
@@ -64,8 +67,8 @@ export function StageConversationList({
                 {contactLabel(row)}
               </p>
               <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">
-                {row.contact_username ? (
-                  <span className="mr-2">@{row.contact_username}</span>
+                {contactHandle(row.contact_username) ? (
+                  <span className="mr-2">@{contactHandle(row.contact_username)}</span>
                 ) : null}
                 <span className="opacity-60">{row.id.slice(0, 8)}</span>
               </p>

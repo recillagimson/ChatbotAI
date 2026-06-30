@@ -7,6 +7,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PlatformBadge } from "@/components/dashboard/platform-badge";
 import { ConversationFilter } from "@/components/dashboard/conversation-filter";
+import { contactDisplayName } from "@/lib/contact";
 import { formatDate, cn } from "@/lib/utils";
 import { MessageSquare } from "lucide-react";
 import { PLATFORMS, PLATFORM_META, isPlatform } from "@/lib/platforms";
@@ -137,14 +138,14 @@ export default async function ConversationsPage({
                 className="flex items-center gap-4 p-4 hover:bg-accent transition-colors"
               >
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold shrink-0">
-                  {(c.contact_name || c.contact_username || "?")
+                  {contactDisplayName(c.contact_name, c.contact_username, "?")
                     .charAt(0)
                     .toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="font-medium truncate">
-                      {c.contact_name || c.contact_username || "Unknown"}
+                      {contactDisplayName(c.contact_name, c.contact_username)}
                     </p>
                     <PlatformBadge platform={c.platform} showLabel={false} />
                     {c.unread_count > 0 && (

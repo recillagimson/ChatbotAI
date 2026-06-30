@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Chatbot, Message } from "./types";
 import { sanitizeReply } from "./sanitize";
+import { openaiChat } from "./openai";
 
 let _anthropic: Anthropic | null = null;
 
@@ -25,6 +26,12 @@ function getAnthropic(): Anthropic {
 
 export const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
+// DM-reply provider. Defaults to OpenAI (ChatGPT) — the app already requires
+// OPENAI_API_KEY for the change-request AI + embeddings, so this needs no new
+// key. Set AI_PROVIDER=anthropic to use Claude instead (needs ANTHROPIC_API_KEY).
+export const DM_AI_PROVIDER = (process.env.AI_PROVIDER || "openai").toLowerCase();
+export const OPENAI_DM_MODEL = process.env.OPENAI_DM_MODEL || "gpt-4.1-mini";
+
 // Shared by the DM-reply path (below) and the change-request AI (lib/openai-changes.ts).
 export const TONE_GUIDES: Record<Chatbot["tone"], string> = {
   friendly:
@@ -38,8 +45,9 @@ export const TONE_GUIDES: Record<Chatbot["tone"], string> = {
 
 // The change-request AI (draftChangeRequest, chatTurn, parseProposalInput, the
 // propose_changes tool, and the scoped chat system prompt) lives in
-// lib/openai-changes.ts — it runs on OpenAI. Only the DM-reply path below
-// (generateReply / buildSystemPrompt) uses Anthropic.
+// lib/openai-changes.ts. The DM-reply path below (generateReply) runs on OpenAI
+// by default (DM_AI_PROVIDER), with Anthropic as an opt-in alternative.
+// buildSystemPrompt is provider-agnostic.
 
 // Platform guardrails appended below the persona/sections — these are channel
 // requirements (DM length, bubble splitting, no inventing facts), NOT a
@@ -120,6 +128,25 @@ export async function generateReply(opts: {
     role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
     content: m.content,
   }));
+  const messages = [...trimmed, { role: "user" as const, content: opts.userMessage }];
+
+  // OpenAI (ChatGPT) — the default DM engine. Same system prompt + history; the
+  // return shape matches the Anthropic path (cache fields are 0, OpenAI has no
+  // prompt-cache token accounting here).
+  if (DM_AI_PROVIDER !== "anthropic") {
+    const { text, tokensUsed } = await openaiChat({
+      model: OPENAI_DM_MODEL,
+      system: systemText,
+      messages,
+      maxTokens: 400,
+    });
+    return {
+      text: sanitizeReply(text),
+      tokensUsed,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
+  }
 
   // Mark the system prompt as ephemeral-cacheable. The persona + knowledge
   // base are identical across every reply for a given chatbot, so the next
@@ -136,7 +163,7 @@ export async function generateReply(opts: {
         cache_control: { type: "ephemeral" },
       },
     ],
-    messages: [...trimmed, { role: "user", content: opts.userMessage }],
+    messages,
   });
 
   const text = sanitizeReply(

@@ -21,6 +21,7 @@ import {
   getTrivialReply,
 } from "@/lib/limits";
 import { type Platform, toPlatform, canPushPlatform } from "@/lib/platforms";
+import { cleanContactField } from "@/lib/contact";
 import type { Chatbot, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -37,7 +38,12 @@ const BodySchema = z.object({
   platform: z.union([z.string(), z.number()]).transform(String).optional(),
   first_name: z.string().optional().nullable(),
   last_name: z.string().optional().nullable(),
+  // The IG/FB handle. ManyChat setups send this under different field names
+  // depending on which merge field was wired, so we accept any of them and use
+  // the first real (non-placeholder) one for the contact's @handle / fallback name.
   username: z.string().optional().nullable(),
+  ig_username: z.string().optional().nullable(),
+  user_name: z.string().optional().nullable(),
   message: z.string().min(1).max(4000),
 });
 
@@ -193,11 +199,17 @@ export async function POST(request: NextRequest) {
     await logPushFailure(supabase, chatbot.user_id, chatbot.id, code);
   }
 
-  // 4. Upsert conversation
+  // 4. Upsert conversation. Clean each field: ManyChat sends unresolved merge
+  // tags ("{{first_name}}") when fields aren't wired, which we must not store.
+  const firstName = cleanContactField(body.first_name);
+  const lastName = cleanContactField(body.last_name);
+  // Use whichever username field actually carries a real handle.
+  const username =
+    cleanContactField(body.username) ??
+    cleanContactField(body.ig_username) ??
+    cleanContactField(body.user_name);
   const displayName =
-    [body.first_name, body.last_name].filter(Boolean).join(" ").trim() ||
-    body.username ||
-    null;
+    [firstName, lastName].filter(Boolean).join(" ").trim() || username || null;
 
   const { data: existing } = await supabase
     .from("conversations")
@@ -226,7 +238,7 @@ export async function POST(request: NextRequest) {
           manychat_subscriber_id: body.subscriber_id,
           platform,
           contact_name: displayName,
-          contact_username: body.username ?? null,
+          contact_username: username,
         },
         { onConflict: "chatbot_id,manychat_subscriber_id" }
       )
@@ -248,8 +260,9 @@ export async function POST(request: NextRequest) {
       .update({
         last_message_at: new Date().toISOString(),
         unread_count: (existing.unread_count ?? 0) + 1,
-        contact_name: existing.contact_name ?? displayName,
-        contact_username: existing.contact_username ?? body.username ?? null,
+        // Heal old rows too: replace a stored placeholder/empty with a real value.
+        contact_name: cleanContactField(existing.contact_name) ?? displayName,
+        contact_username: cleanContactField(existing.contact_username) ?? username,
         // The contact replied — re-arm auto follow-up for the next silence.
         followup_count: 0,
         last_followup_at: null,

@@ -9,6 +9,7 @@
  */
 import type { Chatbot, Conversation } from "@/lib/types";
 import { sendManychatMessage } from "@/lib/manychat";
+import { cleanContactField } from "@/lib/contact";
 import { type Platform, PLATFORM_META, toPlatform, canPushPlatform } from "@/lib/platforms";
 import type { createServiceClient } from "@/lib/supabase/server";
 
@@ -139,7 +140,11 @@ export async function sendFollowup(
   now: Date,
   apiKey: string
 ): Promise<string> {
-  const text = renderTemplate(template, { name: conversation.contact_name });
+  // Clean the stored name so a never-resolved "{{first_name}}" doesn't get sent
+  // to the contact; renderTemplate falls back to "there" when name is null.
+  const text = renderTemplate(template, {
+    name: cleanContactField(conversation.contact_name),
+  });
   const platform = toPlatform(conversation.platform);
 
   await sendManychatMessage({

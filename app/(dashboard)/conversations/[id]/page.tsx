@@ -10,6 +10,7 @@ import { ConversationActions } from "@/components/dashboard/conversation-actions
 import { ConversationReplyBox } from "@/components/dashboard/conversation-reply-box";
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { PlatformBadge } from "@/components/dashboard/platform-badge";
+import { contactDisplayName, contactHandle } from "@/lib/contact";
 
 export default async function ConversationDetailPage({
   params,
@@ -61,16 +62,17 @@ export default async function ConversationDetailPage({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-display font-semibold tracking-tight">
-              {conversation.contact_name ||
-                conversation.contact_username ||
-                "Unknown contact"}
+              {contactDisplayName(
+                conversation.contact_name,
+                conversation.contact_username
+              )}
             </h1>
             <PlatformBadge platform={conversation.platform} />
           </div>
           <p className="text-sm text-muted-foreground">
             {(conversation.chatbots as { name: string } | null)?.name ?? "—"}
-            {conversation.contact_username
-              ? ` · @${conversation.contact_username}`
+            {contactHandle(conversation.contact_username)
+              ? ` · @${contactHandle(conversation.contact_username)}`
               : ""}
           </p>
         </div>
