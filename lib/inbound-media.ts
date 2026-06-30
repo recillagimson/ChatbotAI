@@ -120,9 +120,38 @@ export function isAllowedMediaHost(url: string): boolean {
   );
 }
 
+/** Matches bare http(s) URLs (up to the next whitespace). */
+const URL_RE = /https?:\/\/[^\s]+/gi;
+
+/**
+ * Find media-CDN URLs sitting inside free text. Instagram frequently delivers a
+ * photo as a `lookaside.fbsbx.com` URL in the message body rather than a
+ * dedicated media field, so we scan the text too. Only allowlisted CDN hosts
+ * count as media — an ordinary link the customer typed is left alone.
+ */
+export function mediaUrlsInText(text?: string | null): string[] {
+  const matches = (text ?? "").match(URL_RE) ?? [];
+  return matches.filter((u) => isAllowedMediaHost(u));
+}
+
+/**
+ * Remove media-CDN URLs from text (so the AI doesn't see — and comment on — the
+ * raw attachment link), leaving ordinary links intact. Collapses the whitespace
+ * left behind.
+ */
+export function stripMediaUrls(text?: string | null): string {
+  const t = text ?? "";
+  return t
+    .replace(URL_RE, (u) => (isAllowedMediaHost(u) ? "" : u))
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+\n/g, "\n")
+    .trim();
+}
+
 /**
  * Pull every media URL out of a webhook body, tolerating the different field
- * shapes a ManyChat flow might map. Drops empties and unresolved "{{...}}"
+ * shapes a ManyChat flow might map. Also scans the message text (IG often sends
+ * an image as a lookaside URL there). Drops empties and unresolved "{{...}}"
  * placeholders, splits the comma/space list field, and de-dupes by URL.
  */
 export function normalizeMediaItems(body: Record<string, unknown>): MediaItem[] {
@@ -143,6 +172,8 @@ export function normalizeMediaItems(body: Record<string, unknown>): MediaItem[] 
   add(body.audio_url, { declaredType: "audio" });
   add(body.video_url, { declaredType: "video" });
   add(body.file_url, { declaredType: "document" });
+  // Media URLs embedded in the text message (IG sends photos this way).
+  for (const url of mediaUrlsInText(asStr(body.message))) items.push({ url });
 
   const seen = new Set<string>();
   return items.filter((it) => (seen.has(it.url) ? false : (seen.add(it.url), true)));

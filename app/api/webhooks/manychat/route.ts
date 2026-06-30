@@ -26,6 +26,7 @@ import {
   normalizeMediaItems,
   processInboundMedia,
   composeUserMessage,
+  stripMediaUrls,
 } from "@/lib/inbound-media";
 import type { Chatbot, Message } from "@/lib/types";
 
@@ -165,9 +166,11 @@ export async function POST(request: NextRequest) {
   const supabase = createServiceClient();
 
   // Inbound media + the typed text. Either may be empty; we require at least one.
+  // A media-CDN URL can arrive inside the message text (IG sends photos that
+  // way), so it's pulled into mediaItems and stripped from the text the AI sees.
   const mediaItems = normalizeMediaItems(body as unknown as Record<string, unknown>);
   const hasMedia = mediaItems.length > 0;
-  const baseText = (body.message ?? "").trim();
+  const baseText = stripMediaUrls(body.message).trim();
 
   // 3. Look up chatbot + verify subscription is active.
   // Auth is the per-chatbot webhook_secret (verified in 3a). We no longer hard-
