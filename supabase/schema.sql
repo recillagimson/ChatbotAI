@@ -88,6 +88,8 @@ create table if not exists public.conversations (
   status text not null default 'active',      -- active|ai_paused|closed
   last_message_at timestamptz not null default now(),
   unread_count int not null default 0,
+  memory_summary text,                        -- rolling summary of turns older than the verbatim window; null until a chat grows past it
+  memory_summary_at timestamptz,              -- created_at watermark of the newest message already folded into the summary
   created_at timestamptz not null default now(),
   unique (chatbot_id, manychat_subscriber_id)
 );

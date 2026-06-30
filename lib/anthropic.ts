@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Chatbot, Message } from "./types";
 import { sanitizeReply } from "./sanitize";
 import { openaiChat, type OpenAIChatMessage } from "./openai";
+import { HISTORY_TURNS } from "./memory";
 
 let _anthropic: Anthropic | null = null;
 
@@ -61,16 +62,27 @@ const GUARDRAILS = `RULES
 - If the user seems angry or asks for a human, reply briefly and say a teammate will follow up.
 - Match the language of the customer's message.`;
 
-export function buildSystemPrompt(chatbot: Chatbot, kbBlock: string): string {
+export function buildSystemPrompt(
+  chatbot: Chatbot,
+  kbBlock: string,
+  memorySummary?: string | null
+): string {
   const persona = chatbot.persona_section?.trim() || "";
   const offers = chatbot.offers_section?.trim() || "";
   const rebuttals = chatbot.rebuttals_section?.trim() || "";
   const hasSections = !!(persona || offers || rebuttals);
 
+  // Memory of earlier turns (summarized) — known context so the bot doesn't
+  // re-ask. Empty for short/new conversations. Placed just above the KB.
+  const memory = memorySummary?.trim();
+  const memoryBlock = memory
+    ? `CONVERSATION MEMORY (summary of earlier messages in this chat; treat as known context, don't re-ask)\n${memory}`
+    : "";
+
   // SECTION MODE — the chatbot is authored as three editable sections. The
   // Personality section leads as identity VERBATIM (no generic preamble bolted
   // on top of a hand-written persona); offers/rebuttals follow when present;
-  // then the knowledge base and the platform guardrails.
+  // then the conversation memory, the knowledge base and the platform guardrails.
   if (hasSections) {
     const parts: string[] = [];
     parts.push(
@@ -79,6 +91,7 @@ export function buildSystemPrompt(chatbot: Chatbot, kbBlock: string): string {
     );
     if (offers) parts.push(`OFFERS, SERVICES & LINKS\n${offers}`);
     if (rebuttals) parts.push(`REBUTTALS & FAQ HANDLING\n${rebuttals}`);
+    if (memoryBlock) parts.push(memoryBlock);
     parts.push(
       `KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)\n${kbBlock}`
     );
@@ -89,10 +102,11 @@ export function buildSystemPrompt(chatbot: Chatbot, kbBlock: string): string {
   // LEGACY FALLBACK — un-migrated bots whose three sections are all empty.
   // A custom system_prompt (a full persona like "Evan") takes over completely:
   // drop the generic name/description/tone scaffolding (which would fight the
-  // persona) and append only the knowledge base plus the bubble-split note.
+  // persona) and append only the conversation memory, knowledge base, and the
+  // bubble-split note.
   if (chatbot.system_prompt && chatbot.system_prompt.trim()) {
     return `${chatbot.system_prompt.trim()}
-
+${memoryBlock ? `\n${memoryBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
 ${kbBlock}
 
@@ -108,7 +122,7 @@ ${chatbot.business_description || "(none provided)"}
 
 TONE
 ${TONE_GUIDES[chatbot.tone]}
-
+${memoryBlock ? `\n${memoryBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)
 ${kbBlock}
 
@@ -123,12 +137,16 @@ export async function generateReply(opts: {
   // Images the contact just sent (base64 + MIME). Attached to the current turn
   // for the vision model; prior history stays text-only.
   images?: { base64: string; mediaType: string }[];
+  // Rolling summary of earlier turns (older than the verbatim window); injected
+  // as known context so the bot remembers long conversations.
+  memorySummary?: string | null;
 }) {
-  const systemText = buildSystemPrompt(opts.chatbot, opts.kbBlock);
+  const systemText = buildSystemPrompt(opts.chatbot, opts.kbBlock, opts.memorySummary);
   const images = opts.images ?? [];
 
-  // ~10 turns is plenty of context for a DM thread; keeps tokens predictable.
-  const trimmed = opts.history.slice(-10).map((m) => ({
+  // Recent turns sent verbatim; older context comes from memorySummary. Keeps
+  // tokens predictable while remembering long chats.
+  const trimmed = opts.history.slice(-HISTORY_TURNS).map((m) => ({
     role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
     content: m.content,
   }));

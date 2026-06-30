@@ -28,6 +28,7 @@ import {
   composeUserMessage,
   stripMediaUrls,
 } from "@/lib/inbound-media";
+import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
 import type { Chatbot, Message } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -408,14 +409,15 @@ export async function POST(request: NextRequest) {
     // The text the AI reasons over: typed text + transcripts/doc text/notes.
     const effectiveMessage = composeUserMessage({ text: baseText, textParts });
 
-    // 7. Fetch recent history. Order desc + limit so we get the newest 11
-    // (= 10 prior + the just-inserted user message), not the oldest.
+    // 7. Fetch recent history. Order desc + limit so we get the newest
+    // HISTORY_TURNS prior + the just-inserted user message, not the oldest.
+    // Context older than this window is carried by the rolling memory summary.
     const { data: history } = await supabase
       .from("messages")
       .select("role, content")
       .eq("conversation_id", conversationId!)
       .order("created_at", { ascending: false })
-      .limit(11)
+      .limit(HISTORY_TURNS + 1)
       .returns<Pick<Message, "role" | "content">[]>();
 
     // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
@@ -438,6 +440,7 @@ export async function POST(request: NextRequest) {
         history: priorHistory,
         userMessage: effectiveMessage,
         images,
+        memorySummary: existing?.memory_summary ?? null,
       });
       if (text) {
         replyText = text;
@@ -509,6 +512,8 @@ export async function POST(request: NextRequest) {
           console.error("[manychat-webhook] push send failed", err);
           await logPushFailure(supabase, chatbot.user_id, chatbot.id);
         }
+        // Refresh the rolling memory summary for the next reply (best-effort).
+        await refreshConversationMemory({ supabase, conversationId: conversationId! });
       } catch (err) {
         // after() runs detached — swallow so nothing crashes the background task.
         console.error("[manychat-webhook] background processing failed", err);
@@ -529,6 +534,8 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[manychat-webhook] sync processing failed", err);
   }
+  // Refresh the rolling memory summary in the background (don't block the reply).
+  after(() => refreshConversationMemory({ supabase, conversationId: conversationId! }));
   return manychatReply(replyText, { ai_delivery: "response", platform });
 }
 

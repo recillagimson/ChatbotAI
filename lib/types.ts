@@ -80,6 +80,8 @@ export interface Conversation {
   last_followup_at: string | null;
   followup_count: number;
   unread_count: number;
+  memory_summary: string | null;     // rolling summary of turns older than the verbatim window
+  memory_summary_at: string | null;  // created_at watermark of the newest message folded into the summary
   created_at: string;
 }
 
