@@ -13,6 +13,12 @@
 
 export type Platform = "instagram" | "messenger" | "whatsapp" | "telegram" | "tiktok";
 
+/**
+ * Outbound media block types ManyChat's Send Content API can push as their own
+ * bubble. A follow-up "link" asset is NOT one of these — links go out as text.
+ */
+export type MediaBlockKind = "image" | "video" | "audio" | "file";
+
 export const PLATFORMS: Platform[] = [
   "instagram",
   "messenger",
@@ -33,14 +39,30 @@ export interface PlatformMeta {
    * can still be delivered, or null if the channel has no window / can't push.
    */
   followupWindowDays: number | null;
+  /**
+   * Hours after the contact's last message during which a NO-TAG standard send
+   * still delivers (the real cap for our hour-scale drip, since we send no
+   * message tag). Instagram/Messenger/WhatsApp = 24h; Telegram has no window
+   * (null); TikTok can't push (null). Multi-day reach past this needs the
+   * Recurring Notifications opt-in (Phase 6).
+   */
+  standardWindowHours: number | null;
+  /**
+   * Media block kinds this channel accepts via ManyChat's sendContent API.
+   * Verified against ManyChat docs: Instagram/WhatsApp accept only `image`
+   * (no audio/video/file); Messenger + Telegram accept all four. A voice note
+   * or video therefore only pushes on Messenger/Telegram — on Instagram the
+   * step falls back to its text caption (see lib/manychat.ts filtering).
+   */
+  outboundMedia: MediaBlockKind[];
 }
 
 export const PLATFORM_META: Record<Platform, PlatformMeta> = {
-  instagram: { label: "Instagram", manychatType: "instagram", canPush: true, followupWindowDays: 7 },
-  messenger: { label: "Facebook", manychatType: "messenger", canPush: true, followupWindowDays: 7 },
-  whatsapp: { label: "WhatsApp", manychatType: "whatsapp", canPush: true, followupWindowDays: 1 },
-  telegram: { label: "Telegram", manychatType: "telegram", canPush: true, followupWindowDays: null },
-  tiktok: { label: "TikTok", manychatType: null, canPush: false, followupWindowDays: null },
+  instagram: { label: "Instagram", manychatType: "instagram", canPush: true, followupWindowDays: 7, standardWindowHours: 24, outboundMedia: ["image"] },
+  messenger: { label: "Facebook", manychatType: "messenger", canPush: true, followupWindowDays: 7, standardWindowHours: 24, outboundMedia: ["image", "video", "audio", "file"] },
+  whatsapp: { label: "WhatsApp", manychatType: "whatsapp", canPush: true, followupWindowDays: 1, standardWindowHours: 24, outboundMedia: ["image"] },
+  telegram: { label: "Telegram", manychatType: "telegram", canPush: true, followupWindowDays: null, standardWindowHours: null, outboundMedia: ["image", "video", "audio", "file"] },
+  tiktok: { label: "TikTok", manychatType: null, canPush: false, followupWindowDays: null, standardWindowHours: null, outboundMedia: [] },
 };
 
 /** The default channel for inbound messages that don't declare one (legacy IG flow). */
@@ -64,4 +86,13 @@ export function platformLabel(v: unknown): string {
 /** Can replies on this platform be pushed via ManyChat's API? */
 export function canPushPlatform(v: unknown): boolean {
   return isPlatform(v) ? PLATFORM_META[v].canPush : false;
+}
+
+/**
+ * Can this platform deliver a given media block kind via ManyChat's sendContent
+ * API? e.g. audio/video are Messenger/Telegram-only; Instagram is image-only.
+ * A follow-up "link" asset is not a media block — send it as text, not here.
+ */
+export function canSendMediaKind(v: unknown, kind: MediaBlockKind): boolean {
+  return isPlatform(v) ? PLATFORM_META[v].outboundMedia.includes(kind) : false;
 }

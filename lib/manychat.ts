@@ -17,7 +17,14 @@
 import { createHash, timingSafeEqual } from "crypto";
 import { sanitizeReply } from "./sanitize";
 import { decryptSecret } from "./crypto";
-import { type Platform, PLATFORM_META, DEFAULT_PLATFORM } from "./platforms";
+import {
+  type Platform,
+  type MediaBlockKind,
+  PLATFORM_META,
+  DEFAULT_PLATFORM,
+  canSendMediaKind,
+} from "./platforms";
+import type { FollowupAssetKind } from "./types";
 
 /** Thrown when a chatbot's ManyChat API key can't be resolved. */
 export class ManychatKeyError extends Error {
@@ -117,7 +124,10 @@ const MAX_BUTTONS = 3;
 const MAX_BUTTON_CAPTION = 20;
 
 export type ManyChatButton = { type: "url"; caption: string; url: string };
-export type ManyChatOutMessage = { type: "text"; text: string; buttons?: ManyChatButton[] };
+export type ManyChatTextMessage = { type: "text"; text: string; buttons?: ManyChatButton[] };
+/** A media bubble (image/video/audio/file) — ManyChat fetches `url` at send time. */
+export type ManyChatMediaMessage = { type: MediaBlockKind; url: string };
+export type ManyChatOutMessage = ManyChatTextMessage | ManyChatMediaMessage;
 
 const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
 const BARE_URL_RE = /https?:\/\/[^\s)]+/g;
@@ -133,7 +143,7 @@ function clampCaption(s: string): string {
  * the label; bare URLs are removed from the text and become an "Open link" button.
  * No links → plain text message. Pure + unit-tested.
  */
-export function messageWithLinkButtons(text: string): ManyChatOutMessage {
+export function messageWithLinkButtons(text: string): ManyChatTextMessage {
   const buttons: ManyChatButton[] = [];
   let out = text.replace(MD_LINK_RE, (_m, label: string, url: string) => {
     if (buttons.length < MAX_BUTTONS) buttons.push({ type: "url", caption: clampCaption(label) || "Open link", url });
@@ -153,63 +163,53 @@ export function messageWithLinkButtons(text: string): ManyChatOutMessage {
  * (Facebook) links become URL buttons; on Instagram and other channels the raw
  * (clickable) URL stays in the text.
  */
-export function buildOutboundMessages(texts: string[], platform?: Platform): ManyChatOutMessage[] {
+export function buildOutboundMessages(texts: string[], platform?: Platform): ManyChatTextMessage[] {
   if (!buttonsSupported(platform)) return texts.map((t) => ({ type: "text", text: t }));
   return texts.map(messageWithLinkButtons);
 }
 
-export async function sendManychatMessage(opts: {
-  subscriberId: string;
-  /**
-   * Reply text. Pass a string for a single bubble, or an array to send several
-   * separate DM bubbles in one call (each element renders as its own message).
-   */
-  text: string | string[];
-  /** Instagram message tag for sending outside the 24h window (e.g. "HUMAN_AGENT"). */
-  messageTag?: string;
-  /** ManyChat API key to authenticate the send (resolved per-chatbot by the caller). */
-  apiKey: string;
-  /** Channel the contact is on; sets ManyChat's content.type. Defaults to Instagram. */
-  platform?: Platform;
-}) {
-  const { apiKey } = opts;
-  // content.type is the ManyChat channel key (instagram/messenger/whatsapp/telegram).
+/** Resolve a platform's ManyChat content.type, throwing for no-send-API channels. */
+function requireContentType(platform?: Platform): string {
   // Channels with no send API (manychatType=null, e.g. TikTok) must never reach here.
-  const contentType = PLATFORM_META[opts.platform ?? DEFAULT_PLATFORM].manychatType;
+  const contentType = PLATFORM_META[platform ?? DEFAULT_PLATFORM].manychatType;
   if (!contentType) {
     throw new Error(
-      `ManyChat has no send API for platform "${opts.platform}" — deliver via the webhook response instead.`
+      `ManyChat has no send API for platform "${platform}" — deliver via the webhook response instead.`
     );
   }
+  return contentType;
+}
 
-  // Normalize to a list of non-empty bubbles. Nothing to send → no-op (also
-  // avoids posting a blank message when an empty string is passed).
-  // sanitizeReply is the final guaranteed backstop: every outbound bubble from
-  // any path (AI reply, canned ack, dedup echo) is stripped of em/en dashes
-  // here so none ever reaches Instagram.
-  const texts = (Array.isArray(opts.text) ? opts.text : [opts.text])
-    .map((t) => sanitizeReply((t ?? "").trim()))
-    .filter(Boolean);
-  if (texts.length === 0) return null;
-
+/**
+ * Low-level: POST a prebuilt `messages[]` to ManyChat's Send Content API with
+ * retries. Shared by the text (sendManychatMessage) and media (sendManychatMedia)
+ * senders so both get identical transient-failure handling.
+ *
+ * Retry transient failures (429 / 5xx / network) so a ManyChat blip doesn't
+ * silently drop a reply that's already saved to the DB. Other 4xx errors
+ * (invalid subscriber, closed messaging window) are permanent — throw
+ * immediately. Worst case 3×8s attempts + 1s+3s backoff = 28s, which fits the
+ * webhook's 60s budget after the AI call. Trade-off: if ManyChat accepts a
+ * request but our 8s abort fires before the response arrives, the retry
+ * double-delivers — a doubled reply beats a dropped one.
+ */
+async function postSendContent(opts: {
+  subscriberId: string;
+  messages: ManyChatOutMessage[];
+  contentType: string;
+  apiKey: string;
+  /** ManyChat message_tag for out-of-window sends (e.g. HUMAN_AGENT). Omitted = standard in-window send. */
+  messageTag?: string;
+}) {
   const body = JSON.stringify({
     subscriber_id: opts.subscriberId,
     data: {
       version: "v2",
-      content: {
-        type: contentType,
-        messages: buildOutboundMessages(texts, opts.platform),
-      },
+      content: { type: opts.contentType, messages: opts.messages },
     },
+    ...(opts.messageTag ? { message_tag: opts.messageTag } : {}),
   });
 
-  // Retry transient failures (429 / 5xx / network) so a ManyChat blip doesn't
-  // silently drop a reply that's already saved to the DB. Other 4xx errors
-  // (invalid subscriber, closed messaging window) are permanent — throw
-  // immediately. Worst case 3×8s attempts + 1s+3s backoff = 28s, which fits
-  // the webhook's 60s budget after the AI call. Trade-off: if ManyChat accepts
-  // a request but our 8s abort fires before the response arrives, the retry
-  // double-delivers — a doubled reply beats a dropped one.
   const ATTEMPTS = 3;
   const BACKOFF_MS = [1_000, 3_000];
   const ATTEMPT_TIMEOUT_MS = 8_000;
@@ -221,7 +221,7 @@ export async function sendManychatMessage(opts: {
       const res = await fetch("https://api.manychat.com/fb/sending/sendContent", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${opts.apiKey}`,
           "Content-Type": "application/json",
         },
         body,
@@ -252,6 +252,104 @@ export async function sendManychatMessage(opts: {
     if (attempt < ATTEMPTS - 1) await new Promise((r) => setTimeout(r, delayMs));
   }
   throw lastError;
+}
+
+export async function sendManychatMessage(opts: {
+  subscriberId: string;
+  /**
+   * Reply text. Pass a string for a single bubble, or an array to send several
+   * separate DM bubbles in one call (each element renders as its own message).
+   */
+  text: string | string[];
+  /** Instagram message tag for sending outside the 24h window (e.g. "HUMAN_AGENT"). */
+  messageTag?: string;
+  /** ManyChat API key to authenticate the send (resolved per-chatbot by the caller). */
+  apiKey: string;
+  /** Channel the contact is on; sets ManyChat's content.type. Defaults to Instagram. */
+  platform?: Platform;
+}) {
+  const contentType = requireContentType(opts.platform);
+
+  // Normalize to a list of non-empty bubbles. Nothing to send → no-op (also
+  // avoids posting a blank message when an empty string is passed).
+  // sanitizeReply is the final guaranteed backstop: every outbound bubble from
+  // any path (AI reply, canned ack, dedup echo) is stripped of em/en dashes
+  // here so none ever reaches Instagram.
+  const texts = (Array.isArray(opts.text) ? opts.text : [opts.text])
+    .map((t) => sanitizeReply((t ?? "").trim()))
+    .filter(Boolean);
+  if (texts.length === 0) return null;
+
+  return postSendContent({
+    subscriberId: opts.subscriberId,
+    messages: buildOutboundMessages(texts, opts.platform),
+    contentType,
+    apiKey: opts.apiKey,
+    messageTag: opts.messageTag,
+  });
+}
+
+/** A media/link asset to push: its kind + a public HTTPS URL. */
+export interface OutboundAsset {
+  kind: FollowupAssetKind; // image | video | audio | link
+  url: string;
+}
+
+/**
+ * Send media assets (+ an optional text caption) as one ManyChat message.
+ *
+ * Channel-aware: image/video/audio assets become native media bubbles ONLY on
+ * channels that accept them (Instagram = image only; Messenger/Telegram = all).
+ * An unsupported media asset (e.g. a voice note on Instagram) is dropped — the
+ * text caption still delivers so nothing is lost. `link` assets are appended to
+ * the caption as a raw URL (sent as text on every channel). Returns null when
+ * there is nothing deliverable (no supported media and no text).
+ *
+ * Ordering: the caption bubble is sent first, then the media bubble(s), so a
+ * "sending you a quick video 👇" caption introduces the asset.
+ */
+export async function sendManychatMedia(opts: {
+  subscriberId: string;
+  assets: OutboundAsset[];
+  text?: string | null;
+  messageTag?: string;
+  apiKey: string;
+  platform?: Platform;
+}): Promise<unknown> {
+  const contentType = requireContentType(opts.platform);
+  const platform = opts.platform ?? DEFAULT_PLATFORM;
+
+  const mediaBlocks: ManyChatMediaMessage[] = [];
+  const linkUrls: string[] = [];
+  for (const asset of opts.assets) {
+    if (!asset?.url) continue;
+    if (asset.kind === "link") {
+      linkUrls.push(asset.url);
+    } else if (canSendMediaKind(platform, asset.kind)) {
+      // image/video/audio -> native bubble (kind names map 1:1 to block types)
+      mediaBlocks.push({ type: asset.kind, url: asset.url });
+    }
+    // else: unsupported media on this channel -> dropped; caption carries it
+  }
+
+  // Caption + any link assets fold into one text bubble (links kept raw so they
+  // stay clickable on channels that render them; IG may strip them — accepted).
+  const captionParts = [sanitizeReply((opts.text ?? "").trim()), ...linkUrls].filter(Boolean);
+  const caption = captionParts.join("\n").trim();
+
+  if (mediaBlocks.length === 0 && !caption) return null;
+
+  const messages: ManyChatOutMessage[] = [];
+  if (caption) messages.push(...buildOutboundMessages([caption], platform));
+  messages.push(...mediaBlocks);
+
+  return postSendContent({
+    subscriberId: opts.subscriberId,
+    messages,
+    contentType,
+    apiKey: opts.apiKey,
+    messageTag: opts.messageTag,
+  });
 }
 
 // ---------------------------------------------------------------------------

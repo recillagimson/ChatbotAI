@@ -5,9 +5,11 @@ import {
   sendFollowup,
   IG_WINDOW_DAYS,
   FOLLOWUP_ENABLED,
+  RN_ENABLED,
 } from "@/lib/followup";
 import { resolveManychatApiKey } from "@/lib/manychat";
-import type { Chatbot, Conversation } from "@/lib/types";
+import { fetchFollowupAssets, resolveAssetByKey } from "@/lib/followup-assets";
+import type { Chatbot, Conversation, FollowupAsset } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,9 +23,9 @@ type FollowupChatbotRow = Pick<
   | "user_id"
   | "auto_followup_enabled"
   | "auto_followup_days"
-  | "auto_followup_repeat"
-  | "auto_followup_max"
   | "auto_followup_template"
+  | "auto_followup_steps"
+  | "auto_followup_loop_last"
   | "manychat_api_key_enc"
 >;
 
@@ -37,6 +39,9 @@ type CandidateRow = Pick<
   | "last_message_at"
   | "last_followup_at"
   | "followup_count"
+  | "followup_step_index"
+  | "confirmed_at"
+  | "rn_opt_in_at"
 > & { chatbots: FollowupChatbotRow };
 
 function bump(map: Record<string, number>, key: string) {
@@ -46,24 +51,22 @@ function bump(map: Record<string, number>, key: string) {
 async function run() {
   const supabase = createServiceClient();
   const now = new Date();
-  const sevenDaysAgo = new Date(
-    now.getTime() - IG_WINDOW_DAYS * DAY_MS
-  ).toISOString();
-  const oneDayAgo = new Date(now.getTime() - DAY_MS).toISOString();
+  // Coarse lookback: any active, unconfirmed conversation whose last inbound is
+  // within the widest window we might still send in (IG's 7-day cap; Telegram
+  // has no window but a 7-day scan is a sane bound). evaluateFollowup() does the
+  // exact per-step, per-platform, 24h-standard-window decision.
+  const lookbackStart = new Date(now.getTime() - IG_WINDOW_DAYS * DAY_MS).toISOString();
 
-  // Coarse candidates: active conversations whose last inbound is 1–7 days old
-  // and whose chatbot has follow-up enabled. evaluateFollowup() does the exact
-  // per-row decision (days elapsed, repeat cap, window).
   const { data, error } = await supabase
     .from("conversations")
     .select(
-      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, " +
-        "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_repeat, auto_followup_max, auto_followup_template, manychat_api_key_enc)"
+      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, rn_opt_in_at, " +
+        "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_template, auto_followup_steps, auto_followup_loop_last, manychat_api_key_enc)"
     )
     .eq("status", "active")
+    .is("confirmed_at", null)
     .eq("chatbots.auto_followup_enabled", true)
-    .gte("last_message_at", sevenDaysAgo)
-    .lte("last_message_at", oneDayAgo)
+    .gte("last_message_at", lookbackStart)
     .limit(500);
 
   if (error) {
@@ -86,6 +89,17 @@ async function run() {
     }
   }
 
+  // Per-chatbot asset cache: only fetch when a due step actually references one.
+  const assetCache = new Map<string, FollowupAsset[]>();
+  const assetsFor = async (chatbotId: string): Promise<FollowupAsset[]> => {
+    let cached = assetCache.get(chatbotId);
+    if (!cached) {
+      cached = await fetchFollowupAssets(supabase, chatbotId);
+      assetCache.set(chatbotId, cached);
+    }
+    return cached;
+  };
+
   let sent = 0;
   let skipped = 0;
   let errors = 0;
@@ -98,8 +112,8 @@ async function run() {
       bump(reasons, "sub_inactive");
       continue;
     }
-    const decision = evaluateFollowup(cb, row, now);
-    if (!decision.due) {
+    const decision = evaluateFollowup(cb, row, now, { rnEnabled: RN_ENABLED });
+    if (!decision.due || !decision.step) {
       skipped++;
       bump(reasons, decision.reason);
       continue;
@@ -112,9 +126,54 @@ async function run() {
       bump(reasons, "manychat_key_unavailable");
       continue;
     }
+    // Resolve the step's asset (if any) from the chatbot's library. A stale key
+    // (asset deleted after the step was saved) degrades to text-only; log it so
+    // the owner-facing diagnostics can surface the broken step.
+    let asset: FollowupAsset | null = null;
+    if (decision.step.asset_key) {
+      asset = resolveAssetByKey(await assetsFor(cb.id), decision.step.asset_key);
+      if (!asset) {
+        bump(reasons, "asset_missing");
+        await supabase
+          .from("usage_log")
+          .insert({
+            user_id: cb.user_id,
+            chatbot_id: cb.id,
+            event_type: "followup_asset_missing",
+            tokens_used: 0,
+          })
+          .then(
+            () => {},
+            () => {}
+          );
+      }
+    }
     try {
-      await sendFollowup(supabase, row, cb.auto_followup_template!, now, apiKey);
-      sent++;
+      const content = await sendFollowup(
+        supabase,
+        row,
+        decision.step,
+        asset,
+        now,
+        apiKey,
+        decision.nextStepIndex ?? (row.followup_step_index ?? 0) + 1,
+        {
+          // Past the standard 24h window (RN path only): IG accepts HUMAN_AGENT;
+          // other channels take no tag (Telegram has no window, Messenger RN
+          // delivery runs through the RN topic flow).
+          messageTag:
+            decision.outOfWindow && row.platform === "instagram"
+              ? "HUMAN_AGENT"
+              : undefined,
+        }
+      );
+      if (content === null) {
+        // Another concurrent run claimed this conversation first — not an error.
+        skipped++;
+        bump(reasons, "claim_lost");
+      } else {
+        sent++;
+      }
     } catch (err) {
       errors++;
       console.error("[cron-followups] send failed for conversation", row.id, err);
@@ -136,11 +195,8 @@ export async function GET(request: NextRequest) {
   if (!authorized(request)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  // Parked: Instagram blocks sends >24h after the contact's last message, so
-  // there's no point scanning/sending until the Recurring Notifications opt-in
-  // exists. Flip FOLLOWUP_ENABLED in lib/followup.ts to activate.
   if (!FOLLOWUP_ENABLED) {
-    return NextResponse.json({ ok: true, disabled: "followup_feature_parked" });
+    return NextResponse.json({ ok: true, disabled: "followup_feature_disabled" });
   }
   const result = await run();
   return NextResponse.json(result, { status: result.ok ? 200 : 500 });

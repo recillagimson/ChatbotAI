@@ -3,8 +3,30 @@ import type { Attachment } from "./types";
 
 export const UPLOAD_BUCKET = "request-uploads";
 
+/** PUBLIC bucket for follow-up media (ManyChat fetches these by public URL). */
+export const FOLLOWUP_BUCKET = "followup-assets";
+
 /** Image media types we allow into Claude (must match the upload validator). */
 export const CLAUDE_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+
+/** The public URL for an object in the public followup-assets bucket. */
+export function publicAssetUrl(supabase: SupabaseClient, path: string): string {
+  return supabase.storage.from(FOLLOWUP_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+/**
+ * Remove a follow-up asset object from the public bucket. Throws on failure —
+ * supabase-js remove() reports errors in its return value rather than throwing,
+ * so callers relying on try/catch need this check. Removing an already-missing
+ * object is NOT an error (retries converge).
+ * (Uploads to this bucket happen directly from the browser — see
+ * followup-asset-manager.tsx — never through the server, because Vercel's
+ * ~4.5 MB request-body cap is far below ManyChat's 25 MB media cap.)
+ */
+export async function removePublicAsset(supabase: SupabaseClient, path: string): Promise<void> {
+  const { error } = await supabase.storage.from(FOLLOWUP_BUCKET).remove([path]);
+  if (error) throw new Error(`storage remove failed: ${error.message}`);
+}
 
 /** Store one File under {userId}/{scope}/{uuid}-{safeName}. RLS enforces the folder. */
 export async function uploadAttachment(

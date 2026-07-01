@@ -1,3 +1,9 @@
+/**
+ * @deprecated DEAD CODE — superseded by followup-sequence-form.tsx (the
+ * step-based rich-media drip). No longer imported anywhere; kept only until the
+ * next cleanup pass. Do not wire this back in: it edits the legacy day-scale
+ * auto_followup_days/repeat/max fields that the engine now treats as a fallback.
+ */
 "use client";
 
 import { useState, useTransition } from "react";

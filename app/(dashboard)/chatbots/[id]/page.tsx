@@ -3,12 +3,13 @@ import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChatbotSettingsForm } from "@/components/dashboard/chatbot-settings-form";
+import { FollowupSequenceForm } from "@/components/dashboard/followup-sequence-form";
+import { FollowupAssetManager } from "@/components/dashboard/followup-asset-manager";
 import { ChatbotEditForm } from "@/components/dashboard/chatbot-edit-form";
 import { ManychatKeyField } from "@/components/dashboard/manychat-key-field";
 import { WebhookSecretField } from "@/components/dashboard/webhook-secret-field";
 import { FOLLOWUP_ENABLED } from "@/lib/followup";
-import type { Chatbot } from "@/lib/types";
+import type { Chatbot, FollowupAsset } from "@/lib/types";
 import Link from "next/link";
 
 export default async function ChatbotDetailPage({
@@ -42,6 +43,13 @@ export default async function ChatbotDetailPage({
     .from("conversations")
     .select("*", { count: "exact", head: true })
     .eq("chatbot_id", id);
+
+  const { data: followupAssets } = await supabase
+    .from("followup_assets")
+    .select("id, chatbot_id, user_id, key, label, description, kind, storage_path, url, mime, created_at")
+    .eq("chatbot_id", id)
+    .order("created_at", { ascending: true });
+  const assets = (followupAssets ?? []) as FollowupAsset[];
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const webhookUrl = `${appUrl}/api/webhooks/manychat`;
@@ -99,19 +107,38 @@ export default async function ChatbotDetailPage({
 
       <Card className="mb-6">
         <CardHeader>
+          <CardTitle>Follow-up assets</CardTitle>
+          <CardDescription>
+            Pictures, voice notes, videos, and links you can attach to follow-up steps
+            or let the AI send during a chat.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FollowupAssetManager
+            chatbotId={chatbot.id}
+            userId={user!.id}
+            assets={assets}
+            usedKeys={(safeChatbot.auto_followup_steps ?? [])
+              .map((s) => s.asset_key ?? "")
+              .filter(Boolean)}
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
           <CardTitle>Auto follow-up</CardTitle>
           <CardDescription>
-            Automatically message contacts who stop replying.
+            A timed sequence that re-engages contacts who stop replying, escalating with
+            media until they convert.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {FOLLOWUP_ENABLED ? (
-            <ChatbotSettingsForm chatbot={safeChatbot} />
+            <FollowupSequenceForm chatbot={safeChatbot} assets={assets} />
           ) : (
             <p className="text-sm text-muted-foreground">
-              Coming soon. Instagram only lets us message a contact more than 24
-              hours after their last message once they&apos;ve opted in to
-              notifications — we&apos;re adding that opt-in next.
+              Auto follow-up is currently disabled for this deployment.
             </p>
           )}
         </CardContent>

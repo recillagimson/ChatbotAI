@@ -67,7 +67,8 @@ export function buildSystemPrompt(
   chatbot: Chatbot,
   kbBlock: string,
   memorySummary?: string | null,
-  returning?: boolean
+  returning?: boolean,
+  mediaCatalog?: string | null
 ): string {
   const persona = chatbot.persona_section?.trim() || "";
   const offers = chatbot.offers_section?.trim() || "";
@@ -90,6 +91,14 @@ export function buildSystemPrompt(
     ? `CONTINUING CONVERSATION — there are earlier messages with this person (see the history). Do NOT greet, introduce yourself, ask if they saw your reel, or re-ask their goal or anything they've already told you. Do NOT repeat a link or info you already sent; if they ask again, just resend it briefly. Pick up naturally from the last message. Only after a long silence is a short "welcome back" okay — never restart the intro.`
     : "";
 
+  // Sendable media — when the bot has a follow-up asset library and AI media is
+  // enabled, tell the model it can attach a saved asset by emitting a directive.
+  // The webhook (lib/ai-media.ts) parses the directive out and delivers the asset.
+  const catalog = mediaCatalog?.trim();
+  const mediaBlock = catalog
+    ? `SENDABLE MEDIA — you may attach ONE of these saved assets to your reply by writing, on its OWN line, exactly: [[SEND_ASSET: key]] (use the exact key shown). Send one only when it genuinely helps (they asked for proof, a demo, pricing, or a link). Never invent a key that isn't listed, and keep your normal text reply too — the asset is delivered alongside it.\nAVAILABLE ASSETS:\n${catalog}`
+    : "";
+
   // SECTION MODE — the chatbot is authored as three editable sections. The
   // Personality section leads as identity VERBATIM (no generic preamble bolted
   // on top of a hand-written persona); offers/rebuttals follow when present;
@@ -104,6 +113,7 @@ export function buildSystemPrompt(
     if (offers) parts.push(`OFFERS, SERVICES & LINKS\n${offers}`);
     if (rebuttals) parts.push(`REBUTTALS & FAQ HANDLING\n${rebuttals}`);
     if (memoryBlock) parts.push(memoryBlock);
+    if (mediaBlock) parts.push(mediaBlock);
     parts.push(
       `KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)\n${kbBlock}`
     );
@@ -118,7 +128,7 @@ export function buildSystemPrompt(
   // bubble-split note.
   if (chatbot.system_prompt && chatbot.system_prompt.trim()) {
     return `${chatbot.system_prompt.trim()}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
 ${kbBlock}
 
@@ -134,7 +144,7 @@ ${chatbot.business_description || "(none provided)"}
 
 TONE
 ${TONE_GUIDES[chatbot.tone]}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)
 ${kbBlock}
 
@@ -152,6 +162,9 @@ export async function generateReply(opts: {
   // Rolling summary of earlier turns (older than the verbatim window); injected
   // as known context so the bot remembers long conversations.
   memorySummary?: string | null;
+  // Catalog of sendable follow-up assets (key/kind/description, one per line) so
+  // the model can emit a [[SEND_ASSET: key]] directive. Empty/absent = no media.
+  mediaCatalog?: string | null;
 }) {
   // Continuing conversation if there's any prior history — drives the
   // continuity directive so the bot doesn't restart the intro or re-ask.
@@ -160,7 +173,8 @@ export async function generateReply(opts: {
     opts.chatbot,
     opts.kbBlock,
     opts.memorySummary,
-    returning
+    returning,
+    opts.mediaCatalog
   );
   const images = opts.images ?? [];
 

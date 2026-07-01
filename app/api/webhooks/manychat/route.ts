@@ -5,13 +5,22 @@ import {
   verifyManychatSecret,
   sendManychatMessage,
   sendManychatMessagePaced,
+  sendManychatMedia,
   pacingEnabled,
   resolveManychatApiKey,
   ManychatKeyError,
+  type OutboundAsset,
 } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
 import { splitIntoMessages } from "@/lib/message-split";
 import { buildKbBlock } from "@/lib/retrieval";
+import { parseAssetDirectives } from "@/lib/ai-media";
+import {
+  fetchFollowupAssets,
+  resolveAssetByKey,
+  buildAssetCatalogBlock,
+} from "@/lib/followup-assets";
+import { detectLeadConfirmed } from "@/lib/confirm-detect";
 import {
   checkRateLimit,
   checkMonthlyCap,
@@ -63,7 +72,20 @@ const BodySchema = z.object({
   audio_url: z.string().optional().nullable(),
   video_url: z.string().optional().nullable(),
   file_url: z.string().optional().nullable(),
+  // Recurring Notifications opt-in (Phase 6). A ManyChat RN opt-in flow sends a
+  // truthy `rn_opt_in` (+ optional topic id) when the contact subscribes to
+  // multi-day follow-ups. Captured onto the conversation for the cron.
+  rn_opt_in: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
+  rn_topic_id: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
 });
+
+/** Truthy check for the RN opt-in flag (accepts "true"/"1"/1/true). */
+function isTruthyFlag(v: unknown): boolean {
+  if (v === true) return true;
+  if (typeof v === "number") return v === 1;
+  if (typeof v === "string") return ["true", "1", "yes", "on"].includes(v.trim().toLowerCase());
+  return false;
+}
 
 /**
  * Format a reply in ManyChat's External Request response schema. ManyChat
@@ -288,11 +310,30 @@ export async function POST(request: NextRequest) {
         // Heal old rows too: replace a stored placeholder/empty with a real value.
         contact_name: cleanContactField(existing.contact_name) ?? displayName,
         contact_username: cleanContactField(existing.contact_username) ?? username,
-        // The contact replied — re-arm auto follow-up for the next silence.
+        // The contact replied — re-arm the auto follow-up drip from step 1 for
+        // the next silence (a reply reopens the 24h window).
         followup_count: 0,
+        followup_step_index: 0,
         last_followup_at: null,
       })
       .eq("id", existing.id);
+  }
+
+  // 4a. Recurring Notifications opt-in (Phase 6): if this inbound carries the RN
+  // opt-in flag, stamp it on the conversation so the cron can follow up past the
+  // 24h window. Best-effort; never blocks the reply.
+  if (conversationId && isTruthyFlag(body.rn_opt_in)) {
+    await supabase
+      .from("conversations")
+      .update({
+        rn_opt_in_at: new Date().toISOString(),
+        rn_topic_id: body.rn_topic_id ?? null,
+      })
+      .eq("id", conversationId)
+      .then(
+        () => {},
+        () => {}
+      );
   }
 
   // 4.5. Nothing to act on (no text and no media): ack without a reply.
@@ -368,7 +409,7 @@ export async function POST(request: NextRequest) {
 
   // 7–9. Generate the AI reply, persist it + usage, and update Redis side-state.
   // Returns the reply text. Shared by both delivery paths below.
-  const generateAndPersistReply = async (): Promise<string> => {
+  const generateAndPersistReply = async (): Promise<{ text: string; assets: OutboundAsset[] }> => {
     // 6e. Process any inbound media (network): transcribe audio/video, read
     // documents, encode images for vision. Runs here (background for push
     // channels) so the fast-ack isn't blocked by downloads/transcription.
@@ -423,6 +464,14 @@ export async function POST(request: NextRequest) {
     // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
     const priorHistory = (history ?? []).slice(1).reverse();
 
+    // 7a. Follow-up media library — only when the bot may send AI-triggered media.
+    // Fetched once here so the same list feeds the system-prompt catalog AND the
+    // directive resolution below.
+    const assetLib = chatbot.ai_media_enabled
+      ? await fetchFollowupAssets(supabase, chatbot.id)
+      : [];
+    const mediaCatalog = assetLib.length ? buildAssetCatalogBlock(assetLib) : "";
+
     // 8. Resolve KB (adaptive: full-context or vector retrieval) then generate.
     const kb = await buildKbBlock({
       supabase,
@@ -441,6 +490,7 @@ export async function POST(request: NextRequest) {
         userMessage: effectiveMessage,
         images,
         memorySummary: existing?.memory_summary ?? null,
+        mediaCatalog,
       });
       if (text) {
         replyText = text;
@@ -450,18 +500,56 @@ export async function POST(request: NextRequest) {
       console.error("[manychat-webhook] AI error", err);
     }
 
-    // 9. Persist outbound + usage
+    // 8a. AI-triggered media: pull [[SEND_ASSET: key]] directives out of the reply
+    // and resolve them to library assets. Capped per reply: one asset is the norm,
+    // three is plenty — a reply spamming the whole library is never desirable, and
+    // the cap keeps a single sendContent call far under ManyChat's 10-message limit.
+    const MAX_AI_ASSETS = 3;
+    const assets: OutboundAsset[] = [];
+    const assetRows: { content: string; media_url: string; media_type: string | null }[] = [];
+    if (chatbot.ai_media_enabled) {
+      const parsed = parseAssetDirectives(replyText);
+      if (parsed.assetKeys.length) {
+        for (const key of parsed.assetKeys.slice(0, MAX_AI_ASSETS)) {
+          const asset = resolveAssetByKey(assetLib, key);
+          if (!asset?.url) continue;
+          assets.push({ kind: asset.kind, url: asset.url });
+          // media_type stays a real MIME (or null) — the inbox renderer matches
+          // on startsWith("image/"|"audio/"|"video/").
+          assetRows.push({
+            content: `(sent ${asset.kind}: ${asset.key})`,
+            media_url: asset.url,
+            media_type: asset.mime ?? null,
+          });
+        }
+        replyText = parsed.cleanText;
+      }
+    }
+
+    // 9. Persist outbound + usage. The text row is inserted BEFORE the asset rows
+    // so inbox chronology matches delivery order (text bubbles, then media).
     console.log(
       `[manychat-webhook] kb mode=${kb.mode} chunks=${kb.chunks} topSim=${kb.topSimilarity ?? "-"} bot=${chatbot.id} platform=${platform}`
     );
-    await Promise.all([
-      supabase.from("messages").insert({
+    if (replyText) {
+      await supabase.from("messages").insert({
         conversation_id: conversationId!,
         role: "assistant",
         content: replyText,
         ai_generated: true,
         tokens_used: tokens,
-      }),
+      });
+    }
+    for (const row of assetRows) {
+      await supabase.from("messages").insert({
+        conversation_id: conversationId!,
+        role: "assistant",
+        ai_generated: true,
+        tokens_used: 0,
+        ...row,
+      });
+    }
+    await Promise.all([
       supabase.from("usage_log").insert({
         user_id: chatbot.user_id,
         chatbot_id: chatbot.id,
@@ -477,12 +565,40 @@ export async function POST(request: NextRequest) {
     ]);
 
     // Redis side-state: cache for dedup echo + bump monthly counter (best-effort).
+    // A media-only reply has no text to echo — skip the cache (the dedup gate then
+    // falls back to its canned ack for an instant repeat, which is acceptable).
     await Promise.all([
-      cacheLastReply(chatbot.id, body.subscriber_id, replyText),
+      replyText
+        ? cacheLastReply(chatbot.id, body.subscriber_id, replyText)
+        : Promise.resolve(),
       incrementMonthlyCount(chatbot.id),
     ]);
 
-    return replyText;
+    // 9a. Auto-confirm detection (best-effort): if the lead clearly converted, stop
+    // the drip. Only for bots running a follow-up sequence, only when not already
+    // confirmed, and only on push channels (where this runs in the background) so
+    // it never adds latency to a synchronous response-channel reply. Never blocks.
+    if (chatbot.auto_followup_enabled && !existing?.confirmed_at && canPushPlatform(platform)) {
+      try {
+        const confirmed = await detectLeadConfirmed({
+          userMessage: effectiveMessage,
+          // A media-only reply has no text; give the classifier a stand-in so a
+          // "just paid!" answered with media still gets detected.
+          botReply: replyText || (assets.length ? "(sent media)" : ""),
+        });
+        if (confirmed) {
+          await supabase
+            .from("conversations")
+            .update({ confirmed_at: new Date().toISOString(), confirmed_by: "ai" })
+            .eq("id", conversationId!)
+            .is("confirmed_at", null);
+        }
+      } catch (err) {
+        console.error("[manychat-webhook] confirm-detect failed", err);
+      }
+    }
+
+    return { text: replyText, assets };
   };
 
   // 10. Deliver. Two paths depending on whether the channel has a ManyChat send API:
@@ -492,7 +608,7 @@ export async function POST(request: NextRequest) {
     // never trips. Delivery is via the Send Content API on the right channel.
     after(async () => {
       try {
-        const replyText = await generateAndPersistReply();
+        const { text: replyText, assets } = await generateAndPersistReply();
         const bubbles = splitIntoMessages(replyText);
         try {
           if (pacingEnabled() && bubbles.length > 0) {
@@ -505,8 +621,13 @@ export async function POST(request: NextRequest) {
               apiKey,
               platform,
             });
-          } else {
+          } else if (bubbles.length > 0) {
             await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles, apiKey, platform });
+          }
+          // Then push any AI-triggered media assets (channel-aware; unsupported
+          // media on this channel is dropped inside sendManychatMedia).
+          if (assets.length > 0) {
+            await sendManychatMedia({ subscriberId: body.subscriber_id, assets, apiKey, platform });
           }
         } catch (err) {
           console.error("[manychat-webhook] push send failed", err);
@@ -528,9 +649,12 @@ export async function POST(request: NextRequest) {
   // shares the ~10s timeout risk we avoid for push channels, but TikTok replies are
   // short. Auto-upgrades to the push path once PLATFORM_META gives the channel a
   // sendContent type (canPush=true).
+  // Media assets can't be pushed on response channels (no send API), so only the
+  // text is returned here; AI media is a push-channel feature.
   let replyText = "Thanks for the message, a teammate will follow up shortly.";
   try {
-    replyText = await generateAndPersistReply();
+    const result = await generateAndPersistReply();
+    replyText = result.text;
   } catch (err) {
     console.error("[manychat-webhook] sync processing failed", err);
   }

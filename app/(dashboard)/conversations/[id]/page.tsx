@@ -89,25 +89,33 @@ export default async function ConversationDetailPage({
               : ""}
           </p>
         </div>
-        <Badge
-          variant={
-            conversation.status === "active"
-              ? "success"
-              : conversation.status === "ai_paused"
-                ? "warning"
-                : "secondary"
-          }
-        >
-          {conversation.status === "ai_paused"
-            ? "AI paused"
-            : conversation.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {conversation.confirmed_at && (
+            <Badge variant="success">
+              Confirmed ✓ ({conversation.confirmed_by === "ai" ? "AI" : "manual"})
+            </Badge>
+          )}
+          <Badge
+            variant={
+              conversation.status === "active"
+                ? "success"
+                : conversation.status === "ai_paused"
+                  ? "warning"
+                  : "secondary"
+            }
+          >
+            {conversation.status === "ai_paused"
+              ? "AI paused"
+              : conversation.status}
+          </Badge>
+        </div>
       </div>
 
       <div className="shrink-0">
         <ConversationActions
           conversationId={conversation.id}
           currentStatus={conversation.status}
+          confirmedAt={conversation.confirmed_at ?? null}
         />
       </div>
 

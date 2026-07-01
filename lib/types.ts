@@ -51,6 +51,33 @@ export interface Chatbot {
   auto_followup_repeat: boolean;
   auto_followup_max: number;
   auto_followup_template: string | null;
+  auto_followup_steps: FollowupStep[];   // ordered rich-media drip steps (JSONB)
+  auto_followup_loop_last: boolean;       // repeat the final step until confirmed
+  ai_media_enabled: boolean;              // allow the live AI to emit [[SEND_ASSET]] directives
+  created_at: string;
+}
+
+/** One step in a chatbot's auto follow-up drip sequence. */
+export interface FollowupStep {
+  delay_hours: number;         // hours after the previous send (or the contact's last message for step 1)
+  asset_key?: string | null;   // key of a FollowupAsset to send (null = text-only step)
+  text?: string | null;        // caption / message body; supports {{name}}. Always sent when present.
+}
+
+export type FollowupAssetKind = "image" | "video" | "audio" | "link";
+
+/** A reusable media/link asset in a chatbot's follow-up library. */
+export interface FollowupAsset {
+  id: string;
+  chatbot_id: string;
+  user_id: string;
+  key: string;                 // short handle referenced by steps + AI directives
+  label: string | null;
+  description: string | null;  // what it is / when to send (fed to the AI)
+  kind: FollowupAssetKind;
+  storage_path: string | null; // path in the followup-assets bucket (null for link)
+  url: string | null;          // public media URL, or external link (kind='link')
+  mime: string | null;
   created_at: string;
 }
 
@@ -79,6 +106,11 @@ export interface Conversation {
   last_message_at: string;
   last_followup_at: string | null;
   followup_count: number;
+  followup_step_index: number;       // next drip step to send (0-based)
+  confirmed_at: string | null;       // lead marked won (stops the drip); null = still open
+  confirmed_by: "manual" | "ai" | null;
+  rn_opt_in_at: string | null;       // Recurring Notifications opt-in (Phase 6, multi-day reach)
+  rn_topic_id: string | null;
   unread_count: number;
   memory_summary: string | null;     // rolling summary of turns older than the verbatim window
   memory_summary_at: string | null;  // created_at watermark of the newest message folded into the summary
