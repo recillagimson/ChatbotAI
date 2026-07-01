@@ -93,6 +93,56 @@ export function verifyManychatSecret(
  *    message, always inside Instagram's 24-hour standard messaging window, so
  *    no tag is needed (and ACCOUNT_UPDATE is a Messenger-only tag anyway).
  */
+// ---------------------------------------------------------------------------
+// Link → button conversion
+// ---------------------------------------------------------------------------
+// Raw links in an automated IG/Messenger DM look spammy and are often stripped.
+// Instead we render links as tappable URL buttons (ManyChat sendContent schema:
+// a text message with a `buttons` array of {type:"url", caption, url}). Handles
+// both markdown [label](url) and bare URLs. Platform limits: max 3 buttons per
+// message, button caption max ~20 chars. Toggle with LINK_BUTTONS_ENABLED=false.
+const LINK_BUTTONS_ENABLED = process.env.LINK_BUTTONS_ENABLED !== "false"; // default on
+const MAX_BUTTONS = 3;
+const MAX_BUTTON_CAPTION = 20;
+
+export type ManyChatButton = { type: "url"; caption: string; url: string };
+export type ManyChatOutMessage = { type: "text"; text: string; buttons?: ManyChatButton[] };
+
+const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+const BARE_URL_RE = /https?:\/\/[^\s)]+/g;
+
+function clampCaption(s: string): string {
+  const t = s.trim().replace(/\s+/g, " ");
+  return t.length > MAX_BUTTON_CAPTION ? t.slice(0, MAX_BUTTON_CAPTION).trim() : t;
+}
+
+/**
+ * Turn one reply bubble into a ManyChat message, converting links to URL buttons.
+ * Markdown `[label](url)` keeps its label inline and adds a button captioned with
+ * the label; bare URLs are removed from the text and become an "Open link" button.
+ * No links → plain text message. Pure + unit-tested.
+ */
+export function messageWithLinkButtons(text: string): ManyChatOutMessage {
+  const buttons: ManyChatButton[] = [];
+  let out = text.replace(MD_LINK_RE, (_m, label: string, url: string) => {
+    if (buttons.length < MAX_BUTTONS) buttons.push({ type: "url", caption: clampCaption(label) || "Open link", url });
+    return label; // keep the label inline so the sentence still reads
+  });
+  out = out.replace(BARE_URL_RE, (url) => {
+    if (buttons.length < MAX_BUTTONS) buttons.push({ type: "url", caption: "Open link", url });
+    return ""; // drop the raw URL from the text; the button carries it
+  });
+  if (buttons.length === 0) return { type: "text", text };
+  out = out.replace(/[ \t]{2,}/g, " ").replace(/ +\n/g, "\n").trim();
+  return { type: "text", text: out || "Here you go 👇", buttons };
+}
+
+/** Build the ManyChat `content.messages` array from reply bubbles. */
+export function buildOutboundMessages(texts: string[]): ManyChatOutMessage[] {
+  if (!LINK_BUTTONS_ENABLED) return texts.map((t) => ({ type: "text", text: t }));
+  return texts.map(messageWithLinkButtons);
+}
+
 export async function sendManychatMessage(opts: {
   subscriberId: string;
   /**
@@ -133,7 +183,7 @@ export async function sendManychatMessage(opts: {
       version: "v2",
       content: {
         type: contentType,
-        messages: texts.map((t) => ({ type: "text", text: t })),
+        messages: buildOutboundMessages(texts),
       },
     },
   });
