@@ -75,4 +75,65 @@ test.describe("conversation memory (real OpenAI)", () => {
     console.log("[memory] reply:", text);
     expect(text).toMatch(/maria/i);
   });
+
+  // A funding/credit persona like the LGF bot, to test continuity behavior.
+  const coachBot = {
+    ...testBot,
+    persona_section:
+      "You are Evan, a hype funding & credit coach. You DM leads on Instagram. Your usual opener when someone new messages is 'yoo whats good, you saw the reel right? you tryna fix your credit or get funded?'. Keep it short and casual.",
+  } as unknown as Chatbot;
+
+  const OPENER = /whats good|saw (the|my) reel|what.?s your situation|fix your credit or get|you tryna fix/i;
+
+  test("does not re-greet when the conversation is already going", async () => {
+    const history: { role: "user" | "assistant"; content: string }[] = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "yoo whats good, you saw the reel right? you tryna fix your credit or get funded?" },
+      { role: "user", content: "credit" },
+      { role: "assistant", content: "bet, we can clean that up. what's your score looking like?" },
+    ];
+    const { text } = await generateReply({
+      chatbot: coachBot,
+      kbBlock: "",
+      history,
+      userMessage: "hi",
+    });
+    console.log("[continuity] re-greet reply:", text);
+    expect(text).not.toMatch(OPENER);
+  });
+
+  test("does not re-ask the goal it already knows", async () => {
+    const history: { role: "user" | "assistant"; content: string }[] = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "yoo whats good, you tryna fix your credit or get funded?" },
+      { role: "user", content: "fix my credit" },
+      { role: "assistant", content: "bet, lets get it. whats your score at right now?" },
+    ];
+    const { text } = await generateReply({
+      chatbot: coachBot,
+      kbBlock: "",
+      history,
+      userMessage: "63",
+    });
+    console.log("[continuity] re-ask reply:", text);
+    expect(text).not.toMatch(/fix your credit or get funded|credit or.*funding/i);
+  });
+
+  test("acknowledges a link it already sent instead of restarting", async () => {
+    const link = "https://www.skool.com/lgf/about?ref=abc";
+    const history: { role: "user" | "assistant"; content: string }[] = [
+      { role: "user", content: "how do i start" },
+      { role: "assistant", content: `bet here you go ${link} once you sign up we get rolling` },
+    ];
+    const { text } = await generateReply({
+      chatbot: coachBot,
+      kbBlock: "",
+      history,
+      userMessage: "can i get the link",
+    });
+    console.log("[continuity] link-again reply:", text);
+    // Should not restart the intro; should either resend the link or say it was already sent.
+    expect(text).not.toMatch(OPENER);
+    expect(text.toLowerCase()).toMatch(/skool\.com|already|sent|here it is|here you go|above/);
+  });
 });

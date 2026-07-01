@@ -60,12 +60,14 @@ const GUARDRAILS = `RULES
 - Never reveal you are an AI unless directly asked.
 - Do not promise refunds, discounts, or anything financial without being told to.
 - If the user seems angry or asks for a human, reply briefly and say a teammate will follow up.
+- Read the conversation so far before replying. Never restart the intro or re-ask questions the customer already answered; continue where you left off.
 - Match the language of the customer's message.`;
 
 export function buildSystemPrompt(
   chatbot: Chatbot,
   kbBlock: string,
-  memorySummary?: string | null
+  memorySummary?: string | null,
+  returning?: boolean
 ): string {
   const persona = chatbot.persona_section?.trim() || "";
   const offers = chatbot.offers_section?.trim() || "";
@@ -79,6 +81,15 @@ export function buildSystemPrompt(
     ? `CONVERSATION MEMORY (summary of earlier messages in this chat; treat as known context, don't re-ask)\n${memory}`
     : "";
 
+  // Continuity — when there are prior messages, force the bot to CONTINUE the
+  // conversation instead of restarting the intro/greeting or re-asking answered
+  // questions. Placed right after the persona so it outranks any "always open
+  // with the reel line" style baked into a client's persona. Empty on the very
+  // first message of a brand-new thread.
+  const continuityBlock = returning
+    ? `CONTINUING CONVERSATION — there are earlier messages with this person (see the history). Do NOT greet, introduce yourself, ask if they saw your reel, or re-ask their goal or anything they've already told you. Do NOT repeat a link or info you already sent; if they ask again, just resend it briefly. Pick up naturally from the last message. Only after a long silence is a short "welcome back" okay — never restart the intro.`
+    : "";
+
   // SECTION MODE — the chatbot is authored as three editable sections. The
   // Personality section leads as identity VERBATIM (no generic preamble bolted
   // on top of a hand-written persona); offers/rebuttals follow when present;
@@ -89,6 +100,7 @@ export function buildSystemPrompt(
       persona ||
         `You are the customer-service AI for "${chatbot.name}". You reply to Instagram and Messenger DMs on the business's behalf.`
     );
+    if (continuityBlock) parts.push(continuityBlock);
     if (offers) parts.push(`OFFERS, SERVICES & LINKS\n${offers}`);
     if (rebuttals) parts.push(`REBUTTALS & FAQ HANDLING\n${rebuttals}`);
     if (memoryBlock) parts.push(memoryBlock);
@@ -106,7 +118,7 @@ export function buildSystemPrompt(
   // bubble-split note.
   if (chatbot.system_prompt && chatbot.system_prompt.trim()) {
     return `${chatbot.system_prompt.trim()}
-${memoryBlock ? `\n${memoryBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
 ${kbBlock}
 
@@ -122,7 +134,7 @@ ${chatbot.business_description || "(none provided)"}
 
 TONE
 ${TONE_GUIDES[chatbot.tone]}
-${memoryBlock ? `\n${memoryBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)
 ${kbBlock}
 
@@ -141,7 +153,15 @@ export async function generateReply(opts: {
   // as known context so the bot remembers long conversations.
   memorySummary?: string | null;
 }) {
-  const systemText = buildSystemPrompt(opts.chatbot, opts.kbBlock, opts.memorySummary);
+  // Continuing conversation if there's any prior history — drives the
+  // continuity directive so the bot doesn't restart the intro or re-ask.
+  const returning = opts.history.length > 0;
+  const systemText = buildSystemPrompt(
+    opts.chatbot,
+    opts.kbBlock,
+    opts.memorySummary,
+    returning
+  );
   const images = opts.images ?? [];
 
   // Recent turns sent verbatim; older context comes from memorySummary. Keeps
