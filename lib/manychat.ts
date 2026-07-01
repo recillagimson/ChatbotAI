@@ -96,12 +96,23 @@ export function verifyManychatSecret(
 // ---------------------------------------------------------------------------
 // Link → button conversion
 // ---------------------------------------------------------------------------
-// Raw links in an automated IG/Messenger DM look spammy and are often stripped.
-// Instead we render links as tappable URL buttons (ManyChat sendContent schema:
-// a text message with a `buttons` array of {type:"url", caption, url}). Handles
-// both markdown [label](url) and bare URLs. Platform limits: max 3 buttons per
-// message, button caption max ~20 chars. Toggle with LINK_BUTTONS_ENABLED=false.
-const LINK_BUTTONS_ENABLED = process.env.LINK_BUTTONS_ENABLED !== "false"; // default on
+// Link → URL-button rendering (ManyChat sendContent schema: a text message with
+// a `buttons` array of {type:"url", caption, url}). Handles markdown [label](url)
+// and bare URLs; platform limits: max 3 buttons/message, caption max ~20 chars.
+//
+// PLATFORM-AWARE. Instagram DMs do NOT render these buttons (button templates are
+// a Messenger feature) — IG collapses them to text, and IG already auto-links raw
+// URLs anyway. So buttons are used ONLY on Messenger (Facebook); Instagram and
+// every other channel keep the raw (clickable) URL as text. Set
+// LINK_BUTTONS_ENABLED=false to disable buttons everywhere (global kill switch).
+const LINK_BUTTONS_DISABLED = process.env.LINK_BUTTONS_ENABLED === "false";
+const BUTTON_PLATFORMS = new Set<Platform>(["messenger"]); // channels that render URL buttons
+
+/** Whether to convert links to buttons on this channel (Messenger only, unless killed). */
+export function buttonsSupported(platform?: Platform): boolean {
+  if (LINK_BUTTONS_DISABLED) return false;
+  return BUTTON_PLATFORMS.has(platform ?? DEFAULT_PLATFORM);
+}
 const MAX_BUTTONS = 3;
 const MAX_BUTTON_CAPTION = 20;
 
@@ -137,9 +148,13 @@ export function messageWithLinkButtons(text: string): ManyChatOutMessage {
   return { type: "text", text: out || "Here you go 👇", buttons };
 }
 
-/** Build the ManyChat `content.messages` array from reply bubbles. */
-export function buildOutboundMessages(texts: string[]): ManyChatOutMessage[] {
-  if (!LINK_BUTTONS_ENABLED) return texts.map((t) => ({ type: "text", text: t }));
+/**
+ * Build the ManyChat `content.messages` array from reply bubbles. On Messenger
+ * (Facebook) links become URL buttons; on Instagram and other channels the raw
+ * (clickable) URL stays in the text.
+ */
+export function buildOutboundMessages(texts: string[], platform?: Platform): ManyChatOutMessage[] {
+  if (!buttonsSupported(platform)) return texts.map((t) => ({ type: "text", text: t }));
   return texts.map(messageWithLinkButtons);
 }
 
@@ -183,7 +198,7 @@ export async function sendManychatMessage(opts: {
       version: "v2",
       content: {
         type: contentType,
-        messages: buildOutboundMessages(texts),
+        messages: buildOutboundMessages(texts, opts.platform),
       },
     },
   });
