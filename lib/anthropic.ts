@@ -89,7 +89,7 @@ export function buildSystemPrompt(
   // with the reel line" style baked into a client's persona. Empty on the very
   // first message of a brand-new thread.
   const continuityBlock = returning
-    ? `CONTINUING CONVERSATION — there are earlier messages with this person (see the history). Do NOT greet, introduce yourself, ask if they saw your reel, or re-ask their goal or anything they've already told you. Do NOT repeat a link or info you already sent; if they ask again, just resend it briefly. Pick up naturally from the last message. Only after a long silence is a short "welcome back" okay — never restart the intro.`
+    ? `CONTINUING CONVERSATION — there are earlier messages with this person (see the history). Do NOT greet, introduce yourself, ask if they saw your reel, or re-ask their goal or anything they've already told you. Do NOT repeat a link or info you already sent; if they ask again, just resend it briefly. Pick up naturally from the last message. Only after a long silence is a short "welcome back" okay — never restart the intro. If a keyword or trigger word from this chatbot's own instructions or knowledge base would normally kick off a scripted pitch or flow, FIRST check the memory and history for where this person actually is. If they already did that step (already sent what was asked for, already got the link, already paid, already moved past that stage), skip the script, acknowledge where they left off, and continue from there instead.`
     : "";
 
   // Sendable media — when the bot has a follow-up asset library and AI media is
@@ -124,7 +124,7 @@ export function buildSystemPrompt(
   }
 
   // LEGACY FALLBACK — un-migrated bots whose three sections are all empty.
-  // A custom system_prompt (a full persona like "Evan") takes over completely:
+  // A custom system_prompt (a full custom persona) takes over completely:
   // drop the generic name/description/tone scaffolding (which would fight the
   // persona) and append only the conversation memory, knowledge base, and the
   // bubble-split note.

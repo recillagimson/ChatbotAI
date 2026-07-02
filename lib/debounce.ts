@@ -53,8 +53,8 @@ export function splitBurst<T extends BurstRow>(rowsDesc: T[]): { burst: T[]; pri
  * output — fresher than the DB row if this run's media backfill failed); other
  * rows use their stored content (backfilled with transcripts/doc text by their
  * own runs, or the provisional attachment label if that backfill is still in
- * flight). Consecutive identical lines collapse so a triple-tap of "63" reads
- * as a single "63".
+ * flight). Consecutive identical lines collapse so a triple-tap of "yes" reads
+ * as a single "yes".
  */
 export function combineBurstText(
   burst: BurstRow[],
