@@ -821,3 +821,15 @@ create policy "admin followup asset update" on storage.objects for update to aut
 -- drop table if exists public.followup_assets;
 -- delete from storage.buckets where id = 'followup-assets';
 -- (plus the followup-assets storage.objects policies above)
+
+-- ---------------------------------------------------------------------------
+-- Reply debounce / single-flight claim (2026-07-02)
+-- The webhook waits REPLY_DEBOUNCE_MS (default 5s) after an inbound message so
+-- a rapid burst gets ONE consolidated reply. reply_claimed_for = inbound
+-- message id of the newest AI-bound webhook run: each run OVERWRITES it before
+-- sleeping; a conditional release (set null where reply_claimed_for = <my id>)
+-- after generation decides the single run allowed to persist + send.
+-- Transient coordination state: no FK, no index, stale value harmless.
+-- ---------------------------------------------------------------------------
+alter table public.conversations
+  add column if not exists reply_claimed_for uuid;

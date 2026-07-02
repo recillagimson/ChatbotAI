@@ -59,6 +59,22 @@ If the chatbot's owner has no active subscription, or the conversation is in `ai
 }
 ```
 
+A repeat of the same message text within 30s is **silently absorbed** — empty
+reply, nothing stored, nothing pushed (the first copy's reply covers it):
+```json
+{
+  "reply": "",
+  "ai_skipped": true,
+  "reason": "duplicate"
+}
+```
+
+On push channels (Instagram/Messenger/WhatsApp/Telegram) the webhook acks
+instantly with `{"ai_queued": true, "reply": ""}` and delivers the reply in the
+background after a short debounce (`REPLY_DEBOUNCE_MS`, default 5s): if the
+contact sends more messages during the wait, the timer resets and the whole
+burst is answered with ONE consolidated reply.
+
 ### Error responses
 | Status | Body                                  | Cause                                      |
 |--------|---------------------------------------|--------------------------------------------|

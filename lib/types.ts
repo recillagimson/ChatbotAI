@@ -111,6 +111,7 @@ export interface Conversation {
   confirmed_by: "manual" | "ai" | null;
   rn_opt_in_at: string | null;       // Recurring Notifications opt-in (Phase 6, multi-day reach)
   rn_topic_id: string | null;
+  reply_claimed_for: string | null;  // inbound message id of the newest AI-bound run (debounce single-flight claim)
   unread_count: number;
   memory_summary: string | null;     // rolling summary of turns older than the verbatim window
   memory_summary_at: string | null;  // created_at watermark of the newest message folded into the summary

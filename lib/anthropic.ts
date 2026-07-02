@@ -3,6 +3,7 @@ import type { Chatbot, Message } from "./types";
 import { sanitizeReply } from "./sanitize";
 import { openaiChat, type OpenAIChatMessage } from "./openai";
 import { HISTORY_TURNS } from "./memory";
+import { HUMANIZER_STYLE } from "./humanizer";
 
 let _anthropic: Anthropic | null = null;
 
@@ -118,6 +119,7 @@ export function buildSystemPrompt(
       `KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)\n${kbBlock}`
     );
     parts.push(GUARDRAILS);
+    parts.push(HUMANIZER_STYLE);
     return parts.join("\n\n");
   }
 
@@ -133,7 +135,9 @@ KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
 ${kbBlock}
 
 DELIVERY FORMAT
-To send several short messages, separate each one with a blank line. Each block is delivered as its own separate Instagram DM bubble. Keep each bubble short.`;
+To send several short messages, separate each one with a blank line. Each block is delivered as its own separate Instagram DM bubble. Keep each bubble short.
+
+${HUMANIZER_STYLE}`;
   }
 
   return `You are the customer-service AI for "${chatbot.name}".
@@ -148,7 +152,9 @@ ${continuityBlock ? `\n${continuityBlock}\n` : ""}${memoryBlock ? `\n${memoryBlo
 KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)
 ${kbBlock}
 
-${GUARDRAILS}`;
+${GUARDRAILS}
+
+${HUMANIZER_STYLE}`;
 }
 
 export async function generateReply(opts: {

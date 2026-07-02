@@ -38,7 +38,10 @@ import {
   stripMediaUrls,
 } from "@/lib/inbound-media";
 import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
+import { splitBurst, combineBurstText, remainingDebounceMs } from "@/lib/debounce";
 import type { Chatbot, Message } from "@/lib/types";
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -246,6 +249,19 @@ export async function POST(request: NextRequest) {
     await logPushFailure(supabase, chatbot.user_id, chatbot.id, code);
   }
 
+  // 3c. Duplicate-message dedup: same TEXT inside 30s → silently absorb. No row,
+  // no reply, no unread bump — a ManyChat re-delivery leaves zero trace, and a
+  // rapid re-tap folds into the in-flight run's debounce burst (the first tap's
+  // run answers once). Skipped when media is attached (two different photos can
+  // share empty/identical text). Trade-off: a deliberate identical re-send
+  // within 30s won't appear in the owner's inbox — the reply would be the same.
+  if (!hasMedia && baseText) {
+    const dup = await checkDuplicate(chatbot.id, body.subscriber_id, baseText);
+    if (dup.isDuplicate) {
+      return manychatReply("", { ai_skipped: true, reason: "duplicate" });
+    }
+  }
+
   // 4. Upsert conversation. Clean each field: ManyChat sends unresolved merge
   // tags ("{{first_name}}") when fields aren't wired, which we must not store.
   const firstName = cleanContactField(body.first_name);
@@ -375,23 +391,18 @@ export async function POST(request: NextRequest) {
 
   // 6b. Trivial-input shortcut: "thanks" / "ok" / 👍 → static ack, no AI.
   // Persona bots (custom system_prompt) skip this so even a "thanks" gets an
-  // in-voice reply from the persona instead of a generic canned line.
+  // in-voice reply from the persona instead of a generic canned line. Also
+  // skipped while a debounce claim is pending: a "thanks" landing mid-burst
+  // must fall through to the AI path (claim + supersede) so the burst's real
+  // question still gets answered — a canned ack row would otherwise become a
+  // burst boundary and strand it.
   const trivial =
-    chatbot.system_prompt || hasMedia ? null : getTrivialReply(baseText);
+    chatbot.system_prompt || hasMedia || existing?.reply_claimed_for
+      ? null
+      : getTrivialReply(baseText);
   if (trivial) {
     await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial, chatbot.user_id, chatbot.id, apiKey, platform);
     return manychatReply(trivial, { ai_skipped: true, reason: "trivial_ack" });
-  }
-
-  // 6c. Duplicate-message dedup: same TEXT inside 30s → echo prior reply. Skipped
-  // when media is attached (two different photos can share empty/identical text).
-  if (!hasMedia) {
-    const dup = await checkDuplicate(chatbot.id, body.subscriber_id, baseText);
-    if (dup.isDuplicate) {
-      const echo = dup.lastReply ?? "Still on that, give me just a sec!";
-      await persistAndPush(supabase, conversationId!, body.subscriber_id, echo, chatbot.user_id, chatbot.id, apiKey, platform);
-      return manychatReply(echo, { ai_skipped: true, reason: "duplicate" });
-    }
   }
 
   // 6d. Per-chatbot monthly cap. Over → static fallback, no AI.
@@ -407,9 +418,30 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Best-effort claim release for abort paths (human takeover / burst already
+  // answered): clears our claim so the trivial-ack shortcut re-arms. A failed
+  // release is harmless — the next message's claim overwrites it anyway.
+  const releaseClaim = async (): Promise<void> => {
+    if (!inboundId) return;
+    await supabase
+      .from("conversations")
+      .update({ reply_claimed_for: null })
+      .eq("id", conversationId!)
+      .eq("reply_claimed_for", inboundId)
+      .then(
+        () => {},
+        () => {}
+      );
+  };
+
   // 7–9. Generate the AI reply, persist it + usage, and update Redis side-state.
-  // Returns the reply text. Shared by both delivery paths below.
-  const generateAndPersistReply = async (): Promise<{ text: string; assets: OutboundAsset[] }> => {
+  // Returns the reply text, or null when this run stood down (burst mode only:
+  // superseded by a newer message, human takeover, or nothing left to answer).
+  // Shared by both delivery paths below; the RESPONSE path always runs "single"
+  // mode, which never returns null and behaves exactly as before.
+  const generateAndPersistReply = async (
+    mode: "burst" | "single" = "single"
+  ): Promise<{ text: string; assets: OutboundAsset[] } | null> => {
     // 6e. Process any inbound media (network): transcribe audio/video, read
     // documents, encode images for vision. Runs here (background for push
     // channels) so the fast-ack isn't blocked by downloads/transcription.
@@ -448,21 +480,69 @@ export async function POST(request: NextRequest) {
         );
     }
     // The text the AI reasons over: typed text + transcripts/doc text/notes.
-    const effectiveMessage = composeUserMessage({ text: baseText, textParts });
+    let effectiveMessage = composeUserMessage({ text: baseText, textParts });
+
+    // 6f. Debounce (burst mode): sleep out the quiet period, then only proceed
+    // if this run's claim survived — every newer message OVERWRITES the claim,
+    // so its run takes over and answers the whole burst instead. That's the
+    // "timer resets while they keep typing" behavior. Media processing above
+    // already backfilled this row, so a superseded run still leaves its
+    // transcript for the surviving run to fold in.
+    let memorySummary: string | null = existing?.memory_summary ?? null;
+    let confirmedAt: string | null = existing?.confirmed_at ?? null;
+    if (mode === "burst") {
+      const waitMs = remainingDebounceMs(performance.now() - startedAt);
+      if (waitMs > 0) await sleep(waitMs);
+      const { data: fresh } = await supabase
+        .from("conversations")
+        .select("status, reply_claimed_for, memory_summary, confirmed_at")
+        .eq("id", conversationId!)
+        .maybeSingle();
+      // Human takeover during the sleep → stand down and release our claim.
+      if (fresh?.status === "ai_paused") {
+        await releaseClaim();
+        return null;
+      }
+      // Superseded: a newer message claimed the reply while we slept. (A null
+      // `fresh` — transient fetch error — falls through: fail-open to a reply.)
+      if (fresh && fresh.reply_claimed_for !== inboundId) return null;
+      memorySummary = fresh?.memory_summary ?? memorySummary;
+      confirmedAt = fresh?.confirmed_at ?? confirmedAt;
+    }
 
     // 7. Fetch recent history. Order desc + limit so we get the newest
     // HISTORY_TURNS prior + the just-inserted user message, not the oldest.
     // Context older than this window is carried by the rolling memory summary.
     const { data: history } = await supabase
       .from("messages")
-      .select("role, content")
+      .select("id, role, content")
       .eq("conversation_id", conversationId!)
       .order("created_at", { ascending: false })
       .limit(HISTORY_TURNS + 1)
-      .returns<Pick<Message, "role" | "content">[]>();
+      .returns<Pick<Message, "id" | "role" | "content">[]>();
 
-    // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
-    const priorHistory = (history ?? []).slice(1).reverse();
+    let priorHistory: Pick<Message, "id" | "role" | "content">[];
+    if (mode === "burst") {
+      // The leading run of unanswered user rows (this message + any that piled
+      // up around it, including rate-limited ones that never got their own run)
+      // is THIS reply's subject; everything older is prior context.
+      const { burst, prior } = splitBurst(history ?? []);
+      if (!burst.length) {
+        // A human agent or a canned path answered everything during the sleep.
+        await releaseClaim();
+        return null;
+      }
+      priorHistory = prior;
+      // One consolidated user turn for the whole burst. This run's own row uses
+      // the in-memory text (fresher if its media backfill failed); earlier rows
+      // contribute their stored content — transcripts/doc text if their runs
+      // finished backfilling, else the provisional attachment label. Vision
+      // image parts stay this-run-only (known limitation for burst images).
+      effectiveMessage = combineBurstText(burst, inboundId, effectiveMessage);
+    } else {
+      // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
+      priorHistory = (history ?? []).slice(1).reverse();
+    }
 
     // 7a. Follow-up media library — only when the bot may send AI-triggered media.
     // Fetched once here so the same list feeds the system-prompt catalog AND the
@@ -489,7 +569,7 @@ export async function POST(request: NextRequest) {
         history: priorHistory,
         userMessage: effectiveMessage,
         images,
-        memorySummary: existing?.memory_summary ?? null,
+        memorySummary,
         mediaCatalog,
       });
       if (text) {
@@ -523,6 +603,27 @@ export async function POST(request: NextRequest) {
           });
         }
         replyText = parsed.cleanText;
+      }
+    }
+
+    // 8b. Single-flight release (burst mode): atomically clear our claim. Zero
+    // rows updated means a newer message claimed while we were generating —
+    // discard this reply WITHOUT persisting or sending; the newer run's burst
+    // covers everything, so the lead gets one consolidated answer instead of
+    // two overlapping ones. The occasional wasted generation is the price of
+    // never double-replying. (A transient release error falls through to a
+    // send — worst case matches today's per-message behavior.)
+    if (mode === "burst" && inboundId) {
+      const { data: released, error: releaseError } = await supabase
+        .from("conversations")
+        .update({ reply_claimed_for: null })
+        .eq("id", conversationId!)
+        .eq("reply_claimed_for", inboundId)
+        .select("id");
+      if (releaseError) {
+        console.error("[manychat-webhook] claim release failed", releaseError);
+      } else if (!released?.length) {
+        return null; // superseded mid-generate
       }
     }
 
@@ -578,7 +679,7 @@ export async function POST(request: NextRequest) {
     // the drip. Only for bots running a follow-up sequence, only when not already
     // confirmed, and only on push channels (where this runs in the background) so
     // it never adds latency to a synchronous response-channel reply. Never blocks.
-    if (chatbot.auto_followup_enabled && !existing?.confirmed_at && canPushPlatform(platform)) {
+    if (chatbot.auto_followup_enabled && !confirmedAt && canPushPlatform(platform)) {
       try {
         const confirmed = await detectLeadConfirmed({
           userMessage: effectiveMessage,
@@ -603,12 +704,32 @@ export async function POST(request: NextRequest) {
 
   // 10. Deliver. Two paths depending on whether the channel has a ManyChat send API:
   if (canPushPlatform(platform) && apiKey) {
+    // Single-flight claim: mark THIS message as the one the conversation's next
+    // reply answers. Newer messages overwrite the claim (their run takes over —
+    // the debounce "timer reset"); the background run below only proceeds if its
+    // claim survived the sleep. Fail-open: on any error (e.g. the migration not
+    // yet applied) fall back to per-message replies exactly as before.
+    let claimed = false;
+    if (inboundId) {
+      const { error: claimError } = await supabase
+        .from("conversations")
+        .update({ reply_claimed_for: inboundId })
+        .eq("id", conversationId!);
+      if (claimError) {
+        console.error("[manychat-webhook] reply claim failed", claimError);
+      } else {
+        claimed = true;
+      }
+    }
+
     // PUSH channels (Instagram/Messenger/WhatsApp/Telegram): generate + push in
     // the background and ack instantly so ManyChat's ~10s External Request timeout
     // never trips. Delivery is via the Send Content API on the right channel.
     after(async () => {
       try {
-        const { text: replyText, assets } = await generateAndPersistReply();
+        const result = await generateAndPersistReply(claimed ? "burst" : "single");
+        if (!result) return; // stood down — a newer run owns the consolidated reply
+        const { text: replyText, assets } = result;
         const bubbles = splitIntoMessages(replyText);
         try {
           if (pacingEnabled() && bubbles.length > 0) {
@@ -653,8 +774,9 @@ export async function POST(request: NextRequest) {
   // text is returned here; AI media is a push-channel feature.
   let replyText = "Thanks for the message, a teammate will follow up shortly.";
   try {
-    const result = await generateAndPersistReply();
-    replyText = result.text;
+    // "single" mode never returns null; the guard is just for the type.
+    const result = await generateAndPersistReply("single");
+    if (result) replyText = result.text;
   } catch (err) {
     console.error("[manychat-webhook] sync processing failed", err);
   }
