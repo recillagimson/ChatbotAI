@@ -496,29 +496,42 @@ export async function POST(request: NextRequest) {
     // row would become a burst boundary and strand an earlier unanswered question.
     // Mid-burst they fall through to the AI's debounce consolidation instead.
     const canCanned = !existing?.reply_claimed_for;
+    // Mark the group delivered to this contact (best-effort; a lost update just
+    // re-runs the first reply once, never strands the contact with no reply).
+    const markFired = () =>
+      supabase
+        .from("conversations")
+        .update({ keyword_fired: Array.from(new Set([...firedIds, keywordGroup.id])) })
+        .eq("id", conversationId!)
+        .then(() => {}, () => {});
+
     if (!alreadyFired) {
-      // A saved group always has first_reply_text (the form requires it); an asset
-      // is an optional attachment. Guarding on `text` means a malformed/text-less
-      // group (e.g. its only asset was later deleted) falls through to the AI rather
-      // than silently sending nothing yet marking itself fired.
-      const text = keywordGroup.first_reply_text?.trim() ?? "";
-      if (canCanned && text) {
-        await sendKeywordCannedReply(
-          supabase, conversationId!, body.subscriber_id, text,
-          keywordGroup.first_reply_asset_key ?? null,
-          chatbot.user_id, chatbot.id, apiKey, platform
-        );
-        // Record the group as fired AFTER dispatch (best-effort; a lost update just
-        // re-sends the canned reply once, never strands the contact with no reply).
-        await supabase
-          .from("conversations")
-          .update({ keyword_fired: Array.from(new Set([...firedIds, keywordGroup.id])) })
-          .eq("id", conversationId!)
-          .then(() => {}, () => {});
-        // Sanitize the response-body copy (raw stays in the DB row): on response
-        // channels (TikTok) the body IS the delivery, so owner em dashes must be
-        // stripped just like AI replies; on push channels the send layer sanitizes.
-        return manychatReply(sanitizeReply(text), { ai_skipped: true, reason: "keyword_trigger" });
+      const firstMode = keywordGroup.first_reply_mode ?? "message";
+      if (firstMode === "message") {
+        // Canned first reply (text + optional asset). Guarding on `text` means a
+        // text-less group (e.g. its only asset was later deleted) falls through to
+        // the AI rather than silently sending nothing yet marking itself fired.
+        const text = keywordGroup.first_reply_text?.trim() ?? "";
+        if (canCanned && text) {
+          await sendKeywordCannedReply(
+            supabase, conversationId!, body.subscriber_id, text,
+            keywordGroup.first_reply_asset_key ?? null,
+            chatbot.user_id, chatbot.id, apiKey, platform
+          );
+          await markFired();
+          // Sanitize the response-body copy (raw stays in the DB row): on response
+          // channels (TikTok) the body IS the delivery, so owner em dashes must be
+          // stripped just like AI replies; on push channels the send layer sanitizes.
+          return manychatReply(sanitizeReply(text), { ai_skipped: true, reason: "keyword_trigger" });
+        }
+        // mid-burst or no text → fall through to the AI (canned deferred, not marked).
+      } else {
+        // "ai" / "instruction": the AI handles the first reply. Steer it (instruction
+        // mode) and mark fired so the NEXT match runs on_repeat, then fall through.
+        if (firstMode === "instruction") {
+          keywordInstruction = keywordGroup.first_reply_instruction?.trim() || null;
+        }
+        await markFired();
       }
     } else if (keywordGroup.on_repeat === "message") {
       const text = keywordGroup.repeat_text?.trim() ?? "";
@@ -532,7 +545,8 @@ export async function POST(request: NextRequest) {
     } else if (keywordGroup.on_repeat === "instruction") {
       keywordInstruction = keywordGroup.instruction?.trim() || null;
     }
-    // on_repeat="ai", or a canned path skipped mid-burst → fall through to the AI.
+    // First-reply "ai"/"instruction", on_repeat="ai", or a canned path skipped
+    // mid-burst → fall through to the AI (with keywordInstruction if set).
   }
 
   // 6d. Per-chatbot monthly cap. Over → static fallback, no AI.

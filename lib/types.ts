@@ -72,9 +72,11 @@ export interface KeywordGroup {
   id: string;                          // stable uuid minted in the editor; keys keyword_fired
   keywords: string[];                  // include list (empty = never matches)
   exclude: string[];                   // if any of these appear, the group does NOT match
-  first_reply_text: string;            // canned reply sent on the first match (stored RAW; sanitized outbound)
-  first_reply_asset_key?: string | null;  // optional FollowupAsset key attached to the first reply
-  on_repeat: KeywordOnRepeat;          // ai = fall through to AI; message = send repeat_text; instruction = AI + inject instruction
+  first_reply_mode: KeywordOnRepeat;   // FIRST match: message = send first_reply_text; ai = hand to AI; instruction = AI + first_reply_instruction
+  first_reply_text: string;            // canned reply sent on the first match when mode="message" (stored RAW; sanitized outbound)
+  first_reply_asset_key?: string | null;  // optional FollowupAsset key attached to the first reply (mode="message")
+  first_reply_instruction?: string | null; // one-line per-turn prompt addition for first_reply_mode="instruction"
+  on_repeat: KeywordOnRepeat;          // LATER matches: ai = fall through to AI; message = send repeat_text; instruction = AI + inject instruction
   repeat_text?: string | null;         // canned text for on_repeat="message"
   instruction?: string | null;         // one-line per-turn prompt addition for on_repeat="instruction"
   enabled: boolean;

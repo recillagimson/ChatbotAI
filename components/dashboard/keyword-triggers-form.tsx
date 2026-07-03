@@ -7,15 +7,29 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { KeywordInput } from "@/components/ui/keyword-input";
+import { KeywordInput, splitKeywordTerms } from "@/components/ui/keyword-input";
 import type { Chatbot, FollowupAsset, KeywordGroup, KeywordOnRepeat } from "@/lib/types";
+
+/** Flatten a stored keyword array, splitting any comma/newline-joined entry and de-duping. */
+function normalizeTerms(arr: unknown): string[] {
+  if (!Array.isArray(arr)) return [];
+  const out: string[] = [];
+  for (const item of arr) {
+    for (const t of splitKeywordTerms(String(item ?? ""))) {
+      if (!out.some((v) => v.toLowerCase() === t.toLowerCase())) out.push(t);
+    }
+  }
+  return out;
+}
 
 type EditableGroup = {
   id: string;
   keywords: string[];
   exclude: string[];
+  first_reply_mode: KeywordOnRepeat;
   first_reply_text: string;
   first_reply_asset_key: string;
+  first_reply_instruction: string;
   on_repeat: KeywordOnRepeat;
   repeat_text: string;
   instruction: string;
@@ -33,10 +47,12 @@ function toEditable(groups: KeywordGroup[]): EditableGroup[] {
   if (!Array.isArray(groups)) return [];
   return groups.map((g) => ({
     id: g.id || newId(),
-    keywords: Array.isArray(g.keywords) ? g.keywords : [],
-    exclude: Array.isArray(g.exclude) ? g.exclude : [],
+    keywords: normalizeTerms(g.keywords),
+    exclude: normalizeTerms(g.exclude),
+    first_reply_mode: g.first_reply_mode ?? "message",
     first_reply_text: g.first_reply_text ?? "",
     first_reply_asset_key: g.first_reply_asset_key ?? "",
+    first_reply_instruction: g.first_reply_instruction ?? "",
     on_repeat: g.on_repeat ?? "ai",
     repeat_text: g.repeat_text ?? "",
     instruction: g.instruction ?? "",
@@ -84,8 +100,10 @@ export function KeywordTriggersForm({
         id: newId(),
         keywords: [],
         exclude: [],
+        first_reply_mode: "message",
         first_reply_text: "",
         first_reply_asset_key: "",
+        first_reply_instruction: "",
         on_repeat: "ai",
         repeat_text: "",
         instruction: "",
@@ -109,9 +127,10 @@ export function KeywordTriggersForm({
       const exclude = g.exclude.map((k) => k.trim()).filter(Boolean);
       const firstText = g.first_reply_text.trim();
       const assetKey = g.first_reply_asset_key.trim();
+      const firstInstr = g.first_reply_instruction.trim();
       // Silently drop a fully-empty row (e.g. an "Add" the owner never filled in).
       if (
-        keywords.length === 0 && !firstText && !assetKey &&
+        keywords.length === 0 && !firstText && !assetKey && !firstInstr &&
         !g.repeat_text.trim() && !g.instruction.trim()
       ) {
         continue;
@@ -120,18 +139,20 @@ export function KeywordTriggersForm({
         setError("Every keyword group needs at least one keyword.");
         return;
       }
-      // Text is required (an asset is an optional attachment to it): the first reply
-      // must have a message so it works on every channel and never sends nothing.
-      if (!firstText) {
-        setError("Every keyword group needs a first reply message.");
+      // A "send a set message" first reply must have a message so it never sends
+      // nothing (an asset is an optional attachment). The AI modes need no text.
+      if (g.first_reply_mode === "message" && !firstText) {
+        setError("A “send a set message” first reply needs a message.");
         return;
       }
       cleaned.push({
         id: g.id,
         keywords,
         exclude,
-        first_reply_text: firstText,
-        first_reply_asset_key: assetKey || null,
+        first_reply_mode: g.first_reply_mode,
+        first_reply_text: g.first_reply_mode === "message" ? firstText : "",
+        first_reply_asset_key: g.first_reply_mode === "message" ? assetKey || null : null,
+        first_reply_instruction: g.first_reply_mode === "instruction" ? firstInstr || null : null,
         on_repeat: g.on_repeat,
         repeat_text: g.on_repeat === "message" ? g.repeat_text.trim() || null : null,
         instruction: g.on_repeat === "instruction" ? g.instruction.trim() || null : null,
@@ -208,47 +229,88 @@ export function KeywordTriggersForm({
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor={`kw-first-${i}`}>First reply {g.first_reply_asset_key ? "/ caption" : ""}</Label>
-            <Textarea
-              id={`kw-first-${i}`}
-              rows={2}
-              value={g.first_reply_text}
-              onChange={(e) => patch(i, { first_reply_text: e.target.value })}
-              placeholder="Appreciate you! Here's how it works…"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor={`kw-asset-${i}`}>Attach asset to the first reply (optional)</Label>
+            <Label htmlFor={`kw-firstmode-${i}`}>First reply (the first time someone matches)</Label>
             <select
-              id={`kw-asset-${i}`}
-              value={g.first_reply_asset_key}
-              onChange={(e) => patch(i, { first_reply_asset_key: e.target.value })}
+              id={`kw-firstmode-${i}`}
+              value={g.first_reply_mode}
+              onChange={(e) => patch(i, { first_reply_mode: e.target.value as KeywordOnRepeat })}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
-              <option value="">No asset (text only)</option>
-              {/* A key whose asset was deleted stays VISIBLE so the owner sees the break. */}
-              {g.first_reply_asset_key && !knownKeys.has(g.first_reply_asset_key) && (
-                <option value={g.first_reply_asset_key}>⚠ missing: {g.first_reply_asset_key}</option>
-              )}
-              {assets.map((a) => (
-                <option key={a.id} value={a.key}>
-                  {a.key} ({a.kind})
-                </option>
-              ))}
+              <option value="message">Send a set message</option>
+              <option value="ai">Hand to the AI</option>
+              <option value="instruction">Steer the AI with an instruction</option>
             </select>
-            {g.first_reply_asset_key && !knownKeys.has(g.first_reply_asset_key) && (
-              <p className="text-xs text-destructive">
-                The asset &quot;{g.first_reply_asset_key}&quot; no longer exists — the first reply
-                will send text only. Pick another asset or set it to text only.
-              </p>
-            )}
-            {g.first_reply_asset_key && !hasAssets && (
-              <p className="text-xs text-muted-foreground">
-                Add assets in the follow-up asset library above to attach them here.
-              </p>
-            )}
           </div>
+
+          {g.first_reply_mode === "message" && (
+            <>
+              <div className="space-y-1">
+                <Label htmlFor={`kw-first-${i}`}>Message {g.first_reply_asset_key ? "/ caption" : ""}</Label>
+                <Textarea
+                  id={`kw-first-${i}`}
+                  rows={2}
+                  value={g.first_reply_text}
+                  onChange={(e) => patch(i, { first_reply_text: e.target.value })}
+                  placeholder="Appreciate you! Here's how it works…"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor={`kw-asset-${i}`}>Attach asset (optional)</Label>
+                <select
+                  id={`kw-asset-${i}`}
+                  value={g.first_reply_asset_key}
+                  onChange={(e) => patch(i, { first_reply_asset_key: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">No asset (text only)</option>
+                  {/* A key whose asset was deleted stays VISIBLE so the owner sees the break. */}
+                  {g.first_reply_asset_key && !knownKeys.has(g.first_reply_asset_key) && (
+                    <option value={g.first_reply_asset_key}>⚠ missing: {g.first_reply_asset_key}</option>
+                  )}
+                  {assets.map((a) => (
+                    <option key={a.id} value={a.key}>
+                      {a.key} ({a.kind})
+                    </option>
+                  ))}
+                </select>
+                {g.first_reply_asset_key && !knownKeys.has(g.first_reply_asset_key) && (
+                  <p className="text-xs text-destructive">
+                    The asset &quot;{g.first_reply_asset_key}&quot; no longer exists — the first reply
+                    will send text only. Pick another asset or set it to text only.
+                  </p>
+                )}
+                {g.first_reply_asset_key && !hasAssets && (
+                  <p className="text-xs text-muted-foreground">
+                    Add assets in the follow-up asset library above to attach them here.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+
+          {g.first_reply_mode === "ai" && (
+            <p className="rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
+              The AI answers their message using this chatbot&apos;s prompts and knowledge base — no
+              canned message. Set what happens on later matches below.
+            </p>
+          )}
+
+          {g.first_reply_mode === "instruction" && (
+            <div className="space-y-1">
+              <Label htmlFor={`kw-finstr-${i}`}>AI instruction for the first reply</Label>
+              <Textarea
+                id={`kw-finstr-${i}`}
+                rows={2}
+                value={g.first_reply_instruction}
+                onChange={(e) => patch(i, { first_reply_instruction: e.target.value })}
+                placeholder="They came in on the 63 post — answer their question and point them to the community."
+              />
+              <p className="text-xs text-muted-foreground">
+                Added to the AI&apos;s instructions for that first reply only.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-1">
             <Label htmlFor={`kw-repeat-${i}`}>If they say it again later</Label>

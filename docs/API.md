@@ -69,11 +69,12 @@ reply, nothing stored, nothing pushed (the first copy's reply covers it):
 }
 ```
 
-A message that matches one of the chatbot's configured **keyword triggers**
-short-circuits the AI. The FIRST time a contact matches a group, its canned reply
-is sent (text + an optional saved asset) and the group is recorded on the
-conversation; a later match runs the group's on-repeat action (hand to the AI,
-send a different message, or steer the AI). The canned paths return:
+A message that matches one of the chatbot's configured **keyword triggers** can
+short-circuit the AI. The FIRST match for a contact runs the group's first-reply
+mode — send a canned reply (text + an optional saved asset), hand to the AI, or
+steer the AI with an instruction — and the group is recorded on the conversation;
+a later match runs its on-repeat action (the same three choices, plus "send a
+different message"). Only the canned-message paths short-circuit the AI and return: 
 ```json
 {
   "reply": "Appreciate you! Here's how it works…",
