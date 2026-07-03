@@ -54,7 +54,30 @@ export interface Chatbot {
   auto_followup_steps: FollowupStep[];   // ordered rich-media drip steps (JSONB)
   auto_followup_loop_last: boolean;       // repeat the final step until confirmed
   ai_media_enabled: boolean;              // allow the live AI to emit [[SEND_ASSET]] directives
+  keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)
   created_at: string;
+}
+
+/** How a keyword group behaves when a contact matches it AGAIN (already got the first reply). */
+export type KeywordOnRepeat = "ai" | "message" | "instruction";
+
+/**
+ * One keyword group on a chatbot. The webhook matches an inbound DM's text
+ * against `keywords` (case-insensitive whole-word "contains"): a group matches
+ * if the message contains ANY include keyword AND NO `exclude` keyword. The
+ * first match for a contact sends `first_reply_text` (+ optional asset); later
+ * matches run `on_repeat`.
+ */
+export interface KeywordGroup {
+  id: string;                          // stable uuid minted in the editor; keys keyword_fired
+  keywords: string[];                  // include list (empty = never matches)
+  exclude: string[];                   // if any of these appear, the group does NOT match
+  first_reply_text: string;            // canned reply sent on the first match (stored RAW; sanitized outbound)
+  first_reply_asset_key?: string | null;  // optional FollowupAsset key attached to the first reply
+  on_repeat: KeywordOnRepeat;          // ai = fall through to AI; message = send repeat_text; instruction = AI + inject instruction
+  repeat_text?: string | null;         // canned text for on_repeat="message"
+  instruction?: string | null;         // one-line per-turn prompt addition for on_repeat="instruction"
+  enabled: boolean;
 }
 
 /** One step in a chatbot's auto follow-up drip sequence. */
@@ -112,6 +135,7 @@ export interface Conversation {
   rn_opt_in_at: string | null;       // Recurring Notifications opt-in (Phase 6, multi-day reach)
   rn_topic_id: string | null;
   reply_claimed_for: string | null;  // inbound message id of the newest AI-bound run (debounce single-flight claim)
+  keyword_fired: string[];           // ids of keyword groups whose first reply this contact already received
   unread_count: number;
   memory_summary: string | null;     // rolling summary of turns older than the verbatim window
   memory_summary_at: string | null;  // created_at watermark of the newest message folded into the summary

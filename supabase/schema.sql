@@ -833,3 +833,25 @@ create policy "admin followup asset update" on storage.objects for update to aut
 -- ---------------------------------------------------------------------------
 alter table public.conversations
   add column if not exists reply_claimed_for uuid;
+
+-- ===========================================================================
+-- Keyword triggers (2026-07-03)
+-- ===========================================================================
+-- Per-chatbot keyword auto-reply with first-touch dedup. chatbots.keyword_triggers
+-- is an ordered JSONB array of groups: [{id, keywords[], exclude[],
+-- first_reply_text, first_reply_asset_key?, on_repeat: "ai"|"message"|"instruction",
+-- repeat_text?, instruction?, enabled}]. The webhook matches an inbound DM's text
+-- (case-insensitive whole-word contains; ANY include AND NO exclude); the FIRST
+-- match for a contact sends that group's canned reply (text + optional followup
+-- asset) and records the group id on conversations.keyword_fired; later matches run
+-- the group's on_repeat action. keyword_fired is best-effort per-contact state
+-- (a lost update just re-sends a canned reply once; never strands the contact).
+alter table public.chatbots
+  add column if not exists keyword_triggers jsonb not null default '[]'::jsonb;
+
+alter table public.conversations
+  add column if not exists keyword_fired jsonb not null default '[]'::jsonb;
+
+-- Teardown:
+-- alter table public.chatbots     drop column if exists keyword_triggers;
+-- alter table public.conversations drop column if exists keyword_fired;

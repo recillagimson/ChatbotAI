@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FollowupSequenceForm } from "@/components/dashboard/followup-sequence-form";
+import { KeywordTriggersForm } from "@/components/dashboard/keyword-triggers-form";
 import { FollowupAssetManager } from "@/components/dashboard/followup-asset-manager";
 import { ChatbotEditForm } from "@/components/dashboard/chatbot-edit-form";
 import { ManychatKeyField } from "@/components/dashboard/manychat-key-field";
@@ -141,6 +142,20 @@ export default async function ChatbotDetailPage({
               Auto follow-up is currently disabled for this deployment.
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Keyword triggers</CardTitle>
+          <CardDescription>
+            Send an instant canned reply when a lead&apos;s DM contains a keyword (like
+            &quot;63&quot;) — the first time only. Say it again later and the bot picks up
+            naturally instead of repeating the pitch.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <KeywordTriggersForm chatbot={safeChatbot} assets={assets} />
         </CardContent>
       </Card>
 

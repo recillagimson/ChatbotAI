@@ -18,8 +18,11 @@ import { parseAssetDirectives } from "@/lib/ai-media";
 import {
   fetchFollowupAssets,
   resolveAssetByKey,
+  assetToOutbound,
   buildAssetCatalogBlock,
 } from "@/lib/followup-assets";
+import { firstMatchingGroup } from "@/lib/keyword-triggers";
+import { sanitizeReply } from "@/lib/sanitize";
 import { detectLeadConfirmed } from "@/lib/confirm-detect";
 import {
   checkRateLimit,
@@ -166,6 +169,72 @@ async function persistAndPush(
         })
       : Promise.resolve(),
   ]);
+}
+
+/**
+ * Canned keyword-trigger reply: persists the outbound text (+ an optional saved
+ * asset) and delivers it — like persistAndPush but with media support. The asset
+ * is OWNER-configured, so it sends regardless of chatbot.ai_media_enabled (that
+ * flag only governs AI-emitted [[SEND_ASSET]] directives). Push only on channels
+ * with a send API; on response channels (TikTok) the caller returns the text in
+ * the body and media is skipped (no send API there). Each side is independent —
+ * a ManyChat failure never loses the DB row.
+ */
+async function sendKeywordCannedReply(
+  supabase: ReturnType<typeof createServiceClient>,
+  conversationId: string,
+  subscriberId: string,
+  text: string,
+  assetKey: string | null,
+  userId: string,
+  chatbotId: string,
+  apiKey: string | null,
+  platform: Platform
+): Promise<void> {
+  const push = !!apiKey && canPushPlatform(platform);
+
+  // Resolve the optional asset only when we can actually push it.
+  let asset: OutboundAsset | null = null;
+  let assetRow: { content: string; media_url: string; media_type: string | null } | null = null;
+  if (push && assetKey) {
+    const found = resolveAssetByKey(await fetchFollowupAssets(supabase, chatbotId), assetKey);
+    asset = assetToOutbound(found);
+    if (asset && found?.url) {
+      assetRow = {
+        content: `(sent ${found.kind}: ${found.key})`,
+        media_url: found.url,
+        media_type: found.mime ?? null,
+      };
+    }
+  }
+
+  // Persist the text row first, then the media row, so inbox order matches delivery.
+  if (text) {
+    await supabase
+      .from("messages")
+      .insert({ conversation_id: conversationId, role: "assistant", content: text, ai_generated: false, tokens_used: 0 })
+      .then(() => {}, () => {});
+  }
+  if (assetRow) {
+    await supabase
+      .from("messages")
+      .insert({ conversation_id: conversationId, role: "assistant", ai_generated: false, tokens_used: 0, ...assetRow })
+      .then(() => {}, () => {});
+  }
+
+  // Deliver on push channels (response channels get the text via the body).
+  if (push && apiKey) {
+    try {
+      if (asset) {
+        await sendManychatMedia({ subscriberId, assets: [asset], text, apiKey, platform });
+      } else if (text) {
+        await sendManychatMessage({ subscriberId, text, apiKey, platform });
+      }
+    } catch (err) {
+      console.error("[manychat-webhook] keyword push send failed", err);
+      await logPushFailure(supabase, userId, chatbotId);
+    }
+  }
 }
 
 /**
@@ -405,6 +474,67 @@ export async function POST(request: NextRequest) {
     return manychatReply(trivial, { ai_skipped: true, reason: "trivial_ack" });
   }
 
+  // 6c. Keyword triggers (per-chatbot, data-driven). Match the inbound text against
+  // the owner's keyword groups (case-insensitive whole-word contains). The FIRST
+  // match for this contact sends the group's canned reply (text + optional saved
+  // asset) and records the group id on conversations.keyword_fired; later matches
+  // run the group's on_repeat action. Matches baseText only (media captions aren't
+  // available yet). Fires for ALL bots (persona bots included). Fail-open: a missing
+  // column reads as no triggers. `keywordInstruction` is captured by the AI closure
+  // below for on_repeat="instruction".
+  let keywordInstruction: string | null = null;
+  const keywordGroup = baseText
+    ? firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [])
+    : null;
+  if (keywordGroup) {
+    const firedIds: string[] = Array.isArray(existing?.keyword_fired)
+      ? (existing!.keyword_fired as string[])
+      : [];
+    const alreadyFired = firedIds.includes(keywordGroup.id);
+    // The canned paths (first reply / repeat "message") insert an assistant row and
+    // return immediately, so they must skip mid-burst (a pending claim): a canned
+    // row would become a burst boundary and strand an earlier unanswered question.
+    // Mid-burst they fall through to the AI's debounce consolidation instead.
+    const canCanned = !existing?.reply_claimed_for;
+    if (!alreadyFired) {
+      // A saved group always has first_reply_text (the form requires it); an asset
+      // is an optional attachment. Guarding on `text` means a malformed/text-less
+      // group (e.g. its only asset was later deleted) falls through to the AI rather
+      // than silently sending nothing yet marking itself fired.
+      const text = keywordGroup.first_reply_text?.trim() ?? "";
+      if (canCanned && text) {
+        await sendKeywordCannedReply(
+          supabase, conversationId!, body.subscriber_id, text,
+          keywordGroup.first_reply_asset_key ?? null,
+          chatbot.user_id, chatbot.id, apiKey, platform
+        );
+        // Record the group as fired AFTER dispatch (best-effort; a lost update just
+        // re-sends the canned reply once, never strands the contact with no reply).
+        await supabase
+          .from("conversations")
+          .update({ keyword_fired: Array.from(new Set([...firedIds, keywordGroup.id])) })
+          .eq("id", conversationId!)
+          .then(() => {}, () => {});
+        // Sanitize the response-body copy (raw stays in the DB row): on response
+        // channels (TikTok) the body IS the delivery, so owner em dashes must be
+        // stripped just like AI replies; on push channels the send layer sanitizes.
+        return manychatReply(sanitizeReply(text), { ai_skipped: true, reason: "keyword_trigger" });
+      }
+    } else if (keywordGroup.on_repeat === "message") {
+      const text = keywordGroup.repeat_text?.trim() ?? "";
+      if (canCanned && text) {
+        await sendKeywordCannedReply(
+          supabase, conversationId!, body.subscriber_id, text, null,
+          chatbot.user_id, chatbot.id, apiKey, platform
+        );
+        return manychatReply(sanitizeReply(text), { ai_skipped: true, reason: "keyword_repeat" });
+      }
+    } else if (keywordGroup.on_repeat === "instruction") {
+      keywordInstruction = keywordGroup.instruction?.trim() || null;
+    }
+    // on_repeat="ai", or a canned path skipped mid-burst → fall through to the AI.
+  }
+
   // 6d. Per-chatbot monthly cap. Over → static fallback, no AI.
   const cap = await checkMonthlyCap(chatbot.id);
   if (!cap.ok) {
@@ -571,6 +701,7 @@ export async function POST(request: NextRequest) {
         images,
         memorySummary,
         mediaCatalog,
+        turnInstruction: keywordInstruction,
       });
       if (text) {
         replyText = text;

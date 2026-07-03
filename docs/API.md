@@ -69,6 +69,23 @@ reply, nothing stored, nothing pushed (the first copy's reply covers it):
 }
 ```
 
+A message that matches one of the chatbot's configured **keyword triggers**
+short-circuits the AI. The FIRST time a contact matches a group, its canned reply
+is sent (text + an optional saved asset) and the group is recorded on the
+conversation; a later match runs the group's on-repeat action (hand to the AI,
+send a different message, or steer the AI). The canned paths return:
+```json
+{
+  "reply": "Appreciate you! Here's how it works…",
+  "ai_skipped": true,
+  "reason": "keyword_trigger"
+}
+```
+`reason` is `keyword_trigger` for the first reply and `keyword_repeat` for an
+on-repeat "send a different message". A verbatim resend within 30s is absorbed by
+the duplicate gate above *before* the keyword check, so it won't re-fire the
+on-repeat message.
+
 On push channels (Instagram/Messenger/WhatsApp/Telegram) the webhook acks
 instantly with `{"ai_queued": true, "reply": ""}` and delivers the reply in the
 background after a short debounce (`REPLY_DEBOUNCE_MS`, default 5s): if the

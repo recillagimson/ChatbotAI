@@ -69,7 +69,8 @@ export function buildSystemPrompt(
   kbBlock: string,
   memorySummary?: string | null,
   returning?: boolean,
-  mediaCatalog?: string | null
+  mediaCatalog?: string | null,
+  turnInstruction?: string | null
 ): string {
   const persona = chatbot.persona_section?.trim() || "";
   const offers = chatbot.offers_section?.trim() || "";
@@ -92,6 +93,14 @@ export function buildSystemPrompt(
     ? `CONTINUING CONVERSATION — there are earlier messages with this person (see the history). Do NOT greet, introduce yourself, ask if they saw your reel, or re-ask their goal or anything they've already told you. Do NOT repeat a link or info you already sent; if they ask again, just resend it briefly. Pick up naturally from the last message. Only after a long silence is a short "welcome back" okay — never restart the intro. If a keyword or trigger word from this chatbot's own instructions or knowledge base would normally kick off a scripted pitch or flow, FIRST check the memory and history for where this person actually is. If they already did that step (already sent what was asked for, already got the link, already paid, already moved past that stage), skip the script, acknowledge where they left off, and continue from there instead.`
     : "";
 
+  // Per-turn instruction from a matched keyword group (on_repeat="instruction").
+  // Injected for THIS reply only, right after the persona/continuity so it steers
+  // this turn without overriding the identity. Empty for normal turns.
+  const instruction = turnInstruction?.trim();
+  const instructionBlock = instruction
+    ? `ADDITIONAL INSTRUCTION FOR THIS REPLY (this person matched a keyword; follow this for this message)\n${instruction}`
+    : "";
+
   // Sendable media — when the bot has a follow-up asset library and AI media is
   // enabled, tell the model it can attach a saved asset by emitting a directive.
   // The webhook (lib/ai-media.ts) parses the directive out and delivers the asset.
@@ -111,6 +120,7 @@ export function buildSystemPrompt(
         `You are the customer-service AI for "${chatbot.name}". You reply to Instagram and Messenger DMs on the business's behalf.`
     );
     if (continuityBlock) parts.push(continuityBlock);
+    if (instructionBlock) parts.push(instructionBlock);
     if (offers) parts.push(`OFFERS, SERVICES & LINKS\n${offers}`);
     if (rebuttals) parts.push(`REBUTTALS & FAQ HANDLING\n${rebuttals}`);
     if (memoryBlock) parts.push(memoryBlock);
@@ -130,7 +140,7 @@ export function buildSystemPrompt(
   // bubble-split note.
   if (chatbot.system_prompt && chatbot.system_prompt.trim()) {
     return `${chatbot.system_prompt.trim()}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
 ${kbBlock}
 
@@ -148,7 +158,7 @@ ${chatbot.business_description || "(none provided)"}
 
 TONE
 ${TONE_GUIDES[chatbot.tone]}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)
 ${kbBlock}
 
@@ -171,6 +181,9 @@ export async function generateReply(opts: {
   // Catalog of sendable follow-up assets (key/kind/description, one per line) so
   // the model can emit a [[SEND_ASSET: key]] directive. Empty/absent = no media.
   mediaCatalog?: string | null;
+  // One-line instruction injected for THIS reply only (a matched keyword group's
+  // on_repeat="instruction"); steers this turn without changing the persona.
+  turnInstruction?: string | null;
 }) {
   // Continuing conversation if there's any prior history — drives the
   // continuity directive so the bot doesn't restart the intro or re-ask.
@@ -180,7 +193,8 @@ export async function generateReply(opts: {
     opts.kbBlock,
     opts.memorySummary,
     returning,
-    opts.mediaCatalog
+    opts.mediaCatalog,
+    opts.turnInstruction
   );
   const images = opts.images ?? [];
 
