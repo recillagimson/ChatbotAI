@@ -74,6 +74,15 @@
 
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
+
+  /* The dashboard is a pinned app shell (fixed sidebar + a single scrolling
+     <main>). Lock the window/document scroll while it's mounted so there's no
+     second, outer scrollbar sitting behind <main>. Scoped via :has() to the
+     shell marker so the marketing homepage, auth pages, and the admin area —
+     which all scroll the window normally — are left untouched. */
+  html:has([data-app-shell]) {
+    overflow: hidden;
+  }
 }
 
 @layer utilities {

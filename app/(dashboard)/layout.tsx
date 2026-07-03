@@ -28,7 +28,7 @@ export default async function DashboardLayout({
     // Pin the shell to the viewport so the SIDEBAR stays put and only the main
     // content scrolls. (min-h-screen let the row grow with content, which pushed
     // the page — and the sidebar — into a scroll.)
-    <div className="flex h-[100dvh] overflow-hidden">
+    <div data-app-shell className="flex h-[100dvh] overflow-hidden">
       {/* While impersonating: scope the sidebar to Overview→Request Changes and
           hide the Admin link (the real admin returns via the banner's Exit). */}
       <Sidebar isSuperadmin={!active && !!profile?.is_superadmin} impersonating={active} />

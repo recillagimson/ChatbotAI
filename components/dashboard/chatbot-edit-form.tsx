@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionField } from "@/components/dashboard/section-field";
+import { Textarea } from "@/components/ui/textarea";
 import type { Chatbot } from "@/lib/types";
 
 export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
@@ -145,9 +146,15 @@ function ReadOnlySection({
           <Link href={`/requests?category=${category}`}>Request a change</Link>
         </Button>
       </div>
-      <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap min-h-[5rem] text-muted-foreground">
-        {value?.trim() || "Not set yet — use “Request a change” to have the team add this section."}
-      </div>
+      {/* Read-only but resizable (like the Personality field), capped at 7 rows so a
+          long section scrolls inside the box instead of stretching the whole page. */}
+      <Textarea
+        readOnly
+        rows={7}
+        value={value?.trim() || ""}
+        placeholder="Not set yet — use “Request a change” to have the team add this section."
+        className="resize-y bg-muted/40 text-muted-foreground"
+      />
       <p className="text-xs text-muted-foreground">
         Edited through the team-reviewed Request Change flow, not here.
       </p>
