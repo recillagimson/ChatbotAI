@@ -10,10 +10,12 @@ export function ConversationActions({
   conversationId,
   currentStatus,
   confirmedAt = null,
+  userMutedAt = null,
 }: {
   conversationId: string;
   currentStatus: string;
   confirmedAt?: string | null;
+  userMutedAt?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -21,6 +23,9 @@ export function ConversationActions({
   // round-trip. Revert if the update fails.
   const [paused, setPaused] = useState(currentStatus === "ai_paused");
   const [confirmed, setConfirmed] = useState(!!confirmedAt);
+  // The lead self-muted the AI ("stopmessage"). Owner escape hatch to re-enable
+  // auto replies without waiting for the lead to text "resumemessage".
+  const [muted, setMuted] = useState(!!userMutedAt);
 
   function toggle() {
     const next = !paused;
@@ -61,8 +66,30 @@ export function ConversationActions({
     });
   }
 
+  // Clear a lead's self-mute (re-enable auto AI replies). Owner-only escape hatch.
+  function unmute() {
+    setMuted(false);
+    startTransition(async () => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("conversations")
+        .update({ user_muted_at: null })
+        .eq("id", conversationId);
+      if (error) {
+        setMuted(true); // revert on failure
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
+      {muted && (
+        <Button onClick={unmute} disabled={isPending} variant="outline" size="sm">
+          <Play className="h-4 w-4 mr-2" /> Un-mute (re-enable AI)
+        </Button>
+      )}
       <Button onClick={toggle} disabled={isPending} variant="outline" size="sm">
         {paused ? (
           <>

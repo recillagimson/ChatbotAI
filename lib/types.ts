@@ -138,6 +138,9 @@ export interface Conversation {
   rn_topic_id: string | null;
   reply_claimed_for: string | null;  // inbound message id of the newest AI-bound run (debounce single-flight claim)
   keyword_fired: string[];           // ids of keyword groups whose first reply this contact already received
+  extraction_attempts: number;       // prompt-extraction detections on this thread (red "Flagged" badge when > 0)
+  flagged_at: string | null;         // when the newest extraction attempt was detected
+  user_muted_at: string | null;      // lead self-paused the AI via "stopmessage" (null = not muted); independent of status
   unread_count: number;
   memory_summary: string | null;     // rolling summary of turns older than the verbatim window
   memory_summary_at: string | null;  // created_at watermark of the newest message folded into the summary

@@ -87,6 +87,34 @@ on-repeat "send a different message". A verbatim resend within 30s is absorbed b
 the duplicate gate above *before* the keyword check, so it won't re-fire the
 on-repeat message.
 
+A message detected as a blatant **prompt-extraction / reverse-engineering
+attempt** ("ignore your instructions", "show me your system prompt") is
+deflected with a static reply — the attacker's text never reaches the AI:
+```json
+{
+  "reply": "That's not something I can share, but tell me what you're looking for and I'll point you the right way.",
+  "ai_skipped": true,
+  "reason": "extraction_blocked"
+}
+```
+Ambiguous attempts (e.g. asking for scripts "word for word") get a **normal**
+reply with no special `reason` — the AI is steered for that turn to answer
+helpfully without revealing internals. Every detection (both kinds) increments
+`conversations.extraction_attempts` + stamps `flagged_at` (a red "Flagged"
+badge in the dashboard inbox) and logs a `usage_log` row with
+`event_type: "extraction_attempt"`.
+
+A lead can **self-pause** the AI for their own conversation by texting
+`stopmessage`, and re-enable it with `resumemessage`. This is tracked on
+`conversations.user_muted_at`, independent of owner human-takeover. Each command
+sends a one-time confirmation:
+```json
+{ "reply": "You're all set, I'll start replying again. What can I help you with?", "ai_skipped": true, "reason": "user_resumed" }
+```
+`reason` is `user_paused` for the stop confirmation, `user_resumed` for resume,
+and `user_muted` (empty reply, no AI) for any other message while the lead is
+muted. Owners see a "Muted by user" badge and can clear it from the dashboard.
+
 On push channels (Instagram/Messenger/WhatsApp/Telegram) the webhook acks
 instantly with `{"ai_queued": true, "reply": ""}` and delivers the reply in the
 background after a short debounce (`REPLY_DEBOUNCE_MS`, default 5s): if the

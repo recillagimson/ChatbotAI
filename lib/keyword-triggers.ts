@@ -15,7 +15,7 @@
 import type { KeywordGroup } from "./types";
 
 /** Lowercase, trim, collapse internal whitespace. Mirrors getTrivialReply's normalize. */
-function normalize(s: string): string {
+export function normalize(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
@@ -24,7 +24,7 @@ function escapeRegExp(s: string): string {
 }
 
 /** True if `keyword` appears as a whole word/phrase in the already-normalized text. */
-function containsWord(normalizedText: string, keyword: string): boolean {
+export function containsWord(normalizedText: string, keyword: string): boolean {
   const k = normalize(keyword);
   if (!k) return false;
   // Whole-word/phrase boundaries: the keyword must not be flanked by another

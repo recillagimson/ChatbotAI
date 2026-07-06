@@ -855,3 +855,34 @@ alter table public.conversations
 -- Teardown:
 -- alter table public.chatbots     drop column if exists keyword_triggers;
 -- alter table public.conversations drop column if exists keyword_fired;
+
+-- ===========================================================================
+-- Prompt shield: anti-extraction flagging (2026-07-06)
+-- ===========================================================================
+-- Owner-visibility state for the anti-prompt-extraction defense. The webhook
+-- (step 6b-shield) increments extraction_attempts and stamps flagged_at on
+-- every detected extraction/reverse-engineering attempt (lib/extraction-detect.ts);
+-- the dashboard renders a red "Flagged" badge when extraction_attempts > 0.
+-- Best-effort writes + default-0 reads keep the app fail-open either side of
+-- this migration.
+alter table public.conversations
+  add column if not exists extraction_attempts int not null default 0,
+  add column if not exists flagged_at timestamptz;
+
+-- Teardown:
+-- alter table public.conversations drop column if exists extraction_attempts;
+-- alter table public.conversations drop column if exists flagged_at;
+
+-- ===========================================================================
+-- Self-service pause/resume (2026-07-06)
+-- ===========================================================================
+-- A lead silences the AI for their own conversation by texting "stopmessage"
+-- and turns it back on with "resumemessage" (lib/user-controls.ts; webhook gate
+-- 6-mute). user_muted_at (null = not muted) is INDEPENDENT of the owner's
+-- human-takeover (status='ai_paused'), so a lead can't resume a chat a human
+-- agent has taken over. Fail-open: missing column reads as not muted.
+alter table public.conversations
+  add column if not exists user_muted_at timestamptz;
+
+-- Teardown:
+-- alter table public.conversations drop column if exists user_muted_at;

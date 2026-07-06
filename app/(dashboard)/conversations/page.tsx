@@ -154,6 +154,14 @@ export default async function ConversationsPage({
                     {c.status === "ai_paused" && (
                       <Badge variant="warning">AI paused</Badge>
                     )}
+                    {c.user_muted_at && (
+                      <Badge variant="secondary">Muted by user</Badge>
+                    )}
+                    {(c.extraction_attempts ?? 0) > 0 && (
+                      <Badge variant="destructive">
+                        Flagged{c.extraction_attempts > 1 ? ` ×${c.extraction_attempts}` : ""}
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground truncate">
                     {(c.chatbots as { name: string } | null)?.name ?? "—"}

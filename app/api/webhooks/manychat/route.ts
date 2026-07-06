@@ -22,6 +22,19 @@ import {
   buildAssetCatalogBlock,
 } from "@/lib/followup-assets";
 import { firstMatchingGroup } from "@/lib/keyword-triggers";
+import {
+  detectExtractionAttempt,
+  pickDeflection,
+  EXTRACTION_REINFORCEMENT,
+  AUTO_PAUSE_ON_EXTRACTION,
+  EXTRACTION_PAUSE_THRESHOLD,
+  type ExtractionResult,
+} from "@/lib/extraction-detect";
+import {
+  detectUserControl,
+  STOP_CONFIRMATION,
+  RESUME_CONFIRMATION,
+} from "@/lib/user-controls";
 import { sanitizeReply } from "@/lib/sanitize";
 import { detectLeadConfirmed } from "@/lib/confirm-detect";
 import {
@@ -322,9 +335,12 @@ export async function POST(request: NextRequest) {
   // no reply, no unread bump — a ManyChat re-delivery leaves zero trace, and a
   // rapid re-tap folds into the in-flight run's debounce burst (the first tap's
   // run answers once). Skipped when media is attached (two different photos can
-  // share empty/identical text). Trade-off: a deliberate identical re-send
-  // within 30s won't appear in the owner's inbox — the reply would be the same.
-  if (!hasMedia && baseText) {
+  // share empty/identical text). Control words (stopmessage/resumemessage) are
+  // ALSO exempt: they toggle state, so a stop→resume→stop within 30s must not
+  // have the 3rd command swallowed as a "duplicate" and leave the lead in the
+  // wrong state. Trade-off: a deliberate identical re-send within 30s won't
+  // appear in the owner's inbox — the reply would be the same.
+  if (!hasMedia && baseText && !detectUserControl(baseText)) {
     const dup = await checkDuplicate(chatbot.id, body.subscriber_id, baseText);
     if (dup.isDuplicate) {
       return manychatReply("", { ai_skipped: true, reason: "duplicate" });
@@ -446,6 +462,46 @@ export async function POST(request: NextRequest) {
     return manychatReply("", { ai_skipped: true, reason: "human_takeover" });
   }
 
+  // 6-mute. Self-service pause/resume. A lead silences the AI by texting
+  // "stopmessage" and turns it back on with "resumemessage". Tracked on
+  // conversations.user_muted_at, INDEPENDENT of the owner's human-takeover
+  // (status='ai_paused', gated above) so a lead can't resume a chat a human has
+  // taken over — and no confirmation bubble fires into a human's conversation.
+  // Runs before rate-limit so a control word is never dropped, and returns a
+  // muted lead before any AI cost. Fail-open: a missing column reads as
+  // not-muted. A verbatim repeat within 30s is already absorbed by the dedup
+  // gate above, so a stray double "stopmessage" won't re-send the confirmation.
+  const control = baseText ? detectUserControl(baseText) : null;
+  const isMuted = !!existing?.user_muted_at;
+  if (control === "resume" && isMuted) {
+    // Clear the mute and any stale debounce claim left by the earlier stop.
+    await supabase
+      .from("conversations")
+      .update({ user_muted_at: null, reply_claimed_for: null })
+      .eq("id", conversationId!)
+      .then(() => {}, () => {});
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, RESUME_CONFIRMATION, chatbot.user_id, chatbot.id, apiKey, platform);
+    return manychatReply(sanitizeReply(RESUME_CONFIRMATION), { ai_skipped: true, reason: "user_resumed" });
+  }
+  if (control === "stop" && !isMuted) {
+    // Overwrite reply_claimed_for so an in-flight burst run (a question asked
+    // seconds earlier, still generating/pushing) fails its single-flight CAS
+    // release and discards — the lead doesn't get an answer bubble AFTER the
+    // "I'll hold off" confirmation.
+    await supabase
+      .from("conversations")
+      .update({ user_muted_at: new Date().toISOString(), reply_claimed_for: inboundId ?? null })
+      .eq("id", conversationId!)
+      .then(() => {}, () => {});
+    await persistAndPush(supabase, conversationId!, body.subscriber_id, STOP_CONFIRMATION, chatbot.user_id, chatbot.id, apiKey, platform);
+    return manychatReply(sanitizeReply(STOP_CONFIRMATION), { ai_skipped: true, reason: "user_paused" });
+  }
+  // Muted, and this wasn't the resume word → stay silent (no AI). A redundant
+  // "stopmessage" while already muted also lands here (no duplicate confirmation).
+  if (isMuted) {
+    return manychatReply("", { ai_skipped: true, reason: "user_muted" });
+  }
+
   // 6a. Rate limit per (chatbot, subscriber). Silent drop on flood — no push,
   // no AI cost. The inbound message is already recorded so a spamming user is
   // still visible in the dashboard inbox.
@@ -472,6 +528,61 @@ export async function POST(request: NextRequest) {
   if (trivial) {
     await persistAndPush(supabase, conversationId!, body.subscriber_id, trivial, chatbot.user_id, chatbot.id, apiKey, platform);
     return manychatReply(trivial, { ai_skipped: true, reason: "trivial_ack" });
+  }
+
+  // 6b-shield. Anti-prompt-extraction (Layer 2; Layer 1 is the always-on
+  // CONFIDENTIALITY block in buildSystemPrompt). Runs for ALL bots (persona
+  // included) on baseText only, BEFORE keyword triggers so a hard attack can't
+  // also fire a keyword canned reply. Tiered: HARD (blatant) → static
+  // deflection, the attacker's text never reaches the model; SOFT (ambiguous)
+  // or HARD mid-burst → fall through steered by a per-turn reinforcement, the
+  // AI still answers. Every detection flags the conversation for the owner
+  // (extraction_attempts/flagged_at + usage_log) best-effort. Fail-open: a
+  // throwing detector or missing column must never break a normal reply.
+  let securityInstruction: string | null = null;
+  let extraction: ExtractionResult = { level: "none", patterns: [] };
+  try {
+    if (baseText) extraction = detectExtractionAttempt(baseText);
+  } catch {
+    /* fail-open */
+  }
+  if (extraction.level !== "none") {
+    const priorAttempts =
+      typeof existing?.extraction_attempts === "number" ? existing.extraction_attempts : 0;
+    const newAttempts = priorAttempts + 1;
+    const flagUpdate: Record<string, unknown> = {
+      extraction_attempts: newAttempts,
+      flagged_at: new Date().toISOString(),
+    };
+    // Repeat-attempt auto-handoff (ships OFF; flag-only per owner decision).
+    if (AUTO_PAUSE_ON_EXTRACTION && extraction.level === "hard" && newAttempts >= EXTRACTION_PAUSE_THRESHOLD) {
+      flagUpdate.status = "ai_paused";
+    }
+    await supabase
+      .from("conversations")
+      .update(flagUpdate)
+      .eq("id", conversationId!)
+      .then(() => {}, () => {});
+    await supabase
+      .from("usage_log")
+      .insert({
+        user_id: chatbot.user_id,
+        chatbot_id: chatbot.id,
+        event_type: "extraction_attempt",
+        tokens_used: 0,
+      })
+      .then(() => {}, () => {});
+
+    // HARD, not mid-burst → guaranteed no-leak deflection (no AI call). The
+    // mid-burst guard mirrors keyword canCanned: a canned row mid-burst would
+    // become a burst boundary and strand an earlier unanswered question.
+    if (extraction.level === "hard" && !existing?.reply_claimed_for) {
+      const text = pickDeflection(body.subscriber_id, baseText.length);
+      await persistAndPush(supabase, conversationId!, body.subscriber_id, text, chatbot.user_id, chatbot.id, apiKey, platform);
+      return manychatReply(sanitizeReply(text), { ai_skipped: true, reason: "extraction_blocked" });
+    }
+    // SOFT, or HARD mid-burst → steer this turn and fall through.
+    securityInstruction = EXTRACTION_REINFORCEMENT;
   }
 
   // 6c. Keyword triggers (per-chatbot, data-driven). Match the inbound text against
@@ -639,11 +750,12 @@ export async function POST(request: NextRequest) {
       if (waitMs > 0) await sleep(waitMs);
       const { data: fresh } = await supabase
         .from("conversations")
-        .select("status, reply_claimed_for, memory_summary, confirmed_at")
+        .select("status, user_muted_at, reply_claimed_for, memory_summary, confirmed_at")
         .eq("id", conversationId!)
         .maybeSingle();
-      // Human takeover during the sleep → stand down and release our claim.
-      if (fresh?.status === "ai_paused") {
+      // Human takeover OR a self-service "stopmessage" during the sleep → stand
+      // down and release our claim (don't answer the burst after the lead muted).
+      if (fresh?.status === "ai_paused" || fresh?.user_muted_at) {
         await releaseClaim();
         return null;
       }
@@ -715,7 +827,10 @@ export async function POST(request: NextRequest) {
         images,
         memorySummary,
         mediaCatalog,
-        turnInstruction: keywordInstruction,
+        // Security reinforcement outranks a keyword steer when both fire on
+        // the same turn (single channel; the keyword steer is sacrificed for
+        // that one flagged reply only).
+        turnInstruction: securityInstruction || keywordInstruction,
       });
       if (text) {
         replyText = text;

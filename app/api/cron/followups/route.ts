@@ -65,6 +65,12 @@ async function run() {
     )
     .eq("status", "active")
     .is("confirmed_at", null)
+    // Never drip to a lead who self-muted the AI ("stopmessage") — proactive
+    // follow-ups would contradict the "I'll hold off" confirmation and risk an
+    // IG spam report. NOTE: filtering on this column requires the
+    // 2026-07-06-user-mute migration applied (an unknown column errors the whole
+    // query, unlike the webhook's fail-open reads).
+    .is("user_muted_at", null)
     .eq("chatbots.auto_followup_enabled", true)
     .gte("last_message_at", lookbackStart)
     .limit(500);

@@ -90,6 +90,14 @@ export default async function ConversationDetailPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {conversation.user_muted_at && (
+            <Badge variant="secondary">Muted by user</Badge>
+          )}
+          {(conversation.extraction_attempts ?? 0) > 0 && (
+            <Badge variant="destructive">
+              Flagged{conversation.extraction_attempts > 1 ? ` ×${conversation.extraction_attempts}` : ""}
+            </Badge>
+          )}
           {conversation.confirmed_at && (
             <Badge variant="success">
               Confirmed ✓ ({conversation.confirmed_by === "ai" ? "AI" : "manual"})
@@ -116,6 +124,7 @@ export default async function ConversationDetailPage({
           conversationId={conversation.id}
           currentStatus={conversation.status}
           confirmedAt={conversation.confirmed_at ?? null}
+          userMutedAt={conversation.user_muted_at ?? null}
         />
       </div>
 
