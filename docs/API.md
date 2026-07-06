@@ -115,6 +115,14 @@ sends a one-time confirmation:
 and `user_muted` (empty reply, no AI) for any other message while the lead is
 muted. Owners see a "Muted by user" badge and can clear it from the dashboard.
 
+A chatbot can enable **keyword-only reply mode** (`chatbots.keyword_gate_enabled`):
+when on, the bot answers ONLY DMs that match one of its configured keyword
+groups and silently ignores everything else. A non-matching message returns an
+empty reply with `reason: "keyword_gate_blocked"` (no AI, no trivial ack, no
+extraction deflection) — the inbound is still stored and shown in the inbox for
+a manual reply. A matching message is handled exactly as a normal keyword
+trigger (canned reply or AI, per the group's mode).
+
 On push channels (Instagram/Messenger/WhatsApp/Telegram) the webhook acks
 instantly with `{"ai_queued": true, "reply": ""}` and delivers the reply in the
 background after a short debounce (`REPLY_DEBOUNCE_MS`, default 5s): if the

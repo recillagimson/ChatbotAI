@@ -886,3 +886,16 @@ alter table public.conversations
 
 -- Teardown:
 -- alter table public.conversations drop column if exists user_muted_at;
+
+-- ===========================================================================
+-- Keyword-only reply mode (2026-07-06)
+-- ===========================================================================
+-- Per-chatbot toggle: when ON, the AI answers ONLY DMs that match a keyword
+-- group (chatbots.keyword_triggers) and silently ignores everything else, for
+-- personal/private accounts. Enforced in the webhook (gate 6-gate). Default
+-- false; fail-open (missing column = gate off).
+alter table public.chatbots
+  add column if not exists keyword_gate_enabled boolean not null default false;
+
+-- Teardown:
+-- alter table public.chatbots drop column if exists keyword_gate_enabled;

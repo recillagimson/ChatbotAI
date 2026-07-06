@@ -26,6 +26,7 @@ type FollowupChatbotRow = Pick<
   | "auto_followup_template"
   | "auto_followup_steps"
   | "auto_followup_loop_last"
+  | "keyword_gate_enabled"
   | "manychat_api_key_enc"
 >;
 
@@ -42,6 +43,7 @@ type CandidateRow = Pick<
   | "followup_step_index"
   | "confirmed_at"
   | "rn_opt_in_at"
+  | "keyword_fired"
 > & { chatbots: FollowupChatbotRow };
 
 function bump(map: Record<string, number>, key: string) {
@@ -60,8 +62,8 @@ async function run() {
   const { data, error } = await supabase
     .from("conversations")
     .select(
-      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, rn_opt_in_at, " +
-        "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_template, auto_followup_steps, auto_followup_loop_last, manychat_api_key_enc)"
+      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, rn_opt_in_at, keyword_fired, " +
+        "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_template, auto_followup_steps, auto_followup_loop_last, keyword_gate_enabled, manychat_api_key_enc)"
     )
     .eq("status", "active")
     .is("confirmed_at", null)
@@ -116,6 +118,19 @@ async function run() {
     if (!activeOwners.has(cb.user_id)) {
       skipped++;
       bump(reasons, "sub_inactive");
+      continue;
+    }
+    // Keyword-only reply mode: never proactively drip a contact the gate has
+    // been ignoring. keyword_fired non-empty = this contact matched a keyword at
+    // least once (engaged); empty = a stranger the bot never answered, so a
+    // follow-up would contradict the gate. (Requires the 2026-07-06-keyword-gate
+    // migration; the select above already depends on it.) Edge (safe direction):
+    // a message-mode group's first match that landed mid-burst or was text-less
+    // isn't marked in keyword_fired, so that engaged contact simply gets no
+    // proactive drip — never the reverse (a stranger is never dripped).
+    if (cb.keyword_gate_enabled && !(Array.isArray(row.keyword_fired) && row.keyword_fired.length)) {
+      skipped++;
+      bump(reasons, "keyword_gated");
       continue;
     }
     const decision = evaluateFollowup(cb, row, now, { rnEnabled: RN_ENABLED });

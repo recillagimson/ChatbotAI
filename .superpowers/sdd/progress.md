@@ -29,3 +29,9 @@ Task 1-5 complete (lib/user-controls.ts + test 21/21; user_muted_at column + mig
 Review (fable) found 2 real bugs: (1) CRITICAL follow-up cron drips to muted leads -> fixed with .is(user_muted_at,null) filter; (2) IMPORTANT 30s dedup swallows control words -> fixed with !detectUserControl guard at 3c; plus race hardening: stop stamps reply_claimed_for to discard in-flight burst run, resume clears it.
 Gates: user-controls 21/21, debounce 30/30, keyword 29/29, extraction 55/55, systemprompt 62/62, tsc clean. Owner applies 2026-07-06-user-mute.sql (also required by the cron filter) + commits.
 Re-review (fable) APPROVED after 3 fixes; applied 2 optional cleanups (accurate dedup comment, un-mute button clears reply_claimed_for). Final gates green, tsc clean. Feature complete; owner applies 2026-07-06-user-mute.sql BEFORE deploy (cron filter is fail-closed) + commits.
+
+=== Feature: keyword-only reply mode (keyword gate) ===
+Complete (chatbots.keyword_gate_enabled column + migration + schema mirror + type; webhook 6-gate hoists keywordGroup above trivial/shield, silent on non-match; keyword-triggers-form toggle + footgun warning; API.md keyword_gate_blocked + CLAUDE.md gotcha 16; test-systemprompt fixture updated)
+Review (fable) found the same-class bug as user-mute: followup drip ignored the gate -> fixed (cron skips gated bots conversations with empty keyword_fired). Also corrected false deploy-safety claim (save+cron require the column). Backlog fold-in accepted+documented.
+Gates: keyword 29/29, extraction 55/55, systemprompt 62/62, user-controls 21/21, debounce 30/30, tsc clean. Owner applies 2026-07-06-keyword-gate.sql BEFORE deploy + commits.
+Re-review (fable) APPROVED; documented the safe-direction message-mode edge in the cron comment. Feature complete; owner applies 2026-07-06-keyword-gate.sql BEFORE deploy + commits.

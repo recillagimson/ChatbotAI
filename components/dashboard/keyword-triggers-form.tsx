@@ -77,10 +77,16 @@ export function KeywordTriggersForm({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [groups, setGroups] = useState<EditableGroup[]>(toEditable(chatbot.keyword_triggers));
+  const [gateEnabled, setGateEnabled] = useState(!!chatbot.keyword_gate_enabled);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
+
+  // Footgun: gate ON with no usable keyword = the bot replies to nobody.
+  const hasActiveKeywords = groups.some(
+    (g) => g.enabled && g.keywords.some((k) => k.trim())
+  );
 
   const knownKeys = new Set(assets.map((a) => a.key));
 
@@ -164,7 +170,7 @@ export function KeywordTriggersForm({
     const supabase = createClient();
     const { error } = await supabase
       .from("chatbots")
-      .update({ keyword_triggers: cleaned })
+      .update({ keyword_triggers: cleaned, keyword_gate_enabled: gateEnabled })
       .eq("id", chatbot.id);
     setSaving(false);
     if (error) {
@@ -187,6 +193,32 @@ export function KeywordTriggersForm({
         send a different message, or steer the AI) — so a returning lead never gets the same
         pitch twice.
       </p>
+
+      {/* Keyword-only reply mode: gate all replies behind a keyword match. */}
+      <div className="space-y-2 rounded-md border p-3">
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium">Only reply to messages with a keyword</span>
+          <Switch
+            checked={gateEnabled}
+            onCheckedChange={(v) => {
+              markDirty();
+              setGateEnabled(v);
+            }}
+            aria-label="Only reply to messages with a keyword"
+          />
+        </label>
+        <p className="text-xs text-muted-foreground">
+          When on, the bot answers ONLY DMs that match a keyword below and silently ignores
+          everyone else. Use this for personal or private accounts. Non-matching messages
+          still show in your inbox so you can reply by hand.
+        </p>
+        {gateEnabled && !hasActiveKeywords && (
+          <p className="text-xs text-amber-600">
+            With this on and no keywords set, the bot won&apos;t reply to anyone. Add at least
+            one enabled keyword group below.
+          </p>
+        )}
+      </div>
 
       {groups.map((g, i) => (
         <div key={g.id} className="space-y-3 rounded-md border p-3">

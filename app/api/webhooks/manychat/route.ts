@@ -516,6 +516,22 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // 6-gate. Keyword-only reply mode. When ON, the bot answers ONLY DMs that
+  // match a keyword group and silently ignores everything else (personal/private
+  // accounts that don't want the AI replying to unrelated people). Computed here
+  // (reused by 6c below) so the gate also suppresses the trivial ack and the
+  // extraction deflection for non-keyword messages. baseText only: a media-only
+  // DM (no text) matches nothing → silent in gate mode. Fail-open: a missing
+  // column reads as false (gate off). The inbound is already persisted (step 5)
+  // + unread-bumped, so the owner still SEES the message in the inbox to answer
+  // manually — only the AUTO reply is withheld, exactly like human-takeover.
+  const keywordGroup = baseText
+    ? firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [])
+    : null;
+  if (chatbot.keyword_gate_enabled && !keywordGroup) {
+    return manychatReply("", { ai_skipped: true, reason: "keyword_gate_blocked" });
+  }
+
   // 6b. Trivial-input shortcut: "thanks" / "ok" / 👍 → static ack, no AI.
   // Persona bots (custom system_prompt) skip this so even a "thanks" gets an
   // in-voice reply from the persona instead of a generic canned line. Also
@@ -594,11 +610,8 @@ export async function POST(request: NextRequest) {
   // run the group's on_repeat action. Matches baseText only (media captions aren't
   // available yet). Fires for ALL bots (persona bots included). Fail-open: a missing
   // column reads as no triggers. `keywordInstruction` is captured by the AI closure
-  // below for on_repeat="instruction".
+  // below for on_repeat="instruction". `keywordGroup` was matched once at 6-gate above.
   let keywordInstruction: string | null = null;
-  const keywordGroup = baseText
-    ? firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [])
-    : null;
   if (keywordGroup) {
     const firedIds: string[] = Array.isArray(existing?.keyword_fired)
       ? (existing!.keyword_fired as string[])

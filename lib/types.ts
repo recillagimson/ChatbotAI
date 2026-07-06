@@ -55,6 +55,7 @@ export interface Chatbot {
   auto_followup_loop_last: boolean;       // repeat the final step until confirmed
   ai_media_enabled: boolean;              // allow the live AI to emit [[SEND_ASSET]] directives
   keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)
+  keyword_gate_enabled: boolean;          // ON = reply ONLY to DMs matching a keyword group; else silent
   created_at: string;
 }
 
