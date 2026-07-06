@@ -21,7 +21,7 @@ import {
   assetToOutbound,
   buildAssetCatalogBlock,
 } from "@/lib/followup-assets";
-import { firstMatchingGroup } from "@/lib/keyword-triggers";
+import { firstMatchingGroup, keywordGateBlocks } from "@/lib/keyword-triggers";
 import {
   detectExtractionAttempt,
   pickDeflection,
@@ -462,16 +462,47 @@ export async function POST(request: NextRequest) {
     return manychatReply("", { ai_skipped: true, reason: "human_takeover" });
   }
 
+  // 6-gate. Keyword-only reply mode — the OUTERMOST filter for a gated bot (only
+  // human-takeover above it). When ON, the bot only engages contacts who have
+  // shown intent via a keyword (personal/private accounts that don't want the AI
+  // replying to unrelated people). The keyword is an ENTRY qualifier, not a
+  // per-message filter: a contact unlocks the bot by matching a keyword once
+  // (recorded on keyword_fired at 6c) and is then a possible lead, so every later
+  // message — keyword or not — falls through and gets answered, so the bot can
+  // carry the conversation it started ("repair or funding?" → the lead's plain
+  // answer still gets a reply). A contact who has NEVER matched a keyword stays
+  // silent. Deliberately placed ABOVE 6-mute/6a/6b/6c: a gated stranger must get
+  // NO automatic reply of ANY kind — not a stop/resume confirmation, not the
+  // trivial ack, not the extraction deflection, not the AI. (If the gate sat below
+  // 6-mute, a stranger typing "stopmessage" would get an "I'll hold off" bubble —
+  // an auto-reply to a non-lead, which is exactly what this feature forbids.)
+  // `keywordGroup` is computed here and reused by 6c. baseText only: a media-only
+  // DM matches nothing → still gated for a never-engaged contact (an engaged lead
+  // falls through). Fail-open: a missing column reads as false (gate off). The
+  // inbound is already persisted (step 5) + unread-bumped, so the owner still SEES
+  // a gated message in the inbox to answer manually — only the AUTO reply is
+  // withheld, like human-takeover.
+  const keywordGroup = baseText
+    ? firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [])
+    : null;
+  const alreadyEngaged =
+    Array.isArray(existing?.keyword_fired) && existing!.keyword_fired.length > 0;
+  if (keywordGateBlocks(chatbot.keyword_gate_enabled ?? false, !!keywordGroup, alreadyEngaged)) {
+    return manychatReply("", { ai_skipped: true, reason: "keyword_gate_blocked" });
+  }
+
   // 6-mute. Self-service pause/resume. A lead silences the AI by texting
   // "stopmessage" and turns it back on with "resumemessage". Tracked on
   // conversations.user_muted_at, INDEPENDENT of the owner's human-takeover
   // (status='ai_paused', gated above) so a lead can't resume a chat a human has
   // taken over — and no confirmation bubble fires into a human's conversation.
   // Runs before rate-limit so a control word is never dropped, and returns a
-  // muted lead before any AI cost. Fail-open: a missing column reads as
-  // not-muted. Control words are exempt from the 30s dedup gate above (they
-  // toggle state), so a duplicate "stopmessage" isn't re-confirmed by the
-  // idempotence below (stop-while-already-muted → silent, no second bubble),
+  // muted lead before any AI cost. On a gated bot the 6-gate above has already
+  // silenced never-engaged strangers, so this only ever sees engaged leads (or
+  // non-gated bots) — a stranger's "stopmessage" never reaches here. Fail-open: a
+  // missing column reads as not-muted. Control words are exempt from the 30s dedup
+  // gate above (they toggle state), so a duplicate "stopmessage" isn't re-confirmed
+  // by the idempotence below (stop-while-already-muted → silent, no second bubble),
   // not by dedup.
   const control = baseText ? detectUserControl(baseText) : null;
   const isMuted = !!existing?.user_muted_at;
@@ -514,22 +545,6 @@ export async function POST(request: NextRequest) {
       reason: "rate_limited",
       limit: rl.limit,
     });
-  }
-
-  // 6-gate. Keyword-only reply mode. When ON, the bot answers ONLY DMs that
-  // match a keyword group and silently ignores everything else (personal/private
-  // accounts that don't want the AI replying to unrelated people). Computed here
-  // (reused by 6c below) so the gate also suppresses the trivial ack and the
-  // extraction deflection for non-keyword messages. baseText only: a media-only
-  // DM (no text) matches nothing → silent in gate mode. Fail-open: a missing
-  // column reads as false (gate off). The inbound is already persisted (step 5)
-  // + unread-bumped, so the owner still SEES the message in the inbox to answer
-  // manually — only the AUTO reply is withheld, exactly like human-takeover.
-  const keywordGroup = baseText
-    ? firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [])
-    : null;
-  if (chatbot.keyword_gate_enabled && !keywordGroup) {
-    return manychatReply("", { ai_skipped: true, reason: "keyword_gate_blocked" });
   }
 
   // 6b. Trivial-input shortcut: "thanks" / "ok" / 👍 → static ack, no AI.

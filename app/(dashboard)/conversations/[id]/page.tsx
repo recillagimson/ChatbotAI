@@ -90,6 +90,9 @@ export default async function ConversationDetailPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {Array.isArray(conversation.keyword_fired) && conversation.keyword_fired.length > 0 && (
+            <Badge variant="outline">Lead</Badge>
+          )}
           {conversation.user_muted_at && (
             <Badge variant="secondary">Muted by user</Badge>
           )}

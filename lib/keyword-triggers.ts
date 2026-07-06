@@ -58,3 +58,29 @@ export function firstMatchingGroup(
   }
   return null;
 }
+
+/**
+ * Keyword-only reply mode gate (chatbots.keyword_gate_enabled). A keyword is an
+ * ENTRY qualifier, not a per-message filter: a contact "unlocks" the bot by
+ * matching a keyword once (becoming a possible lead), and from then on the bot
+ * replies to ALL their messages — keyword or not — so it can actually carry the
+ * conversation it started. A contact who has never matched a keyword stays
+ * silent. Returns true when the inbound should be silently gated (no AI, no ack).
+ *
+ *   gate off                                 → false (feature disabled)
+ *   matched a keyword on THIS message         → false (qualifies now)
+ *   already engaged (matched a keyword before)→ false (converse with the lead)
+ *   gate on, no match, never engaged          → true  (silent for strangers)
+ *
+ * `alreadyEngaged` is derived from conversations.keyword_fired (non-empty), the
+ * same "has this contact shown intent" proxy the follow-up cron uses, so the
+ * reactive gate and the proactive drip qualify contacts identically.
+ */
+export function keywordGateBlocks(
+  gateEnabled: boolean,
+  matchedKeyword: boolean,
+  alreadyEngaged: boolean
+): boolean {
+  if (!gateEnabled) return false;
+  return !matchedKeyword && !alreadyEngaged;
+}
