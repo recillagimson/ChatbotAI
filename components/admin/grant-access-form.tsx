@@ -41,6 +41,8 @@ export function GrantAccessForm({
   const [error, setError] = useState<string | null>(null);
 
   const compActive = !!compExpiresAt && new Date(compExpiresAt) > new Date();
+  // Cap matches the server contract (route.ts zod): 3650 days / 120 months.
+  const maxAmount = unit === "months" ? 120 : 3650;
 
   async function send(action: "grant" | "extend" | "revoke") {
     setBusy(action);
@@ -122,9 +124,11 @@ export function GrantAccessForm({
             id="grant-amount"
             type="number"
             min={1}
-            max={3650}
+            max={maxAmount}
             value={amount}
-            onChange={(e) => setAmount(Math.max(1, Number(e.target.value) || 0))}
+            onChange={(e) =>
+              setAmount(Math.min(maxAmount, Math.max(1, Number(e.target.value) || 0)))
+            }
           />
         </div>
         <div className="w-36">
@@ -132,7 +136,12 @@ export function GrantAccessForm({
           <select
             id="grant-unit"
             value={unit}
-            onChange={(e) => setUnit(e.target.value as Unit)}
+            onChange={(e) => {
+              const next = e.target.value as Unit;
+              setUnit(next);
+              // Re-clamp so switching to Months can't leave an over-cap amount.
+              setAmount((a) => Math.min(next === "months" ? 120 : 3650, a));
+            }}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <option value="days">Days</option>

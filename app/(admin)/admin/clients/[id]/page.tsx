@@ -187,7 +187,17 @@ export default async function AdminClientDetailPage({
               )}
               <div>
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Subscription</p>
-                <div className="mt-1">{subBadge(subscription?.status ?? null)}</div>
+                <div className="mt-1">
+                  {compRow ? (
+                    accessActive ? (
+                      <Badge variant="success">Comp</Badge>
+                    ) : (
+                      <Badge variant="secondary">Comp expired</Badge>
+                    )
+                  ) : (
+                    subBadge(subscription?.status ?? null)
+                  )}
+                </div>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Joined</p>

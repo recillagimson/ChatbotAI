@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { ViewAsButton } from "@/components/admin/view-as-button";
 import type { Profile, Subscription } from "@/lib/types";
+import { hasActiveAccess, isComp, type AccessRow } from "@/lib/access";
 
 type SubStatus = Subscription["status"];
 
@@ -23,6 +24,19 @@ function statusBadge(status: SubStatus | null) {
   }
 }
 
+// Reflect real access, not the raw status: a lapsed comp keeps status='trialing'
+// (no cron sweep), so an admin scanning this list must not see it as "Trialing".
+function accessBadge(row: AccessRow | null) {
+  if (isComp(row)) {
+    return hasActiveAccess(row) ? (
+      <Badge variant="success">Comp</Badge>
+    ) : (
+      <Badge variant="secondary">Comp expired</Badge>
+    );
+  }
+  return statusBadge(row?.status ?? null);
+}
+
 export default async function AdminClientsPage() {
   const supabase = await createClient();
 
@@ -34,7 +48,9 @@ export default async function AdminClientsPage() {
         .order("created_at", { ascending: false }),
       supabase
         .from("subscriptions")
-        .select("user_id, status, current_period_end"),
+        .select(
+          "user_id, status, current_period_end, comp_expires_at, stripe_subscription_id"
+        ),
       supabase.from("chatbots").select("user_id"),
     ]);
 
@@ -43,12 +59,12 @@ export default async function AdminClientsPage() {
     "id" | "email" | "full_name" | "company_name" | "created_at"
   >[];
 
-  const subByUser = new Map<string, SubStatus>();
+  const subByUser = new Map<string, AccessRow>();
   for (const s of (subscriptions ?? []) as Pick<
     Subscription,
-    "user_id" | "status" | "current_period_end"
+    "user_id" | "status" | "current_period_end" | "comp_expires_at" | "stripe_subscription_id"
   >[]) {
-    subByUser.set(s.user_id, s.status);
+    subByUser.set(s.user_id, s);
   }
 
   const countByUser = new Map<string, number>();
@@ -58,7 +74,7 @@ export default async function AdminClientsPage() {
 
   const clients = profileRows.map((profile) => ({
     profile,
-    status: subByUser.get(profile.id) ?? null,
+    access: subByUser.get(profile.id) ?? null,
     chatbotCount: countByUser.get(profile.id) ?? 0,
   }));
 
@@ -101,7 +117,7 @@ export default async function AdminClientsPage() {
               </tr>
             </thead>
             <tbody>
-              {clients.map(({ profile, status, chatbotCount }) => (
+              {clients.map(({ profile, access, chatbotCount }) => (
                 <tr key={profile.id} className="border-b last:border-0 hover:bg-muted/50">
                   <td className="px-4 py-3">
                     <Link
@@ -117,7 +133,7 @@ export default async function AdminClientsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{profile.email}</td>
-                  <td className="px-4 py-3">{statusBadge(status)}</td>
+                  <td className="px-4 py-3">{accessBadge(access)}</td>
                   <td className="px-4 py-3 tabular-nums">{chatbotCount}</td>
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">
                     {new Date(profile.created_at).toLocaleDateString()}

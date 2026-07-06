@@ -72,7 +72,14 @@ export default async function BillingPage({
     ? new Date(subscription.comp_expires_at)
     : null;
   const hasCustomer = !!subscription?.stripe_customer_id;
-  const badge = statusBadge(subscription?.status);
+  // Badge reflects real access, not the raw Stripe status: a comp that has
+  // lapsed still has status='trialing' (no cron sweep), so key off `comp`/`active`
+  // to avoid showing a green "Trial" badge to a user who no longer has access.
+  const badge = isComp(subscription)
+    ? comp
+      ? { label: "Comp access", variant: "success" as const }
+      : { label: "Expired", variant: "secondary" as const }
+    : statusBadge(subscription?.status);
   const renews = subscription?.current_period_end
     ? new Date(subscription.current_period_end)
     : null;

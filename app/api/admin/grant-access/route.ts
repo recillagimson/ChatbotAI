@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireSuperadmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/server";
-import { computeExpiry, hasActiveAccess } from "@/lib/access";
+import { computeExpiry } from "@/lib/access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,17 +45,21 @@ export async function POST(request: NextRequest) {
     .eq("user_id", userId)
     .maybeSingle();
 
-  // Safety rail (applies to ALL actions): never touch a live PAID subscription.
-  // A real payer has a Stripe subscription id, no comp expiry, and active access.
-  // grant/extend would clobber the real sub; revoke would cancel a paying
-  // customer in our DB until Stripe re-syncs. The admin UI never offers these on
-  // a payer (it shows a read-only "Active paid subscription" card) — this guards
-  // direct API calls.
-  const paidActive =
+  // Safety rail (applies to ALL actions): never touch a REAL Stripe subscription
+  // row. That means a row with a Stripe subscription id, no comp, in a status
+  // Stripe actively manages — active/trialing (paying) or past_due (dunning; the
+  // customer may still recover). grant/extend would clobber the real sub; revoke
+  // would mutate it until Stripe re-syncs. Canceled/incomplete rows carry a
+  // Stripe id too but are dead, so they stay comp-eligible (win back a churned
+  // customer). The admin UI never offers these on a live sub (it shows a
+  // read-only "Active paid subscription" card) — this guards direct API calls.
+  const liveStripeSub =
     !!existing?.stripe_subscription_id &&
     !existing?.comp_expires_at &&
-    hasActiveAccess(existing);
-  if (paidActive) {
+    (existing.status === "active" ||
+      existing.status === "trialing" ||
+      existing.status === "past_due");
+  if (liveStripeSub) {
     return NextResponse.json({ error: "has_paid_subscription" }, { status: 409 });
   }
 
