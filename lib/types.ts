@@ -28,6 +28,10 @@ export interface Subscription {
   status: SubscriptionStatus;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  comp_expires_at: string | null;   // admin comp grant end; null on Stripe subs
+  comp_granted_at: string | null;
+  comp_granted_by: string | null;   // superadmin profile id
+  comp_note: string | null;
 }
 
 export interface Chatbot {

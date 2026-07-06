@@ -35,6 +35,13 @@ create table if not exists public.subscriptions (
   status text not null default 'incomplete',  -- active|trialing|past_due|canceled|incomplete
   current_period_end timestamptz,
   cancel_at_period_end boolean not null default false,
+  -- Admin comp grant (see supabase/migrations/2026-07-06-comp-access.sql): a
+  -- comp is status='trialing' with comp_expires_at in the future; NULL on real
+  -- Stripe subs. Enforced at check time by lib/access.ts hasActiveAccess().
+  comp_expires_at timestamptz,
+  comp_granted_at timestamptz,
+  comp_granted_by uuid references public.profiles(id),
+  comp_note text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (user_id)

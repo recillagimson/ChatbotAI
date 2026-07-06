@@ -10,6 +10,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { AdminChatbotEditForm } from "@/components/admin/admin-chatbot-edit-form";
 import { ViewAsButton } from "@/components/admin/view-as-button";
+import { GrantAccessForm } from "@/components/admin/grant-access-form";
+import { hasActiveAccess, isComp } from "@/lib/access";
 import type {
   Profile,
   Subscription,
@@ -105,7 +107,9 @@ export default async function AdminClientDetailPage({
   ] = await Promise.all([
     supabase
       .from("subscriptions")
-      .select("status, current_period_end, stripe_subscription_id")
+      .select(
+        "status, current_period_end, stripe_subscription_id, comp_expires_at, comp_granted_at, comp_note"
+      )
       .eq("user_id", id)
       .maybeSingle(),
     supabase
@@ -130,8 +134,22 @@ export default async function AdminClientDetailPage({
 
   const subscription = subData as Pick<
     Subscription,
-    "status" | "current_period_end" | "stripe_subscription_id"
+    | "status"
+    | "current_period_end"
+    | "stripe_subscription_id"
+    | "comp_expires_at"
+    | "comp_granted_at"
+    | "comp_note"
   > | null;
+
+  // Access state for the grant card. A paid client (active Stripe sub, no comp)
+  // needs no comp; everyone else can be granted/extended/revoked.
+  const accessActive = hasActiveAccess(subscription);
+  const compRow = isComp(subscription);
+  const paidActive = accessActive && !compRow;
+  const paidRenews = subscription?.current_period_end
+    ? new Date(subscription.current_period_end)
+    : null;
   const chatbots = (chatbotsData ?? []) as AdminChatbot[];
   const requests = (requestsData ?? []) as ChangeRequest[];
   const feedback = (feedbackData ?? []) as Feedback[];
@@ -206,6 +224,37 @@ export default async function AdminClientDetailPage({
           <h1 className="mb-6 text-3xl font-display font-semibold tracking-tight lg:sr-only">
             {profile.full_name || profile.email}
           </h1>
+
+          <section className="mb-10">
+            <h2 className="mb-4 text-xl font-display font-semibold tracking-tight">
+              Access
+            </h2>
+            <Card>
+              <CardContent className="py-6">
+                {paidActive ? (
+                  <div className="text-sm">
+                    <p className="font-medium">Active paid subscription</p>
+                    <p className="mt-1 text-muted-foreground">
+                      {paidRenews
+                        ? `Renews on ${paidRenews.toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}.`
+                        : "Managed by Stripe."}{" "}
+                      No comp needed.
+                    </p>
+                  </div>
+                ) : (
+                  <GrantAccessForm
+                    userId={profile.id}
+                    compExpiresAt={subscription?.comp_expires_at ?? null}
+                    compNote={subscription?.comp_note ?? null}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </section>
 
           <section className="mb-10">
             <h2 className="mb-4 text-xl font-display font-semibold tracking-tight">

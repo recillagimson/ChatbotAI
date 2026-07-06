@@ -9,7 +9,13 @@ import {
 } from "@/lib/followup";
 import { resolveManychatApiKey } from "@/lib/manychat";
 import { fetchFollowupAssets, resolveAssetByKey } from "@/lib/followup-assets";
-import type { Chatbot, Conversation, FollowupAsset } from "@/lib/types";
+import { hasActiveAccess } from "@/lib/access";
+import type {
+  Chatbot,
+  Conversation,
+  FollowupAsset,
+  SubscriptionStatus,
+} from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,16 +90,19 @@ async function run() {
 
   const rows = (data ?? []) as unknown as CandidateRow[];
 
-  // Only send for owners with an active/trialing subscription.
+  // Only send for owners with active access (active/trialing, and — for a comp
+  // grant — not past its expiry). Same predicate the DM webhook uses.
   const ownerIds = Array.from(new Set(rows.map((r) => r.chatbots.user_id)));
   const activeOwners = new Set<string>();
   if (ownerIds.length) {
     const { data: subs } = await supabase
       .from("subscriptions")
-      .select("user_id, status")
+      .select("user_id, status, comp_expires_at")
       .in("user_id", ownerIds);
     for (const s of subs ?? []) {
-      if (["active", "trialing"].includes(s.status)) activeOwners.add(s.user_id);
+      if (hasActiveAccess(s as { status: SubscriptionStatus; comp_expires_at: string | null })) {
+        activeOwners.add(s.user_id);
+      }
     }
   }
 

@@ -58,6 +58,10 @@ If the chatbot's owner has no active subscription, or the conversation is in `ai
   "reason": "subscription_inactive"  // or "human_takeover"
 }
 ```
+> **Access includes admin comp grants.** "Active" means
+> `subscriptions.status IN ('active','trialing')` **and**, for an admin-granted
+> comp, `comp_expires_at` is still in the future (see `lib/access.ts`
+> `hasActiveAccess`). A lapsed comp reads as inactive with no scheduled sweep.
 
 A repeat of the same message text within 30s is **silently absorbed** — empty
 reply, nothing stored, nothing pushed (the first copy's reply covers it):
@@ -157,6 +161,44 @@ curl -X POST http://localhost:3000/api/webhooks/manychat `
   -H "x-manychat-secret: your_secret_here" `
   -d '{\"chatbot_id\":\"abc-123\",\"subscriber_id\":\"sub-1\",\"message\":\"hi\"}'
 ```
+
+---
+
+## `POST /api/admin/grant-access`
+
+Superadmin-only. Grants, extends, or revokes **comp access** (free product access
+that bypasses Stripe) for one existing account. A grant sets that user's single
+`subscriptions` row to `status='trialing'` with `comp_expires_at = now + duration`;
+access ends automatically at `comp_expires_at` (enforced at check time).
+
+**Auth:** Supabase session cookie of a `profiles.is_superadmin` user (the real
+admin, never an impersonated client). Non-admins get `403`.
+
+### Request body
+```json
+{
+  "userId": "uuid",                        // the account to grant
+  "action": "grant",                       // "grant" | "extend" | "revoke"
+  "days": 30,                              // grant/extend: whole days (optional)
+  "months": 6,                             // grant/extend: whole calendar months (optional)
+  "note": "string"                         // optional internal reason
+}
+```
+- `grant` sets `comp_expires_at = now + (months, days)`.
+- `extend` adds the duration onto the later of now / the current expiry.
+- `revoke` sets `status='canceled'`, `comp_expires_at = now` (access ends immediately).
+- grant/extend require `days > 0 || months > 0`.
+
+### Responses
+| Status | Body | Cause |
+|--------|------|-------|
+| 200 | `{"ok":true,"action":"grant","comp_expires_at":"<iso>"}` | Success |
+| 400 | `{"error":"Invalid request."}` / `{"error":"Choose a duration."}` | Bad body / no duration |
+| 403 | `{"error":"Forbidden."}` | Not a superadmin |
+| 409 | `{"error":"has_paid_subscription"}` | Client has a live paid Stripe sub (never comp over a payer) |
+| 500 | `{"error":"Could not grant access."}` | DB write failed |
+
+A later real Stripe event overwrites the row and clears the comp fields — Stripe always wins.
 
 ---
 

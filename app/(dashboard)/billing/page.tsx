@@ -4,6 +4,7 @@ import { getImpersonation } from "@/lib/impersonation";
 import { Badge } from "@/components/ui/badge";
 import { BillingButtons } from "@/components/dashboard/billing-buttons";
 import { reconcileFromCheckoutSession } from "@/lib/billing";
+import { hasActiveAccess, isComp } from "@/lib/access";
 import {
   CheckCircle2,
   CalendarClock,
@@ -65,8 +66,11 @@ export default async function BillingPage({
     .eq("user_id", user!.id)
     .maybeSingle();
 
-  const active =
-    subscription?.status === "active" || subscription?.status === "trialing";
+  const active = hasActiveAccess(subscription);
+  const comp = isComp(subscription) && active;
+  const compUntil = subscription?.comp_expires_at
+    ? new Date(subscription.comp_expires_at)
+    : null;
   const hasCustomer = !!subscription?.stripe_customer_id;
   const badge = statusBadge(subscription?.status);
   const renews = subscription?.current_period_end
@@ -82,6 +86,32 @@ export default async function BillingPage({
           Manage your subscription and payment method.
         </p>
       </div>
+
+      {/* Comp-access banner: shown to a client whose access was granted by an
+          admin (no Stripe subscription). Replaces the misleading "Subscribe"-only
+          framing with their real granted state + expiry. */}
+      {comp && compUntil && (
+        <div
+          role="status"
+          className="mb-6 flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3"
+        >
+          <Sparkles className="h-5 w-5 text-green-600 mt-0.5 shrink-0" aria-hidden />
+          <div className="text-sm text-green-800">
+            <p className="font-semibold">Comp access — active</p>
+            <p>
+              Your account has full access through{" "}
+              <span className="font-medium">
+                {compUntil.toLocaleDateString(undefined, {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </span>
+              , courtesy of the SpeedSettr team. Subscribe anytime to continue after it ends.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Return-from-Stripe banners */}
       {status === "success" && (

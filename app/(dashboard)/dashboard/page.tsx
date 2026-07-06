@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bot, MessageSquare, Zap, AlertCircle } from "lucide-react";
+import { hasActiveAccess } from "@/lib/access";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -50,8 +51,7 @@ export default async function DashboardPage() {
     .select("*", { count: "exact", head: true })
     .eq("user_id", user!.id);
 
-  const subActive =
-    subscription?.status === "active" || subscription?.status === "trialing";
+  const subActive = hasActiveAccess(subscription);
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -73,7 +73,7 @@ export default async function DashboardPage() {
                 Your subscription is not active yet
               </p>
               <p className="text-sm text-amber-700">
-                Activate your $997/mo plan to start receiving AI replies.
+                Activate your plan to start receiving AI replies.
               </p>
             </div>
             <Button asChild>
@@ -128,7 +128,7 @@ export default async function DashboardPage() {
         <CardContent className="space-y-3">
           <StepRow
             done={subActive}
-            label="Activate your $997/mo subscription"
+            label="Activate your subscription"
             href="/billing"
           />
           <StepRow

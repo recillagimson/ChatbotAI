@@ -22,6 +22,7 @@ import {
   buildAssetCatalogBlock,
 } from "@/lib/followup-assets";
 import { firstMatchingGroup, keywordGateBlocks } from "@/lib/keyword-triggers";
+import { hasActiveAccess } from "@/lib/access";
 import {
   detectExtractionAttempt,
   pickDeflection,
@@ -306,11 +307,13 @@ export async function POST(request: NextRequest) {
 
   const { data: subscription } = await supabase
     .from("subscriptions")
-    .select("status")
+    .select("status, comp_expires_at")
     .eq("user_id", chatbot.user_id)
     .maybeSingle();
 
-  if (!subscription || !["active", "trialing"].includes(subscription.status)) {
+  // Access = active/trialing AND (if a comp grant) not past its expiry. A comp
+  // that has lapsed reads as no-access here with no scheduled sweep needed.
+  if (!hasActiveAccess(subscription)) {
     return manychatReply(
       "Thanks for your message! We'll get back to you shortly.",
       { ai_skipped: true, reason: "subscription_inactive" }

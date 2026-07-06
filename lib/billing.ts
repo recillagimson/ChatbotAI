@@ -35,6 +35,12 @@ export async function upsertSubscriptionRow(
       status: sub.status,
       current_period_end: periodEndIso(sub),
       cancel_at_period_end: sub.cancel_at_period_end,
+      // A real Stripe event always overrides a comp: clear the grant so a
+      // now-paying user is never treated as a comp or comp-expired.
+      comp_expires_at: null,
+      comp_granted_at: null,
+      comp_granted_by: null,
+      comp_note: null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" }
