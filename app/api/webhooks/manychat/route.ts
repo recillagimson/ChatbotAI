@@ -469,8 +469,10 @@ export async function POST(request: NextRequest) {
   // taken over — and no confirmation bubble fires into a human's conversation.
   // Runs before rate-limit so a control word is never dropped, and returns a
   // muted lead before any AI cost. Fail-open: a missing column reads as
-  // not-muted. A verbatim repeat within 30s is already absorbed by the dedup
-  // gate above, so a stray double "stopmessage" won't re-send the confirmation.
+  // not-muted. Control words are exempt from the 30s dedup gate above (they
+  // toggle state), so a duplicate "stopmessage" isn't re-confirmed by the
+  // idempotence below (stop-while-already-muted → silent, no second bubble),
+  // not by dedup.
   const control = baseText ? detectUserControl(baseText) : null;
   const isMuted = !!existing?.user_muted_at;
   if (control === "resume" && isMuted) {

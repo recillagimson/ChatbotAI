@@ -73,7 +73,9 @@ export function ConversationActions({
       const supabase = createClient();
       const { error } = await supabase
         .from("conversations")
-        .update({ user_muted_at: null })
+        // Also clear any stale debounce claim (mirrors the resume branch in the
+        // webhook) so the next inbound isn't skipped by the trivial-ack guard.
+        .update({ user_muted_at: null, reply_claimed_for: null })
         .eq("id", conversationId);
       if (error) {
         setMuted(true); // revert on failure
