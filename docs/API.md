@@ -40,7 +40,7 @@ The entry point for every message routed through ManyChat, across all channels (
   "last_name": "string|null",      // (optional)
   "username": "string|null",       // (optional) the channel's username/handle
   "message": "string",             // the user's latest message, max 4000 chars
-  "is_leads": 0                    // (optional) truthy (1/"1"/true) → tag as an engaged lead silently, no reply
+  "is_leads": 0                    // (optional, PARKED) accepted but ignored — no longer tags or short-circuits
 }
 ```
 
@@ -135,13 +135,14 @@ badge in the dashboard inbox and that the follow-up cron uses to decide who to
 drip. A matching message is handled exactly as a normal keyword trigger (canned
 reply or AI, per the group's mode).
 
-A truthy **`is_leads`** (e.g. `1`) **tags the contact as an engaged lead without
-replying** — for Instagram commenters routed here by a ManyChat keyword. The
-conversation is created/updated with `is_lead=true` and the webhook returns an
-empty reply with `reason: "lead_tagged"` (no AI, no message recorded, no follow-up
-armed). The keyword gate treats `is_lead` the same as a matched keyword, so the
-lead's **later** DMs get bot replies; the bot never messages first — a tagged lead
-is skipped by the gated follow-up cron until they actually DM.
+**`is_leads` (PARKED).** Lead-tagging via `is_leads` is currently disabled. The
+flag is still accepted on the request body for backward compatibility but is
+**ignored** — it no longer tags the contact, sets `is_lead`, or returns
+`reason: "lead_tagged"`, so a stray `is_leads=1` can never silently swallow a real
+DM. A message carrying `is_leads` is handled exactly like a normal message (keyword
+gate → keyword actions → AI). Engagement is currently **keyword-only**
+(`keyword_fired`). To re-enable, restore the tag branch and re-consult `is_lead` in
+the keyword gate; the `conversations.is_lead` column and its "Lead" badge remain.
 
 On push channels (Instagram/Messenger/WhatsApp/Telegram) the webhook acks
 instantly with `{"ai_queued": true, "reply": ""}` and delivers the reply in the

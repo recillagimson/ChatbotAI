@@ -97,9 +97,10 @@ const BodySchema = z.object({
   // multi-day follow-ups. Captured onto the conversation for the cron.
   rn_opt_in: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
   rn_topic_id: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
-  // Lead tagging: a truthy `is_leads` (e.g. 1) silently tags the contact as an
-  // engaged lead WITHOUT replying — an IG commenter routed here by a ManyChat
-  // keyword. Handled by the is_leads branch below (before any reply path).
+  // Lead tagging (PARKED): `is_leads` is still accepted for backward compatibility
+  // with existing ManyChat flows but is now IGNORED — the tag branch was removed so
+  // a stray is_leads=1 can no longer silently swallow a real DM. To un-park, restore
+  // the branch from git history and re-consult is_lead in the keyword gate (#19).
   is_leads: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
 });
 
@@ -373,43 +374,10 @@ export async function POST(request: NextRequest) {
     .eq("manychat_subscriber_id", body.subscriber_id)
     .maybeSingle();
 
-  // is_leads: silently tag this contact as an engaged lead (no reply) — e.g. an
-  // Instagram commenter routed here by a ManyChat keyword. We ensure the
-  // conversation exists and set is_lead=true; the keyword gate (6-gate below)
-  // treats is_lead as engaged, so the lead's LATER DMs get bot replies. Return
-  // WITHOUT recording a message, arming the follow-up drip, or running the AI —
-  // the bot waits for the lead to message first (a tagged lead keeps
-  // keyword_fired empty, so the gated follow-up cron skips it). No last_message_at
-  // change on an existing row (don't disturb its window/drip state).
-  if (isTruthyFlag(body.is_leads)) {
-    if (existing) {
-      // Existing row: only flip is_lead. Deliberately don't re-write contact
-      // fields — they're already set from prior interaction, and writing a stale
-      // snapshot could re-null a name a concurrent real DM just healed.
-      await supabase
-        .from("conversations")
-        .update({ is_lead: true })
-        .eq("id", existing.id)
-        .then(() => {}, () => {});
-    } else {
-      await supabase
-        .from("conversations")
-        .upsert(
-          {
-            chatbot_id: chatbot.id,
-            user_id: chatbot.user_id,
-            manychat_subscriber_id: body.subscriber_id,
-            platform,
-            contact_name: displayName,
-            contact_username: username,
-            is_lead: true,
-          },
-          { onConflict: "chatbot_id,manychat_subscriber_id" }
-        )
-        .then(() => {}, () => {});
-    }
-    return manychatReply("", { ai_skipped: true, reason: "lead_tagged" });
-  }
+  // is_leads lead-tagging is PARKED (owner decision). A ManyChat flow may still send
+  // is_leads=1; it is now accepted and IGNORED here — no tag, no silent short-circuit
+  // — so a real DM is never swallowed. To un-park: restore this tag branch from git
+  // history and re-add `is_lead` to `alreadyEngaged` at 6-gate below. See CLAUDE.md #19.
 
   let conversationId = existing?.id;
   let conversationStatus = existing?.status;
@@ -533,11 +501,11 @@ export async function POST(request: NextRequest) {
   const keywordGroup = baseText
     ? firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [])
     : null;
-  // Engaged = matched a keyword before (keyword_fired) OR was tagged a lead via
-  // is_leads (e.g. an IG commenter). Either way the gate lets their DMs through.
+  // Engaged = matched a keyword before (keyword_fired non-empty). Lead-tagging via
+  // is_leads is PARKED (see the note where the branch was), so is_lead is no longer
+  // consulted here — engagement is keyword-only.
   const alreadyEngaged =
-    (Array.isArray(existing?.keyword_fired) && existing!.keyword_fired.length > 0) ||
-    existing?.is_lead === true;
+    Array.isArray(existing?.keyword_fired) && existing!.keyword_fired.length > 0;
   if (keywordGateBlocks(chatbot.keyword_gate_enabled ?? false, !!keywordGroup, alreadyEngaged)) {
     return manychatReply("", { ai_skipped: true, reason: "keyword_gate_blocked" });
   }

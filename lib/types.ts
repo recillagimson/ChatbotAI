@@ -147,7 +147,7 @@ export interface Conversation {
   rn_topic_id: string | null;
   reply_claimed_for: string | null;  // inbound message id of the newest AI-bound run (debounce single-flight claim)
   keyword_fired: string[];           // ids of keyword groups whose first reply this contact already received
-  is_lead: boolean;                  // tagged as an engaged lead via webhook is_leads=1 (treated as engaged by the keyword gate)
+  is_lead: boolean;                  // PARKED: column kept but no longer written/read (is_leads tagging disabled — see CLAUDE.md #19)
   extraction_attempts: number;       // prompt-extraction detections on this thread (red "Flagged" badge when > 0)
   flagged_at: string | null;         // when the newest extraction attempt was detected
   user_muted_at: string | null;      // lead self-paused the AI via "stopmessage" (null = not muted); independent of status

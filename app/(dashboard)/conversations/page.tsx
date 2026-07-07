@@ -154,7 +154,7 @@ export default async function ConversationsPage({
                     {c.status === "ai_paused" && (
                       <Badge variant="warning">AI paused</Badge>
                     )}
-                    {((Array.isArray(c.keyword_fired) && c.keyword_fired.length > 0) || c.is_lead) && (
+                    {Array.isArray(c.keyword_fired) && c.keyword_fired.length > 0 && (
                       <Badge variant="outline">Lead</Badge>
                     )}
                     {c.user_muted_at && (
