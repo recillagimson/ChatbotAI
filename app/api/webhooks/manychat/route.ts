@@ -97,6 +97,10 @@ const BodySchema = z.object({
   // multi-day follow-ups. Captured onto the conversation for the cron.
   rn_opt_in: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
   rn_topic_id: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
+  // Lead tagging: a truthy `is_leads` (e.g. 1) silently tags the contact as an
+  // engaged lead WITHOUT replying — an IG commenter routed here by a ManyChat
+  // keyword. Handled by the is_leads branch below (before any reply path).
+  is_leads: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
 });
 
 /** Truthy check for the RN opt-in flag (accepts "true"/"1"/1/true). */
@@ -369,6 +373,44 @@ export async function POST(request: NextRequest) {
     .eq("manychat_subscriber_id", body.subscriber_id)
     .maybeSingle();
 
+  // is_leads: silently tag this contact as an engaged lead (no reply) — e.g. an
+  // Instagram commenter routed here by a ManyChat keyword. We ensure the
+  // conversation exists and set is_lead=true; the keyword gate (6-gate below)
+  // treats is_lead as engaged, so the lead's LATER DMs get bot replies. Return
+  // WITHOUT recording a message, arming the follow-up drip, or running the AI —
+  // the bot waits for the lead to message first (a tagged lead keeps
+  // keyword_fired empty, so the gated follow-up cron skips it). No last_message_at
+  // change on an existing row (don't disturb its window/drip state).
+  if (isTruthyFlag(body.is_leads)) {
+    if (existing) {
+      // Existing row: only flip is_lead. Deliberately don't re-write contact
+      // fields — they're already set from prior interaction, and writing a stale
+      // snapshot could re-null a name a concurrent real DM just healed.
+      await supabase
+        .from("conversations")
+        .update({ is_lead: true })
+        .eq("id", existing.id)
+        .then(() => {}, () => {});
+    } else {
+      await supabase
+        .from("conversations")
+        .upsert(
+          {
+            chatbot_id: chatbot.id,
+            user_id: chatbot.user_id,
+            manychat_subscriber_id: body.subscriber_id,
+            platform,
+            contact_name: displayName,
+            contact_username: username,
+            is_lead: true,
+          },
+          { onConflict: "chatbot_id,manychat_subscriber_id" }
+        )
+        .then(() => {}, () => {});
+    }
+    return manychatReply("", { ai_skipped: true, reason: "lead_tagged" });
+  }
+
   let conversationId = existing?.id;
   let conversationStatus = existing?.status;
 
@@ -406,6 +448,12 @@ export async function POST(request: NextRequest) {
     conversationId = created.id;
     conversationStatus = created.status;
   } else {
+    // A reply re-arms the drip. In CYCLE mode we keep the rotation position so the
+    // lead gets the NEXT follow-up on the next silence (continue forward, don't
+    // restart at step 1); every other mode resets to step 1. Either way, clearing
+    // last_followup_at re-arms the timing (the next step's delay is measured from
+    // this reply) and the fresh last_message_at reopens the 24h send window.
+    const cycling = chatbot.auto_followup_loop_mode === "cycle";
     await supabase
       .from("conversations")
       .update({
@@ -414,10 +462,7 @@ export async function POST(request: NextRequest) {
         // Heal old rows too: replace a stored placeholder/empty with a real value.
         contact_name: cleanContactField(existing.contact_name) ?? displayName,
         contact_username: cleanContactField(existing.contact_username) ?? username,
-        // The contact replied — re-arm the auto follow-up drip from step 1 for
-        // the next silence (a reply reopens the 24h window).
-        followup_count: 0,
-        followup_step_index: 0,
+        ...(cycling ? {} : { followup_count: 0, followup_step_index: 0 }),
         last_followup_at: null,
       })
       .eq("id", existing.id);
@@ -488,8 +533,11 @@ export async function POST(request: NextRequest) {
   const keywordGroup = baseText
     ? firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [])
     : null;
+  // Engaged = matched a keyword before (keyword_fired) OR was tagged a lead via
+  // is_leads (e.g. an IG commenter). Either way the gate lets their DMs through.
   const alreadyEngaged =
-    Array.isArray(existing?.keyword_fired) && existing!.keyword_fired.length > 0;
+    (Array.isArray(existing?.keyword_fired) && existing!.keyword_fired.length > 0) ||
+    existing?.is_lead === true;
   if (keywordGateBlocks(chatbot.keyword_gate_enabled ?? false, !!keywordGroup, alreadyEngaged)) {
     return manychatReply("", { ai_skipped: true, reason: "keyword_gate_blocked" });
   }

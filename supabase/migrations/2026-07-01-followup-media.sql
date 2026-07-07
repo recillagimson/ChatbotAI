@@ -9,7 +9,7 @@
 --     confirmed or the messaging window closes.
 --   * chatbots.ai_media_enabled       = let the live AI emit [[SEND_ASSET: key]]
 --     directives to send an asset mid-conversation.
---   * followup_assets                 = per-chatbot library of uploaded media
+--   * followup_assets        f         = per-chatbot library of uploaded media
 --     (image/video/audio) + link assets, referenced by `key` from steps and AI
 --     directives. Media lives in the PUBLIC `followup-assets` bucket (ManyChat
 --     needs a public HTTPS URL to fetch it at send time).

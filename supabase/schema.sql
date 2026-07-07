@@ -744,8 +744,15 @@ create policy "admin upload update" on storage.objects for update to authenticat
 -- confirmation, and Recurring-Notifications opt-in live on conversations.
 alter table public.chatbots
   add column if not exists auto_followup_steps jsonb not null default '[]'::jsonb,  -- ordered drip steps: [{delay_hours, asset_key?, text?}]
-  add column if not exists auto_followup_loop_last boolean not null default false,  -- repeat final step until confirmed
+  add column if not exists auto_followup_loop_last boolean not null default false,  -- legacy; superseded by auto_followup_loop_mode (see 2026-07-07-followup-loop-mode.sql)
+  add column if not exists auto_followup_loop_mode text not null default 'stop',    -- after last step: stop | repeat last | cycle through all
   add column if not exists ai_media_enabled boolean not null default false;         -- allow [[SEND_ASSET]] directives from the live AI
+
+-- Named drop/re-add so a re-run picks up constraint changes (an inline check on
+-- `add column if not exists` is silently skipped once the column exists).
+alter table public.chatbots drop constraint if exists chatbots_auto_followup_loop_mode_check;
+alter table public.chatbots add constraint chatbots_auto_followup_loop_mode_check
+  check (auto_followup_loop_mode in ('stop', 'repeat_last', 'cycle'));
 
 alter table public.conversations
   add column if not exists followup_step_index int not null default 0,   -- next drip step to send
@@ -893,6 +900,20 @@ alter table public.conversations
 
 -- Teardown:
 -- alter table public.conversations drop column if exists user_muted_at;
+
+-- ===========================================================================
+-- Lead tagging via webhook (2026-07-07)
+-- ===========================================================================
+-- `is_leads: 1` on the ManyChat webhook silently tags a contact as an engaged
+-- lead (no reply) — an IG commenter routed here by a ManyChat keyword. is_lead is
+-- treated as "engaged" by the keyword gate (webhook 6-gate) so the lead's LATER
+-- DMs get bot replies. The bot doesn't proactively reach out (keyword_fired stays
+-- empty → the gated follow-up cron skips it). Fail-open: missing column = not a lead.
+alter table public.conversations
+  add column if not exists is_lead boolean not null default false;
+
+-- Teardown:
+-- alter table public.conversations drop column if exists is_lead;
 
 -- ===========================================================================
 -- Keyword-only reply mode (2026-07-06)

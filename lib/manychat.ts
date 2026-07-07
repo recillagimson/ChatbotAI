@@ -181,6 +181,26 @@ function requireContentType(platform?: Platform): string {
 }
 
 /**
+ * Decide what to do after a `fetch` throw in postSendContent: retry it, or (for
+ * media) assume it was delivered and stop. ANY thrown transport error is
+ * ambiguous for media — a client timeout/abort OR a network error (e.g. an
+ * ECONNRESET / premature close surfacing as a TypeError) that may have fired
+ * AFTER ManyChat already relayed the asset. Re-POSTing risks a duplicate video,
+ * which the owner ranks worse than a rare miss, so `assumeDeliveredOnError`
+ * stops. (429/5xx never reach here — they don't throw — so postSendContent still
+ * retries those: the server explicitly rejected the send, so it was NOT
+ * delivered.) The permanent-4xx error is re-thrown by identity before this is
+ * called. Pure + exported for scripts/test-manychat-retry.ts.
+ */
+export function classifySendError(
+  err: unknown,
+  opts: { assumeDeliveredOnError?: boolean }
+): "assume_delivered" | "retry" {
+  if (opts.assumeDeliveredOnError && err instanceof Error) return "assume_delivered";
+  return "retry";
+}
+
+/**
  * Low-level: POST a prebuilt `messages[]` to ManyChat's Send Content API with
  * retries. Shared by the text (sendManychatMessage) and media (sendManychatMedia)
  * senders so both get identical transient-failure handling.
@@ -188,10 +208,15 @@ function requireContentType(platform?: Platform): string {
  * Retry transient failures (429 / 5xx / network) so a ManyChat blip doesn't
  * silently drop a reply that's already saved to the DB. Other 4xx errors
  * (invalid subscriber, closed messaging window) are permanent — throw
- * immediately. Worst case 3×8s attempts + 1s+3s backoff = 28s, which fits the
- * webhook's 60s budget after the AI call. Trade-off: if ManyChat accepts a
- * request but our 8s abort fires before the response arrives, the retry
- * double-delivers — a doubled reply beats a dropped one.
+ * immediately.
+ *
+ * Failure policy differs by content (see classifySendError): TEXT keeps the
+ * "a doubled reply beats a dropped one" trade-off (retry on any transport error).
+ * MEDIA passes `assumeDeliveredOnError` — a slow-but-successful video that trips a
+ * transport error (our client timeout, or a network blip after ManyChat relayed
+ * it) must NOT be re-POSTed, or the lead receives it twice; we assume it was
+ * delivered and stop. Media also passes a longer `attemptTimeoutMs` so a genuine
+ * video relay rarely trips the timeout in the first place.
  */
 async function postSendContent(opts: {
   subscriberId: string;
@@ -200,6 +225,12 @@ async function postSendContent(opts: {
   apiKey: string;
   /** ManyChat message_tag for out-of-window sends (e.g. HUMAN_AGENT). Omitted = standard in-window send. */
   messageTag?: string;
+  /** Per-attempt client timeout. Default 8s; media passes ~15s (video relay is slow). */
+  attemptTimeoutMs?: number;
+  /** When a send throws a transport error (timeout/network) AFTER the request was
+   *  sent, assume delivered and stop instead of retrying (media only — a duplicate
+   *  is worse than a rare miss). 429/5xx still retry (server rejected, not sent). */
+  assumeDeliveredOnError?: boolean;
 }) {
   const body = JSON.stringify({
     subscriber_id: opts.subscriberId,
@@ -212,7 +243,7 @@ async function postSendContent(opts: {
 
   const ATTEMPTS = 3;
   const BACKOFF_MS = [1_000, 3_000];
-  const ATTEMPT_TIMEOUT_MS = 8_000;
+  const ATTEMPT_TIMEOUT_MS = opts.attemptTimeoutMs ?? 8_000;
   let lastError: Error = new Error("ManyChat send failed: no attempts made");
 
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
@@ -242,9 +273,17 @@ async function postSendContent(opts: {
         }
       }
     } catch (err) {
-      // fetch threw: network error or our abort. Both transient — retry.
-      // But re-throw the permanent-4xx error constructed above.
+      // Re-throw the permanent-4xx error constructed above.
       if (err === lastError) throw err;
+      // Media: a transport error means the request was already sent — assume it
+      // was delivered and stop rather than re-POST (no duplicate video). Text
+      // falls through and retries.
+      if (
+        classifySendError(err, { assumeDeliveredOnError: opts.assumeDeliveredOnError }) ===
+        "assume_delivered"
+      ) {
+        return { assumedDelivered: true };
+      }
       lastError = new Error(
         `ManyChat send failed: ${err instanceof Error ? err.message : String(err)} (attempt ${attempt + 1}/${ATTEMPTS})`
       );
@@ -349,6 +388,11 @@ export async function sendManychatMedia(opts: {
     contentType,
     apiKey: opts.apiKey,
     messageTag: opts.messageTag,
+    // Media prefers a rare drop over a duplicate: give a video time to relay, and
+    // never re-POST after a transport error (a slow-but-delivered video would
+    // double up). 429/5xx still retry (server rejected it, so it wasn't sent).
+    attemptTimeoutMs: 15_000,
+    assumeDeliveredOnError: true,
   });
 }
 

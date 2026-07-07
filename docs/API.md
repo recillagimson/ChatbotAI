@@ -39,7 +39,8 @@ The entry point for every message routed through ManyChat, across all channels (
   "first_name": "string|null",     // (optional) for personalization
   "last_name": "string|null",      // (optional)
   "username": "string|null",       // (optional) the channel's username/handle
-  "message": "string"              // the user's latest message, max 4000 chars
+  "message": "string",             // the user's latest message, max 4000 chars
+  "is_leads": 0                    // (optional) truthy (1/"1"/true) → tag as an engaged lead silently, no reply
 }
 ```
 
@@ -133,6 +134,14 @@ contact matched a keyword at least once), the same signal that surfaces a "Lead"
 badge in the dashboard inbox and that the follow-up cron uses to decide who to
 drip. A matching message is handled exactly as a normal keyword trigger (canned
 reply or AI, per the group's mode).
+
+A truthy **`is_leads`** (e.g. `1`) **tags the contact as an engaged lead without
+replying** — for Instagram commenters routed here by a ManyChat keyword. The
+conversation is created/updated with `is_lead=true` and the webhook returns an
+empty reply with `reason: "lead_tagged"` (no AI, no message recorded, no follow-up
+armed). The keyword gate treats `is_lead` the same as a matched keyword, so the
+lead's **later** DMs get bot replies; the bot never messages first — a tagged lead
+is skipped by the gated follow-up cron until they actually DM.
 
 On push channels (Instagram/Messenger/WhatsApp/Telegram) the webhook acks
 instantly with `{"ai_queued": true, "reply": ""}` and delivers the reply in the

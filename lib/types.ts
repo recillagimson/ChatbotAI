@@ -56,7 +56,8 @@ export interface Chatbot {
   auto_followup_max: number;
   auto_followup_template: string | null;
   auto_followup_steps: FollowupStep[];   // ordered rich-media drip steps (JSONB)
-  auto_followup_loop_last: boolean;       // repeat the final step until confirmed
+  auto_followup_loop_last: boolean;       // legacy; superseded by auto_followup_loop_mode
+  auto_followup_loop_mode: FollowupLoopMode; // after the last step: stop | repeat last | cycle through all
   ai_media_enabled: boolean;              // allow the live AI to emit [[SEND_ASSET]] directives
   keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)
   keyword_gate_enabled: boolean;          // ON = reply ONLY to DMs matching a keyword group; else silent
@@ -86,6 +87,9 @@ export interface KeywordGroup {
   instruction?: string | null;         // one-line per-turn prompt addition for on_repeat="instruction"
   enabled: boolean;
 }
+
+/** What the drip does once it reaches the end of the step sequence. */
+export type FollowupLoopMode = "stop" | "repeat_last" | "cycle";
 
 /** One step in a chatbot's auto follow-up drip sequence. */
 export interface FollowupStep {
@@ -143,6 +147,7 @@ export interface Conversation {
   rn_topic_id: string | null;
   reply_claimed_for: string | null;  // inbound message id of the newest AI-bound run (debounce single-flight claim)
   keyword_fired: string[];           // ids of keyword groups whose first reply this contact already received
+  is_lead: boolean;                  // tagged as an engaged lead via webhook is_leads=1 (treated as engaged by the keyword gate)
   extraction_attempts: number;       // prompt-extraction detections on this thread (red "Flagged" badge when > 0)
   flagged_at: string | null;         // when the newest extraction attempt was detected
   user_muted_at: string | null;      // lead self-paused the AI via "stopmessage" (null = not muted); independent of status

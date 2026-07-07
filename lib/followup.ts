@@ -77,6 +77,7 @@ export type FollowupChatbot = Pick<
   | "auto_followup_template"
   | "auto_followup_steps"
   | "auto_followup_loop_last"
+  | "auto_followup_loop_mode"
 >;
 
 export type FollowupConversation = Pick<
@@ -174,12 +175,21 @@ export function evaluateFollowup(
     meta.standardWindowHours != null &&
     nowMs - lastMsgMs >= meta.standardWindowHours * HOUR_MS;
 
-  // Which step are we on? Past the end, loop the last step or stop.
+  // Which step are we on? Past the end, behavior depends on the loop mode:
+  //   stop        -> no more follow-ups (until the lead replies/re-arms)
+  //   repeat_last -> resend the final step forever
+  //   cycle       -> wrap around and rotate through all steps in order, forever
+  // followup_step_index increments unbounded, so idx % steps.length walks
+  // 0,1,2,0,1,2… The legacy boolean is the fallback when the column is absent
+  // (pre-migration reads).
   const idx = conversation.followup_step_index ?? 0;
   let sendIdx = idx;
   if (idx >= steps.length) {
-    if (!chatbot.auto_followup_loop_last) return { due: false, reason: "sequence_done" };
-    sendIdx = steps.length - 1;
+    const mode =
+      chatbot.auto_followup_loop_mode ??
+      (chatbot.auto_followup_loop_last ? "repeat_last" : "stop");
+    if (mode === "stop") return { due: false, reason: "sequence_done" };
+    sendIdx = mode === "cycle" ? idx % steps.length : steps.length - 1;
   }
   const step = steps[sendIdx];
 

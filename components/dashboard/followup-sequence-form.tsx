@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import type { Chatbot, FollowupAsset, FollowupStep } from "@/lib/types";
+import type { Chatbot, FollowupAsset, FollowupLoopMode, FollowupStep } from "@/lib/types";
 
 const MIN_H = 1;
 const MAX_H = 22;
@@ -43,7 +43,10 @@ export function FollowupSequenceForm({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [enabled, setEnabled] = useState(chatbot.auto_followup_enabled);
-  const [loopLast, setLoopLast] = useState(chatbot.auto_followup_loop_last);
+  const [loopMode, setLoopMode] = useState<FollowupLoopMode>(
+    chatbot.auto_followup_loop_mode ??
+      (chatbot.auto_followup_loop_last ? "repeat_last" : "stop")
+  );
   const [aiMedia, setAiMedia] = useState(chatbot.ai_media_enabled);
   const [steps, setSteps] = useState<EditableStep[]>(toEditable(chatbot.auto_followup_steps));
   const [saving, setSaving] = useState(false);
@@ -98,7 +101,8 @@ export function FollowupSequenceForm({
       .update({
         auto_followup_enabled: enabled,
         auto_followup_steps: cleaned,
-        auto_followup_loop_last: loopLast,
+        auto_followup_loop_mode: loopMode,
+        auto_followup_loop_last: loopMode === "repeat_last", // keep the legacy flag consistent
         ai_media_enabled: aiMedia,
       })
       .eq("id", chatbot.id);
@@ -213,15 +217,28 @@ export function FollowupSequenceForm({
             + Add step
           </Button>
 
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <Label htmlFor="fu-loop">Repeat the last step until they convert</Label>
-              <p className="text-sm text-muted-foreground">
-                Keep re-sending the final step (on its delay) until the lead is confirmed
-                or the 24h window closes.
-              </p>
-            </div>
-            <Switch id="fu-loop" checked={loopLast} onCheckedChange={(v) => { setLoopLast(v); markDirty(); }} />
+          <div className="space-y-1">
+            <Label htmlFor="fu-loop-mode">After the last step</Label>
+            <select
+              id="fu-loop-mode"
+              value={loopMode}
+              onChange={(e) => {
+                setLoopMode(e.target.value as FollowupLoopMode);
+                markDirty();
+              }}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="stop">Stop — send nothing more</option>
+              <option value="repeat_last">Repeat the last step</option>
+              <option value="cycle">Cycle through all steps (recommended)</option>
+            </select>
+            <p className="text-sm text-muted-foreground">
+              {loopMode === "cycle"
+                ? "Loops back to the first step and keeps rotating — an unconfirmed lead gets a different message each time (until they convert or the window closes). A reply continues to the next one instead of restarting."
+                : loopMode === "repeat_last"
+                  ? "Keeps re-sending the final step (on its delay) until the lead is confirmed or the 24h window closes."
+                  : "The drip ends after the last step until the lead messages again."}
+            </p>
           </div>
 
           {!hasAssets && (
