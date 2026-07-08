@@ -55,7 +55,7 @@ import {
   stripMediaUrls,
 } from "@/lib/inbound-media";
 import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
-import { splitBurst, combineBurstText, remainingDebounceMs } from "@/lib/debounce";
+import { splitBurst, combineBurstText, remainingDebounceMs, shouldStandDown } from "@/lib/debounce";
 import type { Chatbot, Message } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -527,11 +527,11 @@ export async function POST(request: NextRequest) {
   const isMuted = !!existing?.user_muted_at;
   if (control === "resume" && isMuted) {
     // Clear the mute and any stale debounce claim left by the earlier stop.
-    await supabase
+    const { error: unmuteErr } = await supabase
       .from("conversations")
       .update({ user_muted_at: null, reply_claimed_for: null })
-      .eq("id", conversationId!)
-      .then(() => {}, () => {});
+      .eq("id", conversationId!);
+    if (unmuteErr) console.error("[manychat-webhook] unmute write failed", unmuteErr);
     await persistAndPush(supabase, conversationId!, body.subscriber_id, RESUME_CONFIRMATION, chatbot.user_id, chatbot.id, apiKey, platform);
     return manychatReply(sanitizeReply(RESUME_CONFIRMATION), { ai_skipped: true, reason: "user_resumed" });
   }
@@ -540,11 +540,11 @@ export async function POST(request: NextRequest) {
     // seconds earlier, still generating/pushing) fails its single-flight CAS
     // release and discards — the lead doesn't get an answer bubble AFTER the
     // "I'll hold off" confirmation.
-    await supabase
+    const { error: muteErr } = await supabase
       .from("conversations")
       .update({ user_muted_at: new Date().toISOString(), reply_claimed_for: inboundId ?? null })
-      .eq("id", conversationId!)
-      .then(() => {}, () => {});
+      .eq("id", conversationId!);
+    if (muteErr) console.error("[manychat-webhook] mute write failed", muteErr);
     await persistAndPush(supabase, conversationId!, body.subscriber_id, STOP_CONFIRMATION, chatbot.user_id, chatbot.id, apiKey, platform);
     return manychatReply(sanitizeReply(STOP_CONFIRMATION), { ai_skipped: true, reason: "user_paused" });
   }
@@ -802,9 +802,9 @@ export async function POST(request: NextRequest) {
         .select("status, user_muted_at, reply_claimed_for, memory_summary, confirmed_at")
         .eq("id", conversationId!)
         .maybeSingle();
-      // Human takeover OR a self-service "stopmessage" during the sleep → stand
-      // down and release our claim (don't answer the burst after the lead muted).
-      if (fresh?.status === "ai_paused" || fresh?.user_muted_at) {
+      // Human takeover OR a self-service stop during the sleep → stand down and
+      // release our claim (don't answer the burst after the lead muted).
+      if (shouldStandDown(fresh)) {
         await releaseClaim();
         return null;
       }
@@ -933,6 +933,41 @@ export async function POST(request: NextRequest) {
         console.error("[manychat-webhook] claim release failed", releaseError);
       } else if (!released?.length) {
         return null; // superseded mid-generate
+      }
+    }
+
+    // 8c. Final mute/pause re-check (ALL modes). The burst guard above only
+    // covers burst runs and only catches a mute set DURING the debounce sleep;
+    // a stop that lands while the AI is generating — or ANY mute in single /
+    // response mode, which skip the burst guards — would otherwise still push.
+    // Re-read right before persisting and stand down if the lead muted or the
+    // owner took over. Retry once on a null fetch, then fail-open (never drop a
+    // legitimate reply on a transient blip).
+    {
+      let recheck = (
+        await supabase
+          .from("conversations")
+          .select("status, user_muted_at")
+          .eq("id", conversationId!)
+          .maybeSingle()
+      ).data;
+      if (!recheck) {
+        recheck = (
+          await supabase
+            .from("conversations")
+            .select("status, user_muted_at")
+            .eq("id", conversationId!)
+            .maybeSingle()
+        ).data;
+      }
+      if (shouldStandDown(recheck)) {
+        await releaseClaim();
+        return null;
+      }
+      if (!recheck) {
+        console.warn(
+          "[manychat-webhook] pre-push mute re-check fetch failed; proceeding (fail-open)"
+        );
       }
     }
 

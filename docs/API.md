@@ -109,10 +109,13 @@ helpfully without revealing internals. Every detection (both kinds) increments
 badge in the dashboard inbox) and logs a `usage_log` row with
 `event_type: "extraction_attempt"`.
 
-A lead can **self-pause** the AI for their own conversation by texting
-`stopmessage`, and re-enable it with `resumemessage`. This is tracked on
-`conversations.user_muted_at`, independent of owner human-takeover. Each command
-sends a one-time confirmation:
+A lead can **self-pause** the AI for their own conversation by texting a stop
+word — `stop`, `stopmessage`, `stop message`, `unsubscribe`, … — and re-enable
+it with `resume`, `resumemessage`, or `unmute`. Matching is **whole-message
+only** (the message must BE the phrase, after normalize + stripping surrounding
+punctuation/emoji), so an embedded word ("stop thinking about it") does not
+mute. This is tracked on `conversations.user_muted_at`, independent of owner
+human-takeover. Each command sends a one-time confirmation:
 ```json
 { "reply": "You're all set, I'll start replying again. What can I help you with?", "ai_skipped": true, "reason": "user_resumed" }
 ```

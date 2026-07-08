@@ -71,3 +71,17 @@ export function combineBurstText(
   }
   return lines.length ? lines.join("\n") : currentEffective;
 }
+
+/**
+ * Should an in-flight reply run ABANDON its answer? True if, since this run
+ * started, the owner took over (status 'ai_paused') or the lead self-muted
+ * (user_muted_at set). A null/undefined row (transient fetch error) → false:
+ * fail-open, never drop a legitimate reply on a blip. Used both by the burst
+ * post-debounce guard and the final pre-push re-check (which runs in ALL modes,
+ * so single/response-channel runs also honor a mute set during generation).
+ */
+export function shouldStandDown(
+  fresh: { status?: string | null; user_muted_at?: string | null } | null | undefined
+): boolean {
+  return !!fresh && (fresh.status === "ai_paused" || !!fresh.user_muted_at);
+}
