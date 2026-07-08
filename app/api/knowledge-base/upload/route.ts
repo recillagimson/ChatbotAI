@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient, getCurrentUser } from "@/lib/supabase/server";
 import { indexEntry } from "@/lib/retrieval";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 import { extractTextFromFile, ALLOWED_DOC_EXT } from "@/lib/document-parser";
@@ -37,9 +36,10 @@ interface FileResult {
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Impersonation-aware: under admin "view as", getCurrentUser() is the CLIENT, so
+  // the chatbot lookup + KB insert scope to the client (auth.getUser() would be the
+  // admin and never match the client-owned chatbot -> "chatbot not found").
+  const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

@@ -444,14 +444,24 @@ create policy "admin all kb" on public.knowledge_base for all
   using (public.is_superadmin()) with check (public.is_superadmin());
 
 drop policy if exists "admin read conversations" on public.conversations;
-create policy "admin read conversations" on public.conversations for select using (public.is_superadmin());
+drop policy if exists "admin all conversations" on public.conversations;
+create policy "admin all conversations" on public.conversations for all
+  using (public.is_superadmin()) with check (public.is_superadmin());
+
+-- messages has no user_id column (ownership via the conversation); without this
+-- overlay an admin "viewing as" a client sees "No messages yet". read+write (write
+-- is needed for the human-agent manual-reply insert).
+drop policy if exists "admin all messages" on public.messages;
+create policy "admin all messages" on public.messages for all
+  using (public.is_superadmin()) with check (public.is_superadmin());
 
 drop policy if exists "admin read usage" on public.usage_log;
 create policy "admin read usage" on public.usage_log for select using (public.is_superadmin());
 
 -- Teardown (down-migration), if the feature is pulled:
 -- drop policy if exists "admin read usage" on public.usage_log;
--- drop policy if exists "admin read conversations" on public.conversations;
+-- drop policy if exists "admin all messages" on public.messages;
+-- drop policy if exists "admin all conversations" on public.conversations;
 -- drop policy if exists "admin all kb" on public.knowledge_base;
 -- drop policy if exists "admin all chatbots" on public.chatbots;
 -- drop policy if exists "admin read subscriptions" on public.subscriptions;

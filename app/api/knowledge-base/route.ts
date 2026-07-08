@@ -1,7 +1,7 @@
 // app/api/knowledge-base/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient, getCurrentUser } from "@/lib/supabase/server";
 import { indexEntry } from "@/lib/retrieval";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 
@@ -17,9 +17,10 @@ const Body = z.object({
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Impersonation-aware: under admin "view as", getCurrentUser() is the CLIENT, so
+  // the chatbot lookup + KB insert scope to the client (auth.getUser() would be the
+  // admin and never match the client-owned chatbot -> "chatbot not found").
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const parsed = Body.safeParse(await request.json().catch(() => null));
