@@ -252,7 +252,12 @@ export async function sendFollowup(
       followup_step_index: nextStepIndex,
     })
     .eq("id", conversation.id)
-    .eq("followup_step_index", prevIndex);
+    .eq("followup_step_index", prevIndex)
+    // A self-mute ("stopmessage") or owner takeover that landed AFTER the cron's
+    // candidate SELECT but before this claim must cancel the in-flight step (the
+    // cron's row snapshot is stale). Guarding the atomic claim → 0 rows → no send.
+    .is("user_muted_at", null)
+    .eq("status", "active");
   claimQuery =
     prevFollowupAt === null
       ? claimQuery.is("last_followup_at", null)

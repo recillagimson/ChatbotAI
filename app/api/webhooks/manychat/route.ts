@@ -422,6 +422,12 @@ export async function POST(request: NextRequest) {
     // last_followup_at re-arms the timing (the next step's delay is measured from
     // this reply) and the fresh last_message_at reopens the 24h send window.
     const cycling = chatbot.auto_followup_loop_mode === "cycle";
+    // A muted lead's inbound must NOT re-arm the drip: freeze the counters and
+    // last_followup_at so the sequence resumes cleanly from where it was once they
+    // un-mute, instead of replaying from step 1. (The cron already skips muted
+    // leads via the user_muted_at filter, so this reset is inert while muted — but
+    // freezing it keeps the position correct for resume.)
+    const muted = !!existing.user_muted_at;
     await supabase
       .from("conversations")
       .update({
@@ -430,8 +436,8 @@ export async function POST(request: NextRequest) {
         // Heal old rows too: replace a stored placeholder/empty with a real value.
         contact_name: cleanContactField(existing.contact_name) ?? displayName,
         contact_username: cleanContactField(existing.contact_username) ?? username,
-        ...(cycling ? {} : { followup_count: 0, followup_step_index: 0 }),
-        last_followup_at: null,
+        ...(cycling || muted ? {} : { followup_count: 0, followup_step_index: 0 }),
+        ...(muted ? {} : { last_followup_at: null }),
       })
       .eq("id", existing.id);
   }
