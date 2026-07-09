@@ -196,7 +196,16 @@ export function classifySendError(
   err: unknown,
   opts: { assumeDeliveredOnError?: boolean }
 ): "assume_delivered" | "retry" {
-  if (opts.assumeDeliveredOnError && err instanceof Error) return "assume_delivered";
+  if (!(err instanceof Error)) return "retry";
+  // Media (assumeDeliveredOnError): ANY transport error is ambiguous (the request
+  // was already sent) → never re-POST a video/image; assume delivered.
+  if (opts.assumeDeliveredOnError) return "assume_delivered";
+  // Text: a client TIMEOUT/ABORT means our fetch was aborted AFTER the request went
+  // out — ManyChat may well have delivered the DM already, so re-POSTing would deliver
+  // a DUPLICATE. Assume delivered and stop. A connection-level failure (e.g. a
+  // TypeError "fetch failed") means the request likely never completed → safe to retry
+  // (it was not delivered). 429/5xx are handled in postSendContent (server rejected).
+  if (err.name === "TimeoutError" || err.name === "AbortError") return "assume_delivered";
   return "retry";
 }
 
@@ -210,13 +219,14 @@ export function classifySendError(
  * (invalid subscriber, closed messaging window) are permanent — throw
  * immediately.
  *
- * Failure policy differs by content (see classifySendError): TEXT keeps the
- * "a doubled reply beats a dropped one" trade-off (retry on any transport error).
- * MEDIA passes `assumeDeliveredOnError` — a slow-but-successful video that trips a
- * transport error (our client timeout, or a network blip after ManyChat relayed
- * it) must NOT be re-POSTed, or the lead receives it twice; we assume it was
- * delivered and stop. Media also passes a longer `attemptTimeoutMs` so a genuine
- * video relay rarely trips the timeout in the first place.
+ * Failure policy differs by content (see classifySendError). TEXT treats a client
+ * TIMEOUT/ABORT as delivered (the request was already sent — re-POSTing would double
+ * the reply, the exact "same message twice" bug), and only retries connection-level
+ * failures (request never completed) plus 429/5xx (server rejected → not delivered).
+ * MEDIA passes `assumeDeliveredOnError` — a slow-but-successful video that trips ANY
+ * transport error must NOT be re-POSTed, or the lead receives it twice; assume it was
+ * delivered and stop. Both text and media use a 15s default `attemptTimeoutMs` so a
+ * normal-but-slow ManyChat relay completes cleanly instead of tripping the timeout.
  */
 async function postSendContent(opts: {
   subscriberId: string;
@@ -225,11 +235,15 @@ async function postSendContent(opts: {
   apiKey: string;
   /** ManyChat message_tag for out-of-window sends (e.g. HUMAN_AGENT). Omitted = standard in-window send. */
   messageTag?: string;
-  /** Per-attempt client timeout. Default 8s; media passes ~15s (video relay is slow). */
+  /** Per-attempt client timeout. Default 15s so a normal-but-slow ManyChat relay
+   *  responds before we abort (aborting mid-flight risks a duplicate re-POST). */
   attemptTimeoutMs?: number;
   /** When a send throws a transport error (timeout/network) AFTER the request was
    *  sent, assume delivered and stop instead of retrying (media only — a duplicate
-   *  is worse than a rare miss). 429/5xx still retry (server rejected, not sent). */
+   *  is worse than a rare miss). 429/5xx still retry (server rejected, not sent).
+   *  NOTE: even without this flag, text now assumes-delivered on a TIMEOUT/ABORT
+   *  specifically (see classifySendError) — this flag additionally covers connection
+   *  errors, which text still retries. */
   assumeDeliveredOnError?: boolean;
 }) {
   const body = JSON.stringify({
@@ -243,7 +257,7 @@ async function postSendContent(opts: {
 
   const ATTEMPTS = 3;
   const BACKOFF_MS = [1_000, 3_000];
-  const ATTEMPT_TIMEOUT_MS = opts.attemptTimeoutMs ?? 8_000;
+  const ATTEMPT_TIMEOUT_MS = opts.attemptTimeoutMs ?? 15_000;
   let lastError: Error = new Error("ManyChat send failed: no attempts made");
 
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
