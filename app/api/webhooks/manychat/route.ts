@@ -62,7 +62,11 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// 300s (Vercel Pro ceiling) so the background push can pace a multi-bubble reply
+// with a 15–30s human trickle between bubbles (see sendManychatMessagePaced). Must
+// be a static literal — Next can't read this from an env var. On the 60s Hobby
+// budget this is capped to 60; lower BUBBLE_PACING_BUDGET_MS to match if you revert.
+export const maxDuration = 300;
 
 const BodySchema = z.object({
   chatbot_id: z.string().uuid(),
@@ -1082,22 +1086,50 @@ export async function POST(request: NextRequest) {
         const { text: replyText, assets } = result;
         const bubbles = splitIntoMessages(replyText);
         try {
+          let aborted = false;
           if (pacingEnabled() && bubbles.length > 0) {
             // Paced even for a single bubble: a human-like typing delay before the
-            // reply lands (see computeBubbleDelays), then drip-in for extra bubbles.
-            await sendManychatMessagePaced({
+            // reply lands (see computeBubbleDelays), then a 15–30s trickle for extra
+            // bubbles. Because the trickle can span minutes, re-check before each
+            // follow-on bubble whether the lead muted / the owner took over / a newer
+            // run superseded this one, and stop the rest if so (mirrors the pre-push
+            // re-check at 8c). Read-once, retry-once on null, fail-open.
+            const shouldAbort = async (): Promise<boolean> => {
+              const read = async () =>
+                (
+                  await supabase
+                    .from("conversations")
+                    .select("status, user_muted_at, reply_claimed_for")
+                    .eq("id", conversationId!)
+                    .maybeSingle()
+                ).data;
+              let fresh = await read();
+              if (!fresh) fresh = await read();
+              if (!fresh) return false; // transient blip → keep sending (fail-open)
+              if (shouldStandDown(fresh)) return true; // lead muted or owner took over
+              // Superseded: this run released its own claim before pacing, so a
+              // non-null token that isn't ours means a newer inbound now owns the reply.
+              if (fresh.reply_claimed_for && fresh.reply_claimed_for !== inboundId) {
+                return true;
+              }
+              return false;
+            };
+            const paced = await sendManychatMessagePaced({
               subscriberId: body.subscriber_id,
               bubbles,
               startedAt,
               apiKey,
               platform,
+              shouldAbort,
             });
+            aborted = paced.aborted;
           } else if (bubbles.length > 0) {
             await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles, apiKey, platform });
           }
-          // Then push any AI-triggered media assets (channel-aware; unsupported
-          // media on this channel is dropped inside sendManychatMedia).
-          if (assets.length > 0) {
+          // Then push any AI-triggered media assets (channel-aware; unsupported media
+          // on this channel is dropped inside sendManychatMedia). Skipped when the
+          // paced trickle was aborted mid-way (lead muted / owner took over / superseded).
+          if (!aborted && assets.length > 0) {
             await sendManychatMedia({ subscriberId: body.subscriber_id, assets, apiKey, platform });
           }
         } catch (err) {

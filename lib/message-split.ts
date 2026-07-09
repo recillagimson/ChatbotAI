@@ -7,8 +7,14 @@
 /**
  * Max separate bubbles per reply. Beyond this, the overflow tail is merged into
  * the last bubble — keeps the reply intact while avoiding spam-flagging on IG.
+ * Env-overridable (`MAX_BUBBLES`) so the owner can cap reply length — e.g. lower it
+ * so every bubble of a paced 15–30s trickle fits a tighter function budget — without
+ * a code change. Falls back to 6 when unset/invalid; a value < 1 is floored to 1.
  */
-export const MAX_BUBBLES = 6;
+export const MAX_BUBBLES = (() => {
+  const n = Number(process.env.MAX_BUBBLES);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 6;
+})();
 
 /**
  * Hard cap per bubble. Instagram silently drops a DM over ~1000 chars, so any

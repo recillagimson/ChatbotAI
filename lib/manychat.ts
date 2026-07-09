@@ -399,21 +399,40 @@ export async function sendManychatMedia(opts: {
 // ---------------------------------------------------------------------------
 // Human-like bubble pacing
 // ---------------------------------------------------------------------------
-// We delay before EVERY bubble (including a lone single-bubble reply) so a reply
-// never lands the instant the AI finishes — it arrives like a person who read the
-// DM, then typed. The pause before each bubble scales with that bubble's length
-// (you type a longer message longer). Tunables are env-overridable with sane
-// defaults. Total pacing is hard-capped so it never threatens the 60s webhook
-// budget or a ManyChat External Request timeout.
+// The first bubble lands fast (a person who read the DM and started typing), then
+// any follow-on bubbles TRICKLE in 15–30s apart, like someone firing off several
+// texts over time. Bubble-0 timing is unchanged (read pause + short composing +
+// the THINKING_MS floor); the trickle is a random gap before bubbles 2..N. All
+// tunables are env-overridable. The total sleep time is fit under a budget at send
+// time (see sendManychatMessagePaced / pacingFits) so it never exceeds the webhook's
+// maxDuration — on Vercel Pro (maxDuration=300) the full 15–30s trickle fits even
+// for a 6-bubble reply; on the 60s Hobby budget long replies pace what fits and send
+// the remainder immediately (never dropped).
+
+/** Read a non-negative-number env var, falling back to `dflt` when unset/invalid. */
+function readMsEnv(name: string, dflt: number): number {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n >= 0 ? n : dflt;
+}
+
 const PACING_ENABLED = process.env.BUBBLE_PACING_ENABLED !== "false"; // default on
 const READ_MS = 900; // base "saw the DM and started typing" pause before bubble 1
-const PER_CHAR_MS = 24; // typing-speed feel (~per character)
+const PER_CHAR_MS = 24; // typing-speed feel (~per character) for bubble 0
 const FIRST_MIN_MS = 1_200; // a real reply never lands instantly
 const FIRST_MAX_MS = 4_000; // cap composing time even for a long first bubble
-const MIN_GAP_MS = 700; // floor for gaps before later bubbles
-const MAX_GAP_MS = 2_500; // ceiling for gaps before later bubbles
-const MAX_TOTAL_PACING_MS = 9_000; // sum of all delays; scaled down if exceeded
-const PACING_DEADLINE_MS = 45_000; // if the request is already this old, stop sleeping
+// Random gap before each LATER bubble (uniform in [min, max]) — the human trickle.
+const BUBBLE_GAP_MIN_MS = readMsEnv("BUBBLE_GAP_MIN_MS", 15_000);
+const BUBBLE_GAP_MAX_MS = Math.max(
+  BUBBLE_GAP_MIN_MS,
+  readMsEnv("BUBBLE_GAP_MAX_MS", 30_000)
+); // floor max at min so a mis-set env can't invert the range
+// Total sleep budget: a bubble's gap is only slept if it FINISHES at/under this, so
+// cumulative pacing never overshoots the function's maxDuration. Sized for Vercel
+// Pro (maxDuration=300) by default; lower it to ~50_000 if you run on the 60s budget.
+const BUBBLE_PACING_BUDGET_MS = readMsEnv("BUBBLE_PACING_BUDGET_MS", 280_000);
+// Absolute hard stop: once the request is this old, skip all remaining sleeps. Kept
+// just under maxDuration as a belt-and-suspenders guard alongside the budget.
+const PACING_DEADLINE_MS = readMsEnv("PACING_DEADLINE_MS", 290_000);
 // "Thinking" pause: the first reply bubble lands at least this long after the
 // customer's message, so the bot reads as a person who paused to think. Measured
 // from request start, so AI-generation time counts toward it (no stacking).
@@ -438,46 +457,84 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 /**
- * Pure: compute the "typing" delay (ms) to wait BEFORE sending each bubble.
- * - Bubble 0 gets a read pause + length-scaled composing time (FIRST_MIN..FIRST_MAX),
- *   so even a single-bubble reply has a believable typing delay.
- * - Later bubbles get a length-scaled gap (MIN_GAP..MAX_GAP) so they drip in.
- * The total is scaled down proportionally to stay within MAX_TOTAL_PACING_MS.
- * Exported for unit testing (deterministic, no I/O).
+ * Pure: the delay (ms) to wait BEFORE sending each bubble.
+ * - Bubble 0: a read pause + short length-scaled composing time, clamped to
+ *   FIRST_MIN..FIRST_MAX (the send loop also lifts it to the THINKING_MS floor), so
+ *   the first reply lands quickly and feels responsive.
+ * - Bubbles 1..N: a uniform random gap in [BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS] so
+ *   follow-on messages trickle in like a person firing off several texts.
+ * `rng` is injectable so tests are deterministic (defaults to Math.random, which is
+ * fine in app runtime). No total down-scaling — the budget is enforced at send time
+ * by pacingFits, so real gaps are never silently shrunk.
+ * Exported for unit testing (deterministic given rng, no I/O).
  */
-export function computeBubbleDelays(bubbles: string[]): number[] {
-  const lens = bubbles.map((b) => (b ?? "").trim().length);
-  const raw = lens.map((len, i) =>
-    i === 0
-      ? clamp(READ_MS + len * PER_CHAR_MS, FIRST_MIN_MS, FIRST_MAX_MS)
-      : clamp(len * PER_CHAR_MS, MIN_GAP_MS, MAX_GAP_MS)
-  );
-  const total = raw.reduce((a, b) => a + b, 0);
-  const scale = total > MAX_TOTAL_PACING_MS ? MAX_TOTAL_PACING_MS / total : 1;
-  return raw.map((g) => Math.round(g * scale));
+export function computeBubbleDelays(
+  bubbles: string[],
+  rng: () => number = Math.random
+): number[] {
+  return bubbles.map((b, i) => {
+    if (i === 0) {
+      const len = (b ?? "").trim().length;
+      return clamp(READ_MS + len * PER_CHAR_MS, FIRST_MIN_MS, FIRST_MAX_MS);
+    }
+    return Math.round(
+      BUBBLE_GAP_MIN_MS + rng() * (BUBBLE_GAP_MAX_MS - BUBBLE_GAP_MIN_MS)
+    );
+  });
 }
 
 /**
- * Deliver a reply with short, human-like typing delays so it "drips in" instead
- * of landing all at once the instant the AI finishes. Each bubble is its own
- * sendContent call (reusing sendManychatMessage for per-call sanitize + retry).
- * Delays come from computeBubbleDelays (length-scaled, capped); sleeps are skipped
- * once the request passes PACING_DEADLINE_MS so we never blow the 60s budget.
- * Every bubble is always attempted — a single failure is logged and the rest still
- * send; throws once at the end if any failed so the caller can record push_failed.
+ * Pure: should we actually sleep `wait` ms before the next bubble? True only if the
+ * gap is positive, the request hasn't passed the deadline, AND the whole gap finishes
+ * within the pacing budget — so cumulative sleep never overshoots the function's
+ * maxDuration (a long random gap late in a reply is skipped rather than blowing the
+ * budget; that bubble just sends immediately). Exported for unit testing.
+ */
+export function pacingFits(
+  elapsed: number,
+  wait: number,
+  budget: number = BUBBLE_PACING_BUDGET_MS,
+  deadline: number = PACING_DEADLINE_MS
+): boolean {
+  return wait > 0 && elapsed < deadline && elapsed + wait <= budget;
+}
+
+/**
+ * Deliver a reply as human-like "trickle" bubbles: the first lands fast, then any
+ * follow-on bubbles drip in 15–30s apart (see computeBubbleDelays). Each bubble is
+ * its own sendContent call (reusing sendManychatMessage for per-call sanitize +
+ * retry). A sleep happens only while it fits the pacing budget (pacingFits) so the
+ * background task never exceeds the webhook's maxDuration — once the budget is spent,
+ * remaining bubbles send immediately (pacing degrades, nothing is dropped).
+ *
+ * Because the trickle can span minutes, an optional `shouldAbort` is checked before
+ * each follow-on bubble: if the lead muted / the owner took over / a newer reply
+ * superseded this run, the remaining bubbles are NOT sent and { aborted: true } is
+ * returned so the caller can skip the media send too.
+ *
+ * Every attempted bubble is always sent — a single send failure is logged and the
+ * rest still send; throws once at the end if any failed so the caller can record
+ * push_failed. Abort is NOT a failure (no throw).
  */
 export async function sendManychatMessagePaced(opts: {
   subscriberId: string;
   bubbles: string[];
   messageTag?: string;
-  startedAt?: number; // performance.now() at request start, for the deadline guard
+  startedAt?: number; // performance.now() at request start, for the budget guard
   /** ManyChat API key to authenticate each send (resolved per-chatbot by the caller). */
   apiKey: string;
   /** Channel the contact is on; forwarded to each sendContent call. */
   platform?: Platform;
-}): Promise<void> {
+  /**
+   * Optional stand-down check, evaluated before each FOLLOW-ON bubble (2..N). Return
+   * true to stop sending the rest (lead muted / owner took over / superseded). If it
+   * throws, this loop keeps going (fail-open) — dropping a legit reply on a transient
+   * blip is the worse outcome, and the next bubble re-checks anyway.
+   */
+  shouldAbort?: () => Promise<boolean>;
+}): Promise<{ aborted: boolean }> {
   const bubbles = opts.bubbles.map((b) => (b ?? "").trim()).filter(Boolean);
-  if (bubbles.length === 0) return;
+  if (bubbles.length === 0) return { aborted: false };
 
   const gaps = computeBubbleDelays(bubbles);
 
@@ -485,16 +542,35 @@ export async function sendManychatMessagePaced(opts: {
   let anyFailed = false;
 
   for (let i = 0; i < bubbles.length; i++) {
-    // Bubble 0 also waits out the "thinking" pause so the reply lands ~THINKING_MS
-    // after the customer's message (minus time already spent generating). Later
-    // bubbles just use their length-scaled drip gap.
+    // Bubble 0 also waits out the "thinking" pause so the first reply lands
+    // ~THINKING_MS after the customer's message (minus time already spent
+    // generating). Later bubbles use their random trickle gap.
     const elapsed = performance.now() - startedAt;
     const wait = i === 0 ? Math.max(gaps[i], thinkingDelayMs(elapsed)) : gaps[i];
-    // Skip the pause if the request is already old (protect the 60s budget);
-    // we still send every bubble, just without the gap.
-    if (wait > 0 && elapsed < PACING_DEADLINE_MS) {
+    // Sleep only while the WHOLE gap finishes within budget — otherwise send the
+    // rest immediately so we never overshoot maxDuration (bubbles never dropped).
+    if (pacingFits(elapsed, wait)) {
       await sleep(wait);
     }
+
+    // Mid-trickle stand-down: re-check before each follow-on bubble (bubble 0 was
+    // just re-checked pre-push). Catches a "stop"/takeover/supersede that landed
+    // during the gap we just slept. Fail-open if the check itself throws.
+    if (i > 0 && opts.shouldAbort) {
+      let abort = false;
+      try {
+        abort = await opts.shouldAbort();
+      } catch (err) {
+        console.error("[manychat] paced stand-down check failed; continuing", err);
+      }
+      if (abort) {
+        console.log(
+          `[manychat] paced send aborted before bubble ${i + 1}/${bubbles.length} (muted/superseded)`
+        );
+        return { aborted: true };
+      }
+    }
+
     try {
       await sendManychatMessage({
         subscriberId: opts.subscriberId,
@@ -513,6 +589,7 @@ export async function sendManychatMessagePaced(opts: {
   }
 
   if (anyFailed) throw new Error("ManyChat paced send: one or more bubbles failed");
+  return { aborted: false };
 }
 
 /**
