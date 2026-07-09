@@ -5,7 +5,7 @@
 // extraction (fix OCR noise, trim boilerplate, correct facts).
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient, getCurrentUser } from "@/lib/supabase/server";
 import { indexEntry } from "@/lib/retrieval";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 
@@ -24,9 +24,10 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Impersonation-aware: under admin "view as", getCurrentUser() is the CLIENT, so
+  // the ownership lookup + re-index scope to the client. auth.getUser() would be the
+  // admin and never match the client-owned entry -> silent 404, edit never saved.
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const parsed = Body.safeParse(await request.json().catch(() => null));

@@ -11,6 +11,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { KnowledgeBaseForm } from "@/components/dashboard/kb-form";
 import { KnowledgeBaseList } from "@/components/dashboard/kb-list";
+import { RetrainBotButton } from "@/components/dashboard/retrain-bot-button";
 
 type Entry = {
   id: string;
@@ -70,6 +71,15 @@ export function KnowledgeBaseManager({
               ))}
             </select>
           </div>
+
+          {chatbotId && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-4">
+              <RetrainBotButton chatbotId={chatbotId} variant="outline" size="sm" />
+              <p className="text-xs text-muted-foreground">
+                Applies your latest knowledge edits to the bot and clears its caches.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

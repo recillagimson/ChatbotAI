@@ -185,6 +185,35 @@ export async function cacheLastReply(
   }
 }
 
+/**
+ * Best-effort: clear the short-lived per-conversation reply + dedup caches for a
+ * chatbot. Used by the "Retrain bot" action so an immediate re-ask right after a
+ * KB change gets a fresh answer instead of the 30s dedup gate / cached last reply.
+ * These keys auto-expire (30s / 300s) anyway, so this is a convenience, not a
+ * correctness requirement. Returns the number of keys deleted. Fail-open.
+ */
+export async function clearReplyCaches(chatbotId: string): Promise<number> {
+  const redis = getRedis();
+  if (!redis) return 0;
+  let deleted = 0;
+  try {
+    for (const pattern of [
+      `chatpilot:last:${chatbotId}:*`,
+      `chatpilot:dedup:${chatbotId}:*`,
+    ]) {
+      let cursor = "0";
+      do {
+        const [next, keys] = await redis.scan(cursor, { match: pattern, count: 200 });
+        cursor = next;
+        if (keys.length) deleted += await redis.del(...keys);
+      } while (cursor !== "0");
+    }
+  } catch (err) {
+    console.error("[limits] clearReplyCaches redis error", err);
+  }
+  return deleted;
+}
+
 // ---------------------------------------------------------------------------
 // 4) Per-chatbot monthly reply cap
 // ---------------------------------------------------------------------------

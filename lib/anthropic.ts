@@ -94,7 +94,7 @@ export function buildSystemPrompt(
   // re-ask. Empty for short/new conversations. Placed just above the KB.
   const memory = memorySummary?.trim();
   const memoryBlock = memory
-    ? `CONVERSATION MEMORY (summary of earlier messages in this chat; treat as known context, don't re-ask)\n${memory}`
+    ? `CONVERSATION MEMORY (summary of earlier messages in this chat; treat as known context, don't re-ask). If anything here conflicts with the OFFERS or KNOWLEDGE BASE below (a price, link, or term), the knowledge base is current and WINS — use it, not the remembered value.\n${memory}`
     : "";
 
   // Continuity — when there are prior messages, force the bot to CONTINUE the
