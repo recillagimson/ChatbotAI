@@ -400,12 +400,13 @@ export async function sendManychatMedia(opts: {
 // Human-like bubble pacing
 // ---------------------------------------------------------------------------
 // The first bubble lands fast (a person who read the DM and started typing), then
-// any follow-on bubbles TRICKLE in 15–30s apart, like someone firing off several
-// texts over time. Bubble-0 timing is unchanged (read pause + short composing +
-// the THINKING_MS floor); the trickle is a random gap before bubbles 2..N. All
-// tunables are env-overridable. The total sleep time is fit under a budget at send
-// time (see sendManychatMessagePaced / pacingFits) so it never exceeds the webhook's
-// maxDuration — on Vercel Pro (maxDuration=300) the full 15–30s trickle fits even
+// any follow-on bubbles TRICKLE in, spaced by how long THAT bubble is to "type":
+// a short message waits ~10s, a long one up to ~30s (length-scaled, clamped).
+// Bubble-0 timing is unchanged (read pause + short composing + the THINKING_MS
+// floor); the trickle is the length-scaled gap before bubbles 2..N. All tunables
+// are env-overridable. The total sleep time is fit under a budget at send time (see
+// sendManychatMessagePaced / pacingFits) so it never exceeds the webhook's
+// maxDuration — on Vercel Pro (maxDuration=300) the full 10–30s trickle fits even
 // for a 6-bubble reply; on the 60s Hobby budget long replies pace what fits and send
 // the remainder immediately (never dropped).
 
@@ -420,12 +421,17 @@ const READ_MS = 900; // base "saw the DM and started typing" pause before bubble
 const PER_CHAR_MS = 24; // typing-speed feel (~per character) for bubble 0
 const FIRST_MIN_MS = 1_200; // a real reply never lands instantly
 const FIRST_MAX_MS = 4_000; // cap composing time even for a long first bubble
-// Random gap before each LATER bubble (uniform in [min, max]) — the human trickle.
-const BUBBLE_GAP_MIN_MS = readMsEnv("BUBBLE_GAP_MIN_MS", 15_000);
+// Length-scaled gap before each LATER bubble: gap = len * BUBBLE_GAP_PER_CHAR_MS,
+// clamped to [BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS] — a short bubble waits the 10s
+// floor, a long one up to the 30s ceiling. All three are env-tunable.
+const BUBBLE_GAP_MIN_MS = readMsEnv("BUBBLE_GAP_MIN_MS", 10_000);
 const BUBBLE_GAP_MAX_MS = Math.max(
   BUBBLE_GAP_MIN_MS,
   readMsEnv("BUBBLE_GAP_MAX_MS", 30_000)
 ); // floor max at min so a mis-set env can't invert the range
+// Per-character "typing" rate for later bubbles. Default 150ms/char reaches the 30s
+// ceiling at ~200 chars and the 10s floor at ≤~67 chars — tune to taste.
+const BUBBLE_GAP_PER_CHAR_MS = readMsEnv("BUBBLE_GAP_PER_CHAR_MS", 150);
 // Total sleep budget: a bubble's gap is only slept if it FINISHES at/under this, so
 // cumulative pacing never overshoots the function's maxDuration. Sized for Vercel
 // Pro (maxDuration=300) by default; lower it to ~50_000 if you run on the 60s budget.
@@ -461,25 +467,20 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
  * - Bubble 0: a read pause + short length-scaled composing time, clamped to
  *   FIRST_MIN..FIRST_MAX (the send loop also lifts it to the THINKING_MS floor), so
  *   the first reply lands quickly and feels responsive.
- * - Bubbles 1..N: a uniform random gap in [BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS] so
- *   follow-on messages trickle in like a person firing off several texts.
- * `rng` is injectable so tests are deterministic (defaults to Math.random, which is
- * fine in app runtime). No total down-scaling — the budget is enforced at send time
- * by pacingFits, so real gaps are never silently shrunk.
- * Exported for unit testing (deterministic given rng, no I/O).
+ * - Bubbles 1..N: a length-scaled "typing" gap — len * BUBBLE_GAP_PER_CHAR_MS,
+ *   clamped to [BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS] — so a short message waits ~10s
+ *   and a long one up to ~30s, automatically scaling with the bubble's length.
+ * Deterministic (no I/O, no RNG). No total down-scaling — the budget is enforced at
+ * send time by pacingFits, so real gaps are never silently shrunk.
+ * Exported for unit testing.
  */
-export function computeBubbleDelays(
-  bubbles: string[],
-  rng: () => number = Math.random
-): number[] {
+export function computeBubbleDelays(bubbles: string[]): number[] {
   return bubbles.map((b, i) => {
+    const len = (b ?? "").trim().length;
     if (i === 0) {
-      const len = (b ?? "").trim().length;
       return clamp(READ_MS + len * PER_CHAR_MS, FIRST_MIN_MS, FIRST_MAX_MS);
     }
-    return Math.round(
-      BUBBLE_GAP_MIN_MS + rng() * (BUBBLE_GAP_MAX_MS - BUBBLE_GAP_MIN_MS)
-    );
+    return clamp(len * BUBBLE_GAP_PER_CHAR_MS, BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS);
   });
 }
 
