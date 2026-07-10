@@ -58,6 +58,29 @@ export function resolveOutboundAssets(
 }
 
 /**
+ * Generate `count` unique asset keys of the form `{base}_{n}` (n from 1), skipping
+ * any key already present in `existing` (case-insensitive) AND any already produced
+ * in this batch. Used by the Media tab's bulk-image upload so several images added
+ * at once get distinct, collision-free keys (`results_1`, `results_2`, …), and a
+ * re-upload with the same base continues past the taken numbers. Pure/deterministic.
+ */
+export function nextAssetKeys(base: string, count: number, existing: string[]): string[] {
+  const b = base.trim().toLowerCase();
+  const taken = new Set(existing.map((k) => k.trim().toLowerCase()));
+  const out: string[] = [];
+  let n = 1;
+  while (out.length < count) {
+    const candidate = `${b}_${n}`;
+    if (!taken.has(candidate)) {
+      out.push(candidate);
+      taken.add(candidate);
+    }
+    n += 1;
+  }
+  return out;
+}
+
+/**
  * Compact catalog of usable assets for the AI system prompt so the model knows
  * which keys it may emit. One line per asset: `- key (kind): description`.
  * Empty string when there are no usable assets.

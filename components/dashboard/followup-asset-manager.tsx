@@ -7,12 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { nextAssetKeys } from "@/lib/followup-assets";
 import type { FollowupAsset, FollowupAssetKind } from "@/lib/types";
 
 // Mirrors lib/storage.ts FOLLOWUP_BUCKET (not imported: that module also carries
 // server-side Buffer helpers we keep out of the client bundle).
 const FOLLOWUP_BUCKET = "followup-assets";
 const MAX_FILE_BYTES = 25 * 1024 * 1024; // ManyChat's media cap
+const MAX_IMAGES = 5; // bulk-image upload cap
+const KEY_RE = /^[a-z0-9_-]{1,40}$/;
+const BASE_KEY_RE = /^[a-z0-9_-]{1,38}$/; // leaves room for the "_N" suffix
+const KEY_HINT = "Key: 1–40 chars, lowercase letters/numbers/_/- only (e.g. results_video).";
 
 const KIND_LABEL: Record<FollowupAssetKind, string> = {
   image: "Picture",
@@ -54,6 +59,10 @@ function fileKindError(kind: FollowupAssetKind, file: File): string | null {
  * folder) — routing bytes through an API route would hit Vercel's ~4.5 MB body
  * limit long before ManyChat's 25 MB cap. The API route only records metadata.
  *
+ * Pictures can be added in bulk: select up to 5 images at once and each is saved
+ * as its own asset, keyed {base}_1, {base}_2, … from the Key field (a "base key"
+ * when several are selected). Video/voice/link stay one-at-a-time.
+ *
  * NOTE on Instagram: voice notes/videos only deliver on Messenger/Telegram; on
  * Instagram a step falls back to its text caption (native IG voice notes are set
  * up separately in ManyChat — see docs/followup-media.md).
@@ -76,16 +85,22 @@ export function FollowupAssetManager({
   const [label, setLabel] = useState("");
   const [description, setDescription] = useState("");
   const [url, setUrl] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileInputKey, setFileInputKey] = useState(0); // bump to visually clear the file input
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const isBulkImage = kind === "image" && files.length > 1;
 
   function reset() {
     setKey("");
     setLabel("");
     setDescription("");
     setUrl("");
-    setFile(null);
+    setFiles([]);
+    setFileInputKey((n) => n + 1);
   }
 
   async function postMetadata(body: Record<string, unknown>): Promise<Response> {
@@ -96,54 +111,99 @@ export function FollowupAssetManager({
     });
   }
 
+  // Upload one file to storage + record its metadata row. Cleans up the orphan
+  // object if the metadata insert fails. Returns a per-file result (never throws).
+  async function uploadOne(file: File, k: string): Promise<{ ok: boolean; error?: string }> {
+    const supabase = createClient();
+    const safeName = (file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100);
+    const path = `${userId}/followup/${crypto.randomUUID()}-${safeName}`;
+    const { error: upErr } = await supabase.storage
+      .from(FOLLOWUP_BUCKET)
+      .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
+    if (upErr) return { ok: false, error: `upload failed: ${upErr.message}` };
+    const res = await postMetadata({ chatbot_id: chatbotId, key: k, label, description, kind, storage_path: path, mime: file.type });
+    if (!res.ok) {
+      await supabase.storage.from(FOLLOWUP_BUCKET).remove([path]).catch(() => {});
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: json.error ?? "could not save" };
+    }
+    return { ok: true };
+  }
+
   async function addAsset(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     const k = key.trim().toLowerCase();
-    if (!/^[a-z0-9_-]{1,40}$/.test(k)) {
-      setError("Key: 1–40 chars, lowercase letters/numbers/_/- only (e.g. results_video).");
+
+    // Link: a single metadata POST (no file).
+    if (kind === "link") {
+      if (!KEY_RE.test(k)) { setError(KEY_HINT); return; }
+      setBusy(true);
+      try {
+        const res = await postMetadata({ chatbot_id: chatbotId, key: k, label, description, kind, url });
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) { setError(json.error ?? "Could not save asset."); return; }
+        reset();
+        setNotice("Link added ✓");
+        startTransition(() => router.refresh());
+      } finally {
+        setBusy(false);
+      }
       return;
     }
-    setBusy(true);
-    try {
-      const base = { chatbot_id: chatbotId, key: k, label, description };
-      let res: Response;
-      if (kind === "link") {
-        res = await postMetadata({ ...base, kind, url });
-      } else {
-        if (!file) {
-          setError("Choose a file to upload.");
-          return;
-        }
-        const invalid = fileKindError(kind, file);
-        if (invalid) {
-          setError(invalid);
-          return;
-        }
-        // 1. Upload straight to storage under the owner's folder (RLS-enforced).
-        const supabase = createClient();
-        const safeName = (file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100);
-        const path = `${userId}/followup/${crypto.randomUUID()}-${safeName}`;
-        const { error: upErr } = await supabase.storage
-          .from(FOLLOWUP_BUCKET)
-          .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
-        if (upErr) {
-          setError(`Upload failed: ${upErr.message}`);
-          return;
-        }
-        // 2. Record the metadata row; if that fails, clean up the orphan object.
-        res = await postMetadata({ ...base, kind, storage_path: path, mime: file.type });
-        if (!res.ok) {
-          await supabase.storage.from(FOLLOWUP_BUCKET).remove([path]).catch(() => {});
-        }
-      }
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(json.error ?? "Could not save asset.");
+
+    // Media (image/video/audio): need at least one file.
+    if (files.length === 0) { setError("Choose a file to upload."); return; }
+    // Validate every selected file up-front (all-or-nothing).
+    for (const f of files) {
+      const invalid = fileKindError(kind, f);
+      if (invalid) { setError(invalid); return; }
+    }
+
+    // Bulk images: the Key field is a BASE — each image gets {base}_1, {base}_2, …
+    if (isBulkImage) {
+      const base = k || "image";
+      if (!BASE_KEY_RE.test(base)) {
+        setError("Base key: 1–38 chars, lowercase letters/numbers/_/- only (e.g. results).");
         return;
       }
-      reset();
-      startTransition(() => router.refresh());
+      const keys = nextAssetKeys(base, files.length, assets.map((a) => a.key));
+      setBusy(true);
+      let ok = 0;
+      const fails: string[] = [];
+      try {
+        for (let i = 0; i < files.length; i++) {
+          setProgress(`Uploading ${i + 1} of ${files.length}…`);
+          const r = await uploadOne(files[i], keys[i]);
+          if (r.ok) ok += 1;
+          else fails.push(`${files[i].name}: ${r.error}`);
+        }
+      } finally {
+        setBusy(false);
+        setProgress(null);
+      }
+      if (ok > 0) {
+        reset();
+        startTransition(() => router.refresh());
+      }
+      if (fails.length) setError(`Added ${ok} of ${files.length}. Failed — ${fails.join("; ")}`);
+      else setNotice(`Added ${ok} image${ok === 1 ? "" : "s"} ✓`);
+      return;
+    }
+
+    // Single media (one image, or a video/voice note): the exact typed key.
+    if (!KEY_RE.test(k)) { setError(KEY_HINT); return; }
+    setBusy(true);
+    try {
+      const r = await uploadOne(files[0], k);
+      if (r.ok) {
+        reset();
+        setNotice("Asset added ✓");
+        startTransition(() => router.refresh());
+      } else {
+        setError(r.error ?? "Could not save asset.");
+      }
     } finally {
       setBusy(false);
     }
@@ -151,6 +211,7 @@ export function FollowupAssetManager({
 
   async function remove(asset: FollowupAsset) {
     setError(null);
+    setNotice(null);
     const inUse = usedKeys.includes(asset.key);
     const warning = inUse
       ? `"${asset.key}" is used by your follow-up sequence — that step will send TEXT ONLY until you pick another asset.\n\nDelete it anyway?`
@@ -164,6 +225,11 @@ export function FollowupAssetManager({
     }
     startTransition(() => router.refresh());
   }
+
+  // Preview of the keys a bulk-image batch will produce (pure; validated on submit).
+  const keyPreview = isBulkImage
+    ? nextAssetKeys(key.trim().toLowerCase() || "image", files.length, assets.map((a) => a.key))
+    : [];
 
   return (
     <div className="space-y-6">
@@ -215,7 +281,13 @@ export function FollowupAssetManager({
             <select
               id="asset-kind"
               value={kind}
-              onChange={(e) => setKind(e.target.value as FollowupAssetKind)}
+              onChange={(e) => {
+                setKind(e.target.value as FollowupAssetKind);
+                setFiles([]);
+                setFileInputKey((n) => n + 1);
+                setError(null);
+                setNotice(null);
+              }}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               <option value="image">Picture</option>
@@ -225,13 +297,18 @@ export function FollowupAssetManager({
             </select>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="asset-key">Key</Label>
+            <Label htmlFor="asset-key">{kind === "image" ? "Key / base key" : "Key"}</Label>
             <Input
               id="asset-key"
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              placeholder="results_video"
+              placeholder={kind === "image" ? "results" : "results_video"}
             />
+            {kind === "image" && (
+              <p className="text-xs text-muted-foreground">
+                Adding several? This becomes a base — each image gets _1, _2, …
+              </p>
+            )}
           </div>
         </div>
 
@@ -248,13 +325,27 @@ export function FollowupAssetManager({
           </div>
         ) : (
           <div className="space-y-1">
-            <Label htmlFor="asset-file">File (max 25 MB{kind === "audio" ? ", MP3/M4A/WAV" : ""})</Label>
+            <Label htmlFor="asset-file">
+              {kind === "image" ? "Images" : "File"} (max 25 MB
+              {kind === "audio" ? ", MP3/M4A/WAV" : ""}
+              {kind === "image" ? `, up to ${MAX_IMAGES}` : ""})
+            </Label>
             <Input
+              key={fileInputKey}
               id="asset-file"
               type="file"
+              multiple={kind === "image"}
               accept={kind === "image" ? "image/*" : kind === "video" ? "video/*" : ".mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav"}
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                const list = Array.from(e.target.files ?? []);
+                setFiles(kind === "image" ? list.slice(0, MAX_IMAGES) : list.slice(0, 1));
+              }}
             />
+            {isBulkImage && (
+              <p className="text-xs text-muted-foreground">
+                {files.length} images selected → keys: {keyPreview.join(", ")}
+              </p>
+            )}
           </div>
         )}
 
@@ -281,8 +372,14 @@ export function FollowupAssetManager({
         {error && (
           <p className="rounded bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
         )}
+        {notice && !error && <p className="text-sm text-green-600">{notice}</p>}
+        {progress && <p className="text-sm text-muted-foreground">{progress}</p>}
         <Button type="submit" disabled={busy}>
-          {busy ? "Saving..." : "Add asset"}
+          {busy
+            ? (progress ?? "Saving...")
+            : isBulkImage
+              ? `Add ${files.length} images`
+              : "Add asset"}
         </Button>
       </form>
     </div>
