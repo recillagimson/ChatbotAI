@@ -12,6 +12,7 @@ import { WebhookSecretField } from "@/components/dashboard/webhook-secret-field"
 import { ChatbotTabsBar } from "@/components/dashboard/chatbot-tabs-bar";
 import { RetrainBotButton } from "@/components/dashboard/retrain-bot-button";
 import { resolveChatbotTab } from "@/lib/chatbot-tabs";
+import { stepAssetKeys } from "@/lib/followup-assets";
 import { FOLLOWUP_ENABLED } from "@/lib/followup";
 import type { Chatbot, FollowupAsset } from "@/lib/types";
 import Link from "next/link";
@@ -228,9 +229,7 @@ export default async function ChatbotDetailPage({
               chatbotId={chatbot.id}
               userId={user!.id}
               assets={assets}
-              usedKeys={(safeChatbot.auto_followup_steps ?? [])
-                .map((s) => s.asset_key ?? "")
-                .filter(Boolean)}
+              usedKeys={(safeChatbot.auto_followup_steps ?? []).flatMap((s) => stepAssetKeys(s))}
             />
           </CardContent>
         </Card>

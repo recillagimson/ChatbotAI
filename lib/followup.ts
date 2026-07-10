@@ -17,8 +17,8 @@
  * the I/O.
  */
 import type { Chatbot, Conversation, FollowupStep, FollowupAsset } from "@/lib/types";
-import { sendManychatMedia } from "@/lib/manychat";
-import { assetToOutbound } from "@/lib/followup-assets";
+import { sendManychatMedia, type OutboundAsset } from "@/lib/manychat";
+import { assetToOutbound, stepAssetKeys } from "@/lib/followup-assets";
 import { cleanContactField } from "@/lib/contact";
 import { type Platform, PLATFORM_META, toPlatform, canPushPlatform } from "@/lib/platforms";
 import type { createServiceClient } from "@/lib/supabase/server";
@@ -93,17 +93,26 @@ export type FollowupConversation = Pick<
 export function resolveSteps(chatbot: FollowupChatbot): FollowupStep[] {
   const raw = Array.isArray(chatbot.auto_followup_steps) ? chatbot.auto_followup_steps : [];
   const valid = raw
-    .filter((s) => s && ((s.text ?? "").trim() || (s.asset_key ?? "").trim()))
-    .map((s) => ({
-      delay_hours: clampDelayHours(s.delay_hours),
-      asset_key: (s.asset_key ?? "").trim() || null,
-      text: s.text ?? null,
+    .map((s) => ({ step: s, keys: s ? stepAssetKeys(s) : [] }))
+    .filter(({ step, keys }) => step && ((step.text ?? "").trim() || keys.length))
+    .map(({ step, keys }) => ({
+      delay_hours: clampDelayHours(step.delay_hours),
+      asset_keys: keys,             // canonical, normalized (back-compat: reads old asset_key)
+      asset_key: keys[0] ?? null,   // keep the singular in sync for any legacy consumer
+      text: step.text ?? null,
     }));
   if (valid.length) return valid;
 
   const tmpl = chatbot.auto_followup_template?.trim();
   if (tmpl) {
-    return [{ delay_hours: clampDelayHours((chatbot.auto_followup_days ?? 1) * 24), asset_key: null, text: tmpl }];
+    return [
+      {
+        delay_hours: clampDelayHours((chatbot.auto_followup_days ?? 1) * 24),
+        asset_keys: [],
+        asset_key: null,
+        text: tmpl,
+      },
+    ];
   }
   return [];
 }
@@ -216,8 +225,9 @@ export function evaluateFollowup(
  *
  * Channel-aware: an asset the channel can't push (e.g. a voice note on
  * Instagram) is dropped by sendManychatMedia; the text caption still delivers.
- * Does NOT touch `last_message_at` (that tracks the contact's real last inbound
- * and gates the window).
+ * Multiple assets are sent as one message (caption bubble + one bubble per asset)
+ * in a single ManyChat call. Does NOT touch `last_message_at` (that tracks the
+ * contact's real last inbound and gates the window).
  *
  * Returns the recorded message content, or null when the claim was lost.
  */
@@ -233,7 +243,7 @@ export async function sendFollowup(
     | "last_followup_at"
   > & { platform?: Platform },
   step: FollowupStep,
-  asset: FollowupAsset | null,
+  assets: FollowupAsset[],
   now: Date,
   apiKey: string,
   nextStepIndex: number,
@@ -272,12 +282,24 @@ export async function sendFollowup(
     name: cleanContactField(conversation.contact_name),
   });
   const platform = toPlatform(conversation.platform);
-  const outbound = assetToOutbound(asset);
+  const outbound = assets
+    .map(assetToOutbound)
+    .filter((a): a is OutboundAsset => a !== null);
+
+  // Nothing deliverable: a caption-less step whose asset(s) were ALL deleted from
+  // the library (outbound empty AND no caption text). The claim above already
+  // advanced past this broken step so the drip doesn't get stuck — but don't send
+  // (ManyChat would no-op anyway), don't log a phantom "delivered" message, and
+  // don't count it as a send. Returning null makes the cron record a skip; the
+  // per-key followup_asset_missing diagnostics already fired upstream.
+  if (outbound.length === 0 && !text.trim()) {
+    return null;
+  }
 
   try {
     await sendManychatMedia({
       subscriberId: conversation.manychat_subscriber_id,
-      assets: outbound ? [outbound] : [],
+      assets: outbound,
       text,
       apiKey,
       platform,
@@ -304,18 +326,26 @@ export async function sendFollowup(
     throw err;
   }
 
-  // 3. Record the outbound message. content is NOT NULL — use the caption, or a
-  // note for media-only steps. media_type stays a real MIME (or null): the inbox
-  // renderer matches on startsWith("image/"|"audio/"|"video/").
-  const content = text || (asset ? `(sent ${asset.kind})` : "(follow-up)");
+  // 3. Record the outbound message. One row per step (matches the atomic-claim
+  // model); the first asset is the representative media. content is NOT NULL —
+  // use the caption, or a note for media-only steps. media_type stays a real MIME
+  // (or null): the inbox renderer matches on startsWith("image/"|"audio/"|"video/").
+  const first = assets[0] ?? null;
+  const mediaNote =
+    assets.length === 0
+      ? "(follow-up)"
+      : assets.length === 1
+        ? `(sent ${assets[0].kind})`
+        : `(sent ${assets.length} assets)`;
+  const content = text || mediaNote;
   await supabase.from("messages").insert({
     conversation_id: conversation.id,
     role: "assistant",
     content,
     ai_generated: false,
     tokens_used: 0,
-    media_url: asset?.url ?? null,
-    media_type: asset?.mime ?? null,
+    media_url: first?.url ?? null,
+    media_type: first?.mime ?? null,
   });
 
   return content;

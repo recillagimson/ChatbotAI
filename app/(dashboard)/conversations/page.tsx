@@ -11,14 +11,16 @@ import { contactDisplayName } from "@/lib/contact";
 import { formatDate, cn } from "@/lib/utils";
 import { MessageSquare } from "lucide-react";
 import { PLATFORMS, PLATFORM_META, isPlatform } from "@/lib/platforms";
+import { CONVERSATION_TAGS, TAG_LABEL, TAG_VARIANT, isTag, tagOf } from "@/lib/conversation-tags";
 
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ platform?: string; chatbot?: string }>;
+  searchParams: Promise<{ platform?: string; chatbot?: string; tag?: string }>;
 }) {
   const sp = await searchParams;
   const platform = isPlatform(sp.platform) ? sp.platform : null;
+  const tag = isTag(sp.tag) ? sp.tag : null;
 
   const supabase = await createClient();
   const user = await getCurrentUser();
@@ -39,21 +41,33 @@ export default async function ConversationsPage({
     .eq("user_id", user!.id);
   if (platform) query = query.eq("platform", platform);
   if (chatbotId) query = query.eq("chatbot_id", chatbotId);
+  if (tag) query = query.eq("tag", tag);
   const { data: conversations } = await query
     .order("last_message_at", { ascending: false })
     .limit(100);
 
-  // Build a conversations URL preserving both filters (so platform tabs keep the
-  // active chatbot, and vice-versa).
-  const hrefWith = (next: { platform?: string | null; chatbot?: string | null }) => {
+  // Build a conversations URL preserving the other filters (so each tab/dropdown
+  // keeps the active platform, chatbot, and tag).
+  const hrefWith = (next: {
+    platform?: string | null;
+    chatbot?: string | null;
+    tag?: string | null;
+  }) => {
     const params = new URLSearchParams();
     const p = next.platform === undefined ? platform : next.platform;
     const c = next.chatbot === undefined ? chatbotId : next.chatbot;
+    const t = next.tag === undefined ? tag : next.tag;
     if (p) params.set("platform", p);
     if (c) params.set("chatbot", c);
+    if (t) params.set("tag", t);
     const qs = params.toString();
     return qs ? `/conversations?${qs}` : "/conversations";
   };
+
+  const tagTabs: { value: string | null; label: string }[] = [
+    { value: null, label: "All" },
+    ...CONVERSATION_TAGS.map((t) => ({ value: t, label: TAG_LABEL[t] })),
+  ];
 
   // Which platforms does this user actually have threads on? (for tab visibility)
   const { data: distinctRows } = await supabase
@@ -108,9 +122,32 @@ export default async function ConversationsPage({
             chatbots={chatbots ?? []}
             chatbotId={chatbotId}
             platform={platform}
+            tag={tag}
           />
         )}
       </div>
+
+      {/* Tag filter: Lead / Wants a call / Needs attention / Subscribed */}
+      <nav aria-label="Filter by tag" className="mb-6 flex flex-wrap gap-2">
+        {tagTabs.map((t) => {
+          const active = tag === t.value || (!tag && t.value === null);
+          return (
+            <Link
+              key={t.value ?? "all"}
+              href={hrefWith({ tag: t.value })}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                active
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-input bg-background hover:bg-accent"
+              )}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
 
       {!conversations?.length ? (
         <Card>
@@ -118,8 +155,8 @@ export default async function ConversationsPage({
             <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="font-medium mb-1">No conversations yet</p>
             <p className="text-sm text-muted-foreground">
-              {chatbotId || platform
-                ? `No conversations${
+              {chatbotId || platform || tag
+                ? `No conversations${tag ? ` tagged "${TAG_LABEL[tag]}"` : ""}${
                     chatbotId
                       ? ` for ${chatbots?.find((c) => c.id === chatbotId)?.name ?? "this chatbot"}`
                       : ""
@@ -154,9 +191,7 @@ export default async function ConversationsPage({
                     {c.status === "ai_paused" && (
                       <Badge variant="warning">AI paused</Badge>
                     )}
-                    {Array.isArray(c.keyword_fired) && c.keyword_fired.length > 0 && (
-                      <Badge variant="outline">Lead</Badge>
-                    )}
+                    <Badge variant={TAG_VARIANT[tagOf(c.tag)]}>{TAG_LABEL[tagOf(c.tag)]}</Badge>
                     {c.user_muted_at && (
                       <Badge variant="secondary">Muted by user</Badge>
                     )}

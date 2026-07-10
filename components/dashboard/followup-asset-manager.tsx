@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AssetThumb } from "@/components/dashboard/asset-thumb";
 import { nextAssetKeys } from "@/lib/followup-assets";
 import type { FollowupAsset, FollowupAssetKind } from "@/lib/types";
 
@@ -91,6 +92,15 @@ export function FollowupAssetManager({
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Object-URL previews parallel to `files`, rebuilt+revoked whenever the
+  // selection changes (and on unmount). Mirrors the pattern in request-composer.
+  const [previews, setPreviews] = useState<string[]>([]);
+  useEffect(() => {
+    const urls = files.map((f) => URL.createObjectURL(f));
+    setPreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [files]);
 
   const isBulkImage = kind === "image" && files.length > 1;
 
@@ -237,33 +247,36 @@ export function FollowupAssetManager({
         <ul className="divide-y rounded-md border">
           {assets.map((a) => (
             <li key={a.id} className="flex items-center justify-between gap-3 p-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{a.key}</code>
-                  <span className="text-xs text-muted-foreground">{KIND_LABEL[a.kind]}</span>
-                  {usedKeys.includes(a.key) && (
-                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
-                      in sequence
-                    </span>
+              <div className="flex min-w-0 items-center gap-3">
+                <AssetThumb kind={a.kind} url={a.url} className="h-12 w-12" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{a.key}</code>
+                    <span className="text-xs text-muted-foreground">{KIND_LABEL[a.kind]}</span>
+                    {usedKeys.includes(a.key) && (
+                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                        in sequence
+                      </span>
+                    )}
+                  </div>
+                  {(a.label || a.description) && (
+                    <p className="truncate text-sm text-muted-foreground">
+                      {a.label}
+                      {a.label && a.description ? " — " : ""}
+                      {a.description}
+                    </p>
+                  )}
+                  {a.url && (
+                    <a
+                      href={a.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-primary underline"
+                    >
+                      {a.kind === "link" ? a.url : "open"}
+                    </a>
                   )}
                 </div>
-                {(a.label || a.description) && (
-                  <p className="truncate text-sm text-muted-foreground">
-                    {a.label}
-                    {a.label && a.description ? " — " : ""}
-                    {a.description}
-                  </p>
-                )}
-                {a.url && (
-                  <a
-                    href={a.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-primary underline"
-                  >
-                    {a.kind === "link" ? a.url : "preview"}
-                  </a>
-                )}
               </div>
               <Button type="button" variant="ghost" size="sm" onClick={() => remove(a)}>
                 Delete
@@ -345,6 +358,18 @@ export function FollowupAssetManager({
               <p className="text-xs text-muted-foreground">
                 {files.length} images selected → keys: {keyPreview.join(", ")}
               </p>
+            )}
+            {/* Pre-upload preview: image/video thumbnails, or a player for voice notes. */}
+            {files.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {files.map((f, i) =>
+                  kind === "audio" ? (
+                    <audio key={i} controls src={previews[i]} className="h-9" />
+                  ) : (
+                    <AssetThumb key={i} kind={kind} url={previews[i]} className="h-16 w-16" />
+                  )
+                )}
+              </div>
             )}
           </div>
         )}

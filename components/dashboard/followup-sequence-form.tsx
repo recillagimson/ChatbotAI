@@ -8,21 +8,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { AssetThumb } from "@/components/dashboard/asset-thumb";
+import { stepAssetKeys } from "@/lib/followup-assets";
+import { cn } from "@/lib/utils";
+import { Check } from "lucide-react";
 import type { Chatbot, FollowupAsset, FollowupLoopMode, FollowupStep } from "@/lib/types";
 
 const MIN_H = 1;
 const MAX_H = 22;
+const MAX_STEP_ASSETS = 5; // caption + up to 5 media bubbles stays under ManyChat's 10-per-call cap
 const clampHours = (n: number) => Math.min(MAX_H, Math.max(MIN_H, Math.round(n || 3)));
 
-type EditableStep = { delay_hours: number; asset_key: string; text: string };
+type EditableStep = { delay_hours: number; asset_keys: string[]; text: string };
 
 function toEditable(steps: FollowupStep[]): EditableStep[] {
-  if (!Array.isArray(steps) || steps.length === 0) {
-    return [{ delay_hours: 3, asset_key: "", text: "" }];
+  // auto_followup_steps is schemaless JSONB — drop any null/garbage element
+  // before mapping (a null here would otherwise crash the editor mount).
+  const arr = Array.isArray(steps)
+    ? steps.filter((s): s is FollowupStep => !!s && typeof s === "object")
+    : [];
+  if (arr.length === 0) {
+    return [{ delay_hours: 3, asset_keys: [], text: "" }];
   }
-  return steps.map((s) => ({
+  return arr.map((s) => ({
     delay_hours: clampHours(Number(s.delay_hours)),
-    asset_key: s.asset_key ?? "",
+    asset_keys: stepAssetKeys(s), // back-compat: reads old single asset_key too
     text: s.text ?? "",
   }));
 }
@@ -66,9 +76,23 @@ export function FollowupSequenceForm({
     markDirty();
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...next } : s)));
   }
+  // Toggle an asset key on step i: add if absent (up to the cap), remove if present.
+  function toggleAsset(i: number, key: string) {
+    markDirty();
+    setSteps((prev) =>
+      prev.map((s, idx) => {
+        if (idx !== i) return s;
+        if (s.asset_keys.includes(key)) {
+          return { ...s, asset_keys: s.asset_keys.filter((k) => k !== key) };
+        }
+        if (s.asset_keys.length >= MAX_STEP_ASSETS) return s; // at cap, ignore
+        return { ...s, asset_keys: [...s.asset_keys, key] };
+      })
+    );
+  }
   function addStep() {
     markDirty();
-    setSteps((prev) => [...prev, { delay_hours: 5, asset_key: "", text: "" }]);
+    setSteps((prev) => [...prev, { delay_hours: 5, asset_keys: [], text: "" }]);
   }
   function removeStep(i: number) {
     markDirty();
@@ -80,12 +104,15 @@ export function FollowupSequenceForm({
     setError(null);
     setSaved(false);
 
-    // Keep only steps that carry a message or an asset; normalize.
+    // Keep only steps that carry a message or an asset; normalize. Write both the
+    // plural asset_keys (canonical) and a singular asset_key mirror (= first key)
+    // so anything still reading the legacy field keeps working.
     const cleaned: FollowupStep[] = steps
-      .filter((s) => s.text.trim() || s.asset_key.trim())
+      .filter((s) => s.text.trim() || s.asset_keys.length)
       .map((s) => ({
         delay_hours: clampHours(Number(s.delay_hours)),
-        asset_key: s.asset_key.trim() || null,
+        asset_keys: s.asset_keys,
+        asset_key: s.asset_keys[0] ?? null,
         text: s.text.trim() || null,
       }));
 
@@ -157,51 +184,91 @@ export function FollowupSequenceForm({
                   </Button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor={`step-delay-${i}`}>
-                    {i === 0 ? "Send after (hours of silence)" : "Then wait (hours)"}
-                  </Label>
-                  <Input
-                    id={`step-delay-${i}`}
-                    type="number"
-                    min={MIN_H}
-                    max={MAX_H}
-                    value={step.delay_hours}
-                    onChange={(e) => patch(i, { delay_hours: Number(e.target.value) })}
-                    className="w-28"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor={`step-asset-${i}`}>Attach asset (optional)</Label>
-                  <select
-                    id={`step-asset-${i}`}
-                    value={step.asset_key}
-                    onChange={(e) => patch(i, { asset_key: e.target.value })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">No asset (text only)</option>
-                    {/* A key whose asset was deleted stays VISIBLE (not silently
-                        blank) so the owner sees the broken reference. */}
-                    {step.asset_key && !knownKeys.has(step.asset_key) && (
-                      <option value={step.asset_key}>⚠ missing: {step.asset_key}</option>
-                    )}
-                    {assets.map((a) => (
-                      <option key={a.id} value={a.key}>
-                        {a.key} ({a.kind})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              {step.asset_key && !knownKeys.has(step.asset_key) && (
-                <p className="text-xs text-destructive">
-                  The asset &quot;{step.asset_key}&quot; no longer exists — this step will send
-                  text only. Pick another asset or set it to text only.
-                </p>
-              )}
               <div className="space-y-1">
-                <Label htmlFor={`step-text-${i}`}>Message {step.asset_key ? "/ caption" : ""}</Label>
+                <Label htmlFor={`step-delay-${i}`}>
+                  {i === 0 ? "Send after (hours of silence)" : "Then wait (hours)"}
+                </Label>
+                <Input
+                  id={`step-delay-${i}`}
+                  type="number"
+                  min={MIN_H}
+                  max={MAX_H}
+                  value={step.delay_hours}
+                  onChange={(e) => patch(i, { delay_hours: Number(e.target.value) })}
+                  className="w-28"
+                />
+              </div>
+
+              {/* Attach assets — a thumbnail multi-picker (up to MAX_STEP_ASSETS). */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Attach assets (optional)</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {step.asset_keys.length}/{MAX_STEP_ASSETS} selected
+                  </span>
+                </div>
+
+                {/* Keys whose asset was deleted stay VISIBLE (removable) so the
+                    owner sees the broken reference instead of a silent drop. */}
+                {step.asset_keys
+                  .filter((k) => !knownKeys.has(k))
+                  .map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => toggleAsset(i, k)}
+                      className="mr-2 inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive"
+                    >
+                      ⚠ missing: {k} <span aria-hidden>✕</span>
+                    </button>
+                  ))}
+
+                {hasAssets ? (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {assets.map((a) => {
+                      const selected = step.asset_keys.includes(a.key);
+                      const atCap = step.asset_keys.length >= MAX_STEP_ASSETS;
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          aria-pressed={selected}
+                          disabled={!selected && atCap}
+                          onClick={() => toggleAsset(i, a.key)}
+                          className={cn(
+                            "relative flex min-h-11 flex-col items-center gap-1 rounded-md border p-2 text-center transition",
+                            selected
+                              ? "border-primary ring-2 ring-primary"
+                              : "border-input hover:border-primary/50",
+                            !selected && atCap && "cursor-not-allowed opacity-40"
+                          )}
+                        >
+                          {selected && (
+                            <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground">
+                              <Check className="h-3 w-3" />
+                            </span>
+                          )}
+                          <AssetThumb kind={a.kind} url={a.url} className="h-16 w-16" />
+                          <code className="block max-w-full truncate rounded bg-muted px-1 py-0.5 text-[11px]">
+                            {a.key}
+                          </code>
+                          <span className="text-[10px] text-muted-foreground">{a.kind}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
+                    Add pictures, voice notes, videos, or links in the asset library above to
+                    attach them here.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor={`step-text-${i}`}>
+                  Message {step.asset_keys.length ? "/ caption" : ""}
+                </Label>
                 <Textarea
                   id={`step-text-${i}`}
                   rows={2}
@@ -240,13 +307,6 @@ export function FollowupSequenceForm({
                   : "The drip ends after the last step until the lead messages again."}
             </p>
           </div>
-
-          {!hasAssets && (
-            <p className="rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
-              Add pictures, voice notes, videos, or links in the asset library above to
-              attach them to a step.
-            </p>
-          )}
         </div>
       )}
 

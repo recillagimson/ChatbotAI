@@ -1,4 +1,5 @@
 import type { Platform } from "./platforms";
+import type { ConversationTag } from "./conversation-tags";
 
 export type SubscriptionStatus =
   | "active"
@@ -94,7 +95,8 @@ export type FollowupLoopMode = "stop" | "repeat_last" | "cycle";
 /** One step in a chatbot's auto follow-up drip sequence. */
 export interface FollowupStep {
   delay_hours: number;         // hours after the previous send (or the contact's last message for step 1)
-  asset_key?: string | null;   // key of a FollowupAsset to send (null = text-only step)
+  asset_key?: string | null;   // LEGACY single key — still read for steps saved before multi-asset
+  asset_keys?: string[];       // keys of FollowupAssets to send in this step (supersedes asset_key)
   text?: string | null;        // caption / message body; supports {{name}}. Always sent when present.
 }
 
@@ -143,6 +145,7 @@ export interface Conversation {
   followup_step_index: number;       // next drip step to send (0-based)
   confirmed_at: string | null;       // lead marked won (stops the drip); null = still open
   confirmed_by: "manual" | "ai" | null;
+  tag: ConversationTag;              // inbox bucket: lead | wants_call | needs_human | subscribed (default 'lead')
   rn_opt_in_at: string | null;       // Recurring Notifications opt-in (Phase 6, multi-day reach)
   rn_topic_id: string | null;
   reply_claimed_for: string | null;  // inbound message id of the newest AI-bound run (debounce single-flight claim)

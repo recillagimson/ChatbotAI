@@ -37,7 +37,8 @@ import {
   RESUME_CONFIRMATION,
 } from "@/lib/user-controls";
 import { sanitizeReply } from "@/lib/sanitize";
-import { detectLeadConfirmed } from "@/lib/confirm-detect";
+import { classifyConversation } from "@/lib/conversation-classify";
+import { resolveTagWrite, type ConversationTag } from "@/lib/conversation-tags";
 import {
   checkRateLimit,
   checkMonthlyCap,
@@ -59,6 +60,11 @@ import { splitBurst, combineBurstText, remainingDebounceMs, shouldStandDown } fr
 import type { Chatbot, Message } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// Auto-tagging kill-switch. When on (default), each AI turn runs a lightweight
+// background classifier that tags the thread (lead/wants_call/needs_human/
+// subscribed). Set AUTO_TAG_ENABLED=false to disable all classifier calls.
+const AUTO_TAG_ENABLED = process.env.AUTO_TAG_ENABLED !== "false";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -488,6 +494,18 @@ export async function POST(request: NextRequest) {
     return manychatReply("", { ai_skipped: true, reason: "human_takeover" });
   }
 
+  // 6-subscribed. A confirmed customer/subscriber gets NO automated messages — the
+  // bot goes fully silent (a teammate handles them from here). Mirrors human-
+  // takeover, and sits above the keyword/mute/trivial/AI paths so a customer never
+  // gets a reply of any kind. The inbound is already persisted + unread-bumped
+  // (step 5) so the owner still SEES the message. Note: the CONVERTING turn is not
+  // silenced — confirmed_at is null when that message reaches here; 9a sets it
+  // afterward, so a final reply lands and only the NEXT message is silenced. The
+  // follow-up cron already excludes confirmed_at, so the drip is stopped too.
+  if (existing?.confirmed_at) {
+    return manychatReply("", { ai_skipped: true, reason: "subscribed_stopped" });
+  }
+
   // 6-gate. Keyword-only reply mode — the OUTERMOST filter for a gated bot (only
   // human-takeover above it). When ON, the bot only engages contacts who have
   // shown intent via a keyword (personal/private accounts that don't want the AI
@@ -755,7 +773,7 @@ export async function POST(request: NextRequest) {
   // mode, which never returns null and behaves exactly as before.
   const generateAndPersistReply = async (
     mode: "burst" | "single" = "single"
-  ): Promise<{ text: string; assets: OutboundAsset[] } | null> => {
+  ): Promise<{ text: string; assets: OutboundAsset[]; tagWork?: Promise<void> } | null> => {
     // 6e. Process any inbound media (network): transcribe audio/video, read
     // documents, encode images for vision. Runs here (background for push
     // channels) so the fast-ack isn't blocked by downloads/transcription.
@@ -1029,31 +1047,58 @@ export async function POST(request: NextRequest) {
       incrementMonthlyCount(chatbot.id),
     ]);
 
-    // 9a. Auto-confirm detection (best-effort): if the lead clearly converted, stop
-    // the drip. Only for bots running a follow-up sequence, only when not already
-    // confirmed, and only on push channels (where this runs in the background) so
-    // it never adds latency to a synchronous response-channel reply. Never blocks.
-    if (chatbot.auto_followup_enabled && !confirmedAt && canPushPlatform(platform)) {
-      try {
-        const confirmed = await detectLeadConfirmed({
-          userMessage: effectiveMessage,
-          // A media-only reply has no text; give the classifier a stand-in so a
-          // "just paid!" answered with media still gets detected.
-          botReply: replyText || (assets.length ? "(sent media)" : ""),
-        });
-        if (confirmed) {
-          await supabase
-            .from("conversations")
-            .update({ confirmed_at: new Date().toISOString(), confirmed_by: "ai" })
-            .eq("id", conversationId!)
-            .is("confirmed_at", null);
+    // 9a. Auto-tag (best-effort): classify the thread into lead/wants_call/
+    // needs_human/subscribed. A `subscribed` result also stamps confirmed_at (which
+    // stops the drip AND, via gate 6-subscribed, silences the bot from the NEXT
+    // message). Runs on push channels only (background — no latency on a synchronous
+    // response-channel reply) and only while not already confirmed (a confirmed
+    // thread is silenced upstream and never reaches here). Never blocks.
+    let tagWork: Promise<void> | undefined;
+    if (AUTO_TAG_ENABLED && !confirmedAt && canPushPlatform(platform)) {
+      const userMessage = effectiveMessage;
+      // A media-only reply has no text; give the classifier a stand-in so a
+      // "just paid!" answered with media still gets detected.
+      const botReply = replyText || (assets.length ? "(sent media)" : "");
+      // KICK OFF but don't await here — the classify OpenAI round-trip is a pure
+      // side-effect (writes tag/confirmed_at) not needed to build or deliver the
+      // reply. The caller awaits `tagWork` AFTER the push, so tagging runs
+      // concurrently with delivery instead of delaying the first bubble, yet still
+      // finishes inside the after() window (a bare fire-and-forget could be dropped
+      // when the serverless instance freezes). Never throws.
+      tagWork = (async () => {
+        try {
+          const tag = await classifyConversation({ userMessage, botReply });
+          if (tag === "subscribed") {
+            await supabase
+              .from("conversations")
+              .update({ confirmed_at: new Date().toISOString(), confirmed_by: "ai", tag: "subscribed" })
+              .eq("id", conversationId!)
+              .is("confirmed_at", null);
+          } else {
+            // Sticky/precedence write against a run-start snapshot, so the DB guards
+            // do the real protection against a concurrent manual change landing
+            // mid-turn: `.is(confirmed_at, null)` never clobbers a customer just
+            // confirmed by the owner (subscribed⇔confirmed invariant), and
+            // `.neq(tag, needs_human)` never auto-clears a needs_human escalation set
+            // concurrently. resolveTagWrite applies the same rules to the snapshot.
+            const next = resolveTagWrite((existing?.tag as ConversationTag) ?? "lead", tag);
+            if (next !== existing?.tag) {
+              let upd = supabase
+                .from("conversations")
+                .update({ tag: next })
+                .eq("id", conversationId!)
+                .is("confirmed_at", null);
+              if (next !== "needs_human") upd = upd.neq("tag", "needs_human");
+              await upd;
+            }
+          }
+        } catch (err) {
+          console.error("[manychat-webhook] classify failed", err);
         }
-      } catch (err) {
-        console.error("[manychat-webhook] confirm-detect failed", err);
-      }
+      })();
     }
 
-    return { text: replyText, assets };
+    return { text: replyText, assets, tagWork };
   };
 
   // 10. Deliver. Two paths depending on whether the channel has a ManyChat send API:
@@ -1136,6 +1181,9 @@ export async function POST(request: NextRequest) {
           console.error("[manychat-webhook] push send failed", err);
           await logPushFailure(supabase, chatbot.user_id, chatbot.id);
         }
+        // Auto-tag ran concurrently with the push (kicked off in step 9a); await it
+        // here so the tag/confirm write completes within the after() window. Never throws.
+        if (result.tagWork) await result.tagWork;
         // Refresh the rolling memory summary for the next reply (best-effort).
         await refreshConversationMemory({ supabase, conversationId: conversationId! });
       } catch (err) {

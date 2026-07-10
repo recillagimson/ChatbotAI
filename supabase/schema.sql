@@ -753,7 +753,7 @@ create policy "admin upload update" on storage.objects for update to authenticat
 -- bucket (ManyChat needs a public HTTPS URL). Per-contact drip state, lead
 -- confirmation, and Recurring-Notifications opt-in live on conversations.
 alter table public.chatbots
-  add column if not exists auto_followup_steps jsonb not null default '[]'::jsonb,  -- ordered drip steps: [{delay_hours, asset_key?, text?}]
+  add column if not exists auto_followup_steps jsonb not null default '[]'::jsonb,  -- ordered drip steps: [{delay_hours, asset_keys?: string[] (legacy asset_key? still read), text?}]
   add column if not exists auto_followup_loop_last boolean not null default false,  -- legacy; superseded by auto_followup_loop_mode (see 2026-07-07-followup-loop-mode.sql)
   add column if not exists auto_followup_loop_mode text not null default 'stop',    -- after last step: stop | repeat last | cycle through all
   add column if not exists ai_media_enabled boolean not null default false;         -- allow [[SEND_ASSET]] directives from the live AI
@@ -776,6 +776,16 @@ alter table public.conversations
 alter table public.conversations drop constraint if exists conversations_confirmed_by_check;
 alter table public.conversations add constraint conversations_confirmed_by_check
   check (confirmed_by is null or confirmed_by in ('manual','ai'));
+
+-- Inbox bucket auto-set by the tag classifier + manual override (2026-07-10-conversation-tag.sql).
+alter table public.conversations
+  add column if not exists tag text not null default 'lead';  -- lead | wants_call | needs_human | subscribed
+alter table public.conversations drop constraint if exists conversations_tag_check;
+alter table public.conversations add constraint conversations_tag_check
+  check (tag in ('lead','wants_call','needs_human','subscribed'));
+-- Existing confirmed customers are subscribers.
+update public.conversations set tag = 'subscribed' where confirmed_at is not null and tag = 'lead';
+create index if not exists conversations_tag_idx on public.conversations (user_id, tag);
 
 create table if not exists public.followup_assets (
   id           uuid primary key default uuid_generate_v4(),

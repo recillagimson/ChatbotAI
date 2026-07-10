@@ -8,7 +8,7 @@ import {
   RN_ENABLED,
 } from "@/lib/followup";
 import { resolveManychatApiKey } from "@/lib/manychat";
-import { fetchFollowupAssets, resolveAssetByKey } from "@/lib/followup-assets";
+import { fetchFollowupAssets, resolveAssetByKey, stepAssetKeys } from "@/lib/followup-assets";
 import { hasActiveAccess } from "@/lib/access";
 import type {
   Chatbot,
@@ -157,26 +157,33 @@ async function run() {
       bump(reasons, "manychat_key_unavailable");
       continue;
     }
-    // Resolve the step's asset (if any) from the chatbot's library. A stale key
-    // (asset deleted after the step was saved) degrades to text-only; log it so
-    // the owner-facing diagnostics can surface the broken step.
-    let asset: FollowupAsset | null = null;
-    if (decision.step.asset_key) {
-      asset = resolveAssetByKey(await assetsFor(cb.id), decision.step.asset_key);
-      if (!asset) {
-        bump(reasons, "asset_missing");
-        await supabase
-          .from("usage_log")
-          .insert({
-            user_id: cb.user_id,
-            chatbot_id: cb.id,
-            event_type: "followup_asset_missing",
-            tokens_used: 0,
-          })
-          .then(
-            () => {},
-            () => {}
-          );
+    // Resolve the step's asset(s) from the chatbot's library. A step can attach
+    // several (sent as one message). A stale key (asset deleted after the step was
+    // saved) is skipped and logged so owner-facing diagnostics surface the broken
+    // reference; if every key is stale the step degrades to text-only.
+    const assets: FollowupAsset[] = [];
+    const stepKeys = stepAssetKeys(decision.step);
+    if (stepKeys.length) {
+      const lib = await assetsFor(cb.id);
+      for (const key of stepKeys) {
+        const asset = resolveAssetByKey(lib, key);
+        if (asset) {
+          assets.push(asset);
+        } else {
+          bump(reasons, "asset_missing");
+          await supabase
+            .from("usage_log")
+            .insert({
+              user_id: cb.user_id,
+              chatbot_id: cb.id,
+              event_type: "followup_asset_missing",
+              tokens_used: 0,
+            })
+            .then(
+              () => {},
+              () => {}
+            );
+        }
       }
     }
     try {
@@ -184,7 +191,7 @@ async function run() {
         supabase,
         row,
         decision.step,
-        asset,
+        assets,
         now,
         apiKey,
         decision.nextStepIndex ?? (row.followup_step_index ?? 0) + 1,

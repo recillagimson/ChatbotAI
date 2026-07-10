@@ -12,10 +12,12 @@ export function ConversationFilter({
   chatbots,
   chatbotId,
   platform,
+  tag = null,
 }: {
   chatbots: { id: string; name: string }[];
   chatbotId: string | null;
   platform: string | null;
+  tag?: string | null;
 }) {
   const router = useRouter();
 
@@ -23,6 +25,7 @@ export function ConversationFilter({
     const params = new URLSearchParams();
     if (platform) params.set("platform", platform);
     if (value) params.set("chatbot", value);
+    if (tag) params.set("tag", tag);
     const qs = params.toString();
     router.push(qs ? `/conversations?${qs}` : "/conversations", { scroll: false });
   }

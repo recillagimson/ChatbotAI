@@ -5,27 +5,35 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Pause, Play, CheckCircle2, RotateCcw } from "lucide-react";
+import {
+  CONVERSATION_TAGS,
+  TAG_LABEL,
+  type ConversationTag,
+} from "@/lib/conversation-tags";
 
 export function ConversationActions({
   conversationId,
   currentStatus,
-  confirmedAt = null,
+  currentTag,
   userMutedAt = null,
 }: {
   conversationId: string;
   currentStatus: string;
-  confirmedAt?: string | null;
+  currentTag: ConversationTag;
   userMutedAt?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  // Optimistic: flip the button the instant it's clicked, before the server
+  // Optimistic: flip the control the instant it's clicked, before the server
   // round-trip. Revert if the update fails.
   const [paused, setPaused] = useState(currentStatus === "ai_paused");
-  const [confirmed, setConfirmed] = useState(!!confirmedAt);
+  const [tag, setTag] = useState<ConversationTag>(currentTag);
   // The lead self-muted the AI ("stopmessage"). Owner escape hatch to re-enable
   // auto replies without waiting for the lead to text "resumemessage".
   const [muted, setMuted] = useState(!!userMutedAt);
+
+  // subscribed ⇔ confirmed_at set: the tag and the conversion state move together.
+  const confirmed = tag === "subscribed";
 
   function toggle() {
     const next = !paused;
@@ -44,22 +52,24 @@ export function ConversationActions({
     });
   }
 
-  // Confirming a lead stops the auto follow-up drip (cron excludes confirmed_at).
-  function toggleConfirmed() {
-    const next = !confirmed;
-    setConfirmed(next);
+  // Change the inbox tag. "subscribed" is coupled to confirmed_at (stops the drip
+  // and silences the bot); leaving "subscribed" reopens the thread. Everything
+  // else is a plain tag write.
+  function changeTag(next: ConversationTag) {
+    if (next === tag) return;
+    const prev = tag;
+    setTag(next);
     startTransition(async () => {
       const supabase = createClient();
-      const { error } = await supabase
-        .from("conversations")
-        .update(
-          next
-            ? { confirmed_at: new Date().toISOString(), confirmed_by: "manual" }
-            : { confirmed_at: null, confirmed_by: null }
-        )
-        .eq("id", conversationId);
+      const patch =
+        next === "subscribed"
+          ? { tag: next, confirmed_at: new Date().toISOString(), confirmed_by: "manual" }
+          : prev === "subscribed"
+            ? { tag: next, confirmed_at: null, confirmed_by: null } // reopen
+            : { tag: next };
+      const { error } = await supabase.from("conversations").update(patch).eq("id", conversationId);
       if (error) {
-        setConfirmed(!next); // revert on failure
+        setTag(prev); // revert on failure
         return;
       }
       router.refresh();
@@ -86,7 +96,22 @@ export function ConversationActions({
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-center gap-2">
+      <label className="flex items-center gap-1.5 text-sm">
+        <span className="text-muted-foreground">Tag</span>
+        <select
+          value={tag}
+          disabled={isPending}
+          onChange={(e) => changeTag(e.target.value as ConversationTag)}
+          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+        >
+          {CONVERSATION_TAGS.map((t) => (
+            <option key={t} value={t}>
+              {TAG_LABEL[t]}
+            </option>
+          ))}
+        </select>
+      </label>
       {muted && (
         <Button onClick={unmute} disabled={isPending} variant="outline" size="sm">
           <Play className="h-4 w-4 mr-2" /> Un-mute (re-enable AI)
@@ -104,18 +129,18 @@ export function ConversationActions({
         )}
       </Button>
       <Button
-        onClick={toggleConfirmed}
+        onClick={() => changeTag(confirmed ? "lead" : "subscribed")}
         disabled={isPending}
         variant={confirmed ? "outline" : "default"}
         size="sm"
       >
         {confirmed ? (
           <>
-            <RotateCcw className="h-4 w-4 mr-2" /> Reopen (resume follow-ups)
+            <RotateCcw className="h-4 w-4 mr-2" /> Reopen (resume messages)
           </>
         ) : (
           <>
-            <CheckCircle2 className="h-4 w-4 mr-2" /> Mark confirmed
+            <CheckCircle2 className="h-4 w-4 mr-2" /> Mark subscribed
           </>
         )}
       </Button>

@@ -81,6 +81,41 @@ export function nextAssetKeys(base: string, count: number, existing: string[]): 
 }
 
 /**
+ * Normalized asset keys for a follow-up step: prefers the new `asset_keys` array,
+ * falls back to the legacy single `asset_key`. Trims, lowercases, de-dupes, drops
+ * empties. Pure/deterministic — the single back-compat read used by the editor,
+ * resolveSteps, the cron, and the page's usedKeys, so old single-asset steps (saved
+ * before multi-asset) keep working.
+ */
+export function stepAssetKeys(
+  step:
+    | {
+        asset_key?: string | null;
+        asset_keys?: string[] | null;
+      }
+    | null
+    | undefined
+): string[] {
+  if (!step || typeof step !== "object") return []; // JSONB can hold a null/garbage element
+  const raw =
+    Array.isArray(step.asset_keys) && step.asset_keys.length
+      ? step.asset_keys
+      : step.asset_key
+        ? [step.asset_key]
+        : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const k of raw) {
+    const key = (k ?? "").trim().toLowerCase();
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      out.push(key);
+    }
+  }
+  return out;
+}
+
+/**
  * Compact catalog of usable assets for the AI system prompt so the model knows
  * which keys it may emit. One line per asset: `- key (kind): description`.
  * Empty string when there are no usable assets.

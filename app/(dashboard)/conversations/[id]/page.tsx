@@ -12,6 +12,7 @@ import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { PlatformBadge } from "@/components/dashboard/platform-badge";
 import { contactDisplayName, contactHandle } from "@/lib/contact";
 import { signAttachment } from "@/lib/storage";
+import { TAG_LABEL, TAG_VARIANT, tagOf } from "@/lib/conversation-tags";
 
 export default async function ConversationDetailPage({
   params,
@@ -90,9 +91,9 @@ export default async function ConversationDetailPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {Array.isArray(conversation.keyword_fired) && conversation.keyword_fired.length > 0 && (
-            <Badge variant="outline">Lead</Badge>
-          )}
+          <Badge variant={TAG_VARIANT[tagOf(conversation.tag)]}>
+            {TAG_LABEL[tagOf(conversation.tag)]}
+          </Badge>
           {conversation.user_muted_at && (
             <Badge variant="secondary">Muted by user</Badge>
           )}
@@ -126,7 +127,7 @@ export default async function ConversationDetailPage({
         <ConversationActions
           conversationId={conversation.id}
           currentStatus={conversation.status}
-          confirmedAt={conversation.confirmed_at ?? null}
+          currentTag={tagOf(conversation.tag)}
           userMutedAt={conversation.user_muted_at ?? null}
         />
       </div>
