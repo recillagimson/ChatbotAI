@@ -94,6 +94,12 @@ export default async function ConversationDetailPage({
           <Badge variant={TAG_VARIANT[tagOf(conversation.tag)]}>
             {TAG_LABEL[tagOf(conversation.tag)]}
           </Badge>
+          {tagOf(conversation.tag) === "starting_later" &&
+            (conversation.start_note || conversation.start_on) && (
+              <span className="text-xs text-muted-foreground">
+                · {conversation.start_note || conversation.start_on}
+              </span>
+            )}
           {conversation.user_muted_at && (
             <Badge variant="secondary">Muted by user</Badge>
           )}
@@ -128,6 +134,7 @@ export default async function ConversationDetailPage({
           conversationId={conversation.id}
           currentStatus={conversation.status}
           currentTag={tagOf(conversation.tag)}
+          currentStartOn={conversation.start_on ?? null}
           userMutedAt={conversation.user_muted_at ?? null}
         />
       </div>

@@ -192,6 +192,9 @@ export default async function ConversationsPage({
                       <Badge variant="warning">AI paused</Badge>
                     )}
                     <Badge variant={TAG_VARIANT[tagOf(c.tag)]}>{TAG_LABEL[tagOf(c.tag)]}</Badge>
+                    {tagOf(c.tag) === "starting_later" && (c.start_note || c.start_on) && (
+                      <span className="text-xs text-muted-foreground">· {c.start_note || c.start_on}</span>
+                    )}
                     {c.user_muted_at && (
                       <Badge variant="secondary">Muted by user</Badge>
                     )}

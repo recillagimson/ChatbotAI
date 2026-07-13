@@ -83,7 +83,7 @@ export type FollowupChatbot = Pick<
 export type FollowupConversation = Pick<
   Conversation,
   "status" | "last_message_at" | "last_followup_at" | "followup_count" | "followup_step_index" | "confirmed_at"
-> & { platform?: Platform; rn_opt_in_at?: string | null };
+> & { platform?: Platform; rn_opt_in_at?: string | null; tag?: Conversation["tag"] | null };
 
 /**
  * Resolve a chatbot's drip steps. Uses `auto_followup_steps` when present; else
@@ -125,6 +125,7 @@ export interface FollowupDecision {
     | "no_steps"
     | "not_active"
     | "confirmed"
+    | "starting_later"
     | "channel_unsupported"
     | "window_closed"
     | "sequence_done"
@@ -157,6 +158,9 @@ export function evaluateFollowup(
 
   if (conversation.status !== "active") return { due: false, reason: "not_active" };
   if (conversation.confirmed_at) return { due: false, reason: "confirmed" };
+  // A lead who asked to start on a future date is paused (AI replies stay on, this
+  // only gates the proactive drip). Stays paused until the owner changes the tag.
+  if (conversation.tag === "starting_later") return { due: false, reason: "starting_later" };
 
   // Channels with no ManyChat send API (TikTok) can't receive follow-ups.
   const platform = toPlatform(conversation.platform);

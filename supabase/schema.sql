@@ -778,11 +778,14 @@ alter table public.conversations add constraint conversations_confirmed_by_check
   check (confirmed_by is null or confirmed_by in ('manual','ai'));
 
 -- Inbox bucket auto-set by the tag classifier + manual override (2026-07-10-conversation-tag.sql).
+-- `starting_later` + start_on/start_note added by 2026-07-13-starting-later.sql (pauses the drip).
 alter table public.conversations
-  add column if not exists tag text not null default 'lead';  -- lead | wants_call | needs_human | subscribed
+  add column if not exists tag text not null default 'lead',  -- lead | wants_call | starting_later | needs_human | subscribed
+  add column if not exists start_on date,                     -- starting_later: date they want to begin
+  add column if not exists start_note text;                   -- starting_later: the human phrase
 alter table public.conversations drop constraint if exists conversations_tag_check;
 alter table public.conversations add constraint conversations_tag_check
-  check (tag in ('lead','wants_call','needs_human','subscribed'));
+  check (tag in ('lead','wants_call','starting_later','needs_human','subscribed'));
 -- Existing confirmed customers are subscribers.
 update public.conversations set tag = 'subscribed' where confirmed_at is not null and tag = 'lead';
 create index if not exists conversations_tag_idx on public.conversations (user_id, tag);

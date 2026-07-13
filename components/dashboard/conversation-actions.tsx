@@ -15,11 +15,13 @@ export function ConversationActions({
   conversationId,
   currentStatus,
   currentTag,
+  currentStartOn = null,
   userMutedAt = null,
 }: {
   conversationId: string;
   currentStatus: string;
   currentTag: ConversationTag;
+  currentStartOn?: string | null;
   userMutedAt?: string | null;
 }) {
   const router = useRouter();
@@ -28,6 +30,8 @@ export function ConversationActions({
   // round-trip. Revert if the update fails.
   const [paused, setPaused] = useState(currentStatus === "ai_paused");
   const [tag, setTag] = useState<ConversationTag>(currentTag);
+  // Start date for a "starting_later" thread (YYYY-MM-DD, from the date input).
+  const [startOn, setStartOn] = useState(currentStartOn ?? "");
   // The lead self-muted the AI ("stopmessage"). Owner escape hatch to re-enable
   // auto replies without waiting for the lead to text "resumemessage".
   const [muted, setMuted] = useState(!!userMutedAt);
@@ -53,26 +57,54 @@ export function ConversationActions({
   }
 
   // Change the inbox tag. "subscribed" is coupled to confirmed_at (stops the drip
-  // and silences the bot); leaving "subscribed" reopens the thread. Everything
-  // else is a plain tag write.
+  // and silences the bot); leaving "subscribed" reopens the thread. Leaving
+  // "starting_later" clears the start date (which un-pauses the drip).
   function changeTag(next: ConversationTag) {
     if (next === tag) return;
     const prev = tag;
     setTag(next);
     startTransition(async () => {
       const supabase = createClient();
-      const patch =
-        next === "subscribed"
-          ? { tag: next, confirmed_at: new Date().toISOString(), confirmed_by: "manual" }
-          : prev === "subscribed"
-            ? { tag: next, confirmed_at: null, confirmed_by: null } // reopen
-            : { tag: next };
+      const patch: Record<string, unknown> = { tag: next };
+      if (next === "subscribed") {
+        patch.confirmed_at = new Date().toISOString();
+        patch.confirmed_by = "manual";
+      } else if (prev === "subscribed") {
+        patch.confirmed_at = null; // reopen
+        patch.confirmed_by = null;
+      }
+      if (prev === "starting_later" && next !== "starting_later") {
+        patch.start_on = null;
+        patch.start_note = null;
+        setStartOn("");
+      }
       const { error } = await supabase.from("conversations").update(patch).eq("id", conversationId);
       if (error) {
         setTag(prev); // revert on failure
         return;
       }
       router.refresh();
+    });
+  }
+
+  // Set/edit the start date on a "starting_later" thread. start_note is a friendly
+  // rendering used by the badge and the AI's SCHEDULED START memory.
+  function setStart(value: string) {
+    setStartOn(value);
+    startTransition(async () => {
+      const supabase = createClient();
+      const note = value
+        ? new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          })
+        : null;
+      const { error } = await supabase
+        .from("conversations")
+        .update({ start_on: value || null, start_note: note })
+        .eq("id", conversationId);
+      if (!error) router.refresh();
     });
   }
 
@@ -112,6 +144,18 @@ export function ConversationActions({
           ))}
         </select>
       </label>
+      {tag === "starting_later" && (
+        <label className="flex items-center gap-1.5 text-sm">
+          <span className="text-muted-foreground">Start</span>
+          <input
+            type="date"
+            value={startOn}
+            disabled={isPending}
+            onChange={(e) => setStart(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          />
+        </label>
+      )}
       {muted && (
         <Button onClick={unmute} disabled={isPending} variant="outline" size="sm">
           <Play className="h-4 w-4 mr-2" /> Un-mute (re-enable AI)

@@ -38,7 +38,7 @@ import {
 } from "@/lib/user-controls";
 import { sanitizeReply } from "@/lib/sanitize";
 import { classifyConversation } from "@/lib/conversation-classify";
-import { resolveTagWrite, type ConversationTag } from "@/lib/conversation-tags";
+import { resolveTagWrite, CONVERSATION_TAGS, TAG_RANK, type ConversationTag } from "@/lib/conversation-tags";
 import {
   checkRateLimit,
   checkMonthlyCap,
@@ -908,6 +908,12 @@ export async function POST(request: NextRequest) {
         // the same turn (single channel; the keyword steer is sacrificed for
         // that one flagged reply only).
         turnInstruction: securityInstruction || keywordInstruction,
+        // Remember a deferred start date the lead named (starting_later), so the
+        // bot references it and doesn't re-pitch. Run-start snapshot is fine.
+        scheduledStart:
+          existing?.start_note || existing?.start_on
+            ? { note: existing.start_note ?? null, on: existing.start_on ?? null }
+            : null,
       });
       if (text) {
         replyText = text;
@@ -1048,47 +1054,73 @@ export async function POST(request: NextRequest) {
     ]);
 
     // 9a. Auto-tag (best-effort): classify the thread into lead/wants_call/
-    // needs_human/subscribed. A `subscribed` result also stamps confirmed_at (which
-    // stops the drip AND, via gate 6-subscribed, silences the bot from the NEXT
-    // message). Runs on push channels only (background — no latency on a synchronous
-    // response-channel reply) and only while not already confirmed (a confirmed
-    // thread is silenced upstream and never reaches here). Never blocks.
+    // starting_later/needs_human/subscribed. `subscribed` stamps confirmed_at (stops
+    // the drip AND, via gate 6-subscribed, silences the bot next message);
+    // `starting_later` records the start date + note (pauses the drip via
+    // evaluateFollowup — AI replies stay on). Push channels only (background — no
+    // latency on a synchronous response-channel reply), only while not already
+    // confirmed (a confirmed thread is silenced upstream). Never blocks.
     let tagWork: Promise<void> | undefined;
     if (AUTO_TAG_ENABLED && !confirmedAt && canPushPlatform(platform)) {
       const userMessage = effectiveMessage;
       // A media-only reply has no text; give the classifier a stand-in so a
       // "just paid!" answered with media still gets detected.
       const botReply = replyText || (assets.length ? "(sent media)" : "");
+      const today = new Date().toISOString().slice(0, 10); // UTC; lets the model resolve "Wednesday"
       // KICK OFF but don't await here — the classify OpenAI round-trip is a pure
-      // side-effect (writes tag/confirmed_at) not needed to build or deliver the
-      // reply. The caller awaits `tagWork` AFTER the push, so tagging runs
+      // side-effect (writes tag/confirmed_at/start_*) not needed to build or deliver
+      // the reply. The caller awaits `tagWork` AFTER the push, so tagging runs
       // concurrently with delivery instead of delaying the first bubble, yet still
       // finishes inside the after() window (a bare fire-and-forget could be dropped
       // when the serverless instance freezes). Never throws.
       tagWork = (async () => {
         try {
-          const tag = await classifyConversation({ userMessage, botReply });
+          const { tag, startOn, startNote } = await classifyConversation({ userMessage, botReply, today });
           if (tag === "subscribed") {
             await supabase
               .from("conversations")
-              .update({ confirmed_at: new Date().toISOString(), confirmed_by: "ai", tag: "subscribed" })
+              .update({
+                confirmed_at: new Date().toISOString(),
+                confirmed_by: "ai",
+                tag: "subscribed",
+                start_on: null,
+                start_note: null, // they started — clear any scheduled-start
+              })
               .eq("id", conversationId!)
               .is("confirmed_at", null);
           } else {
-            // Sticky/precedence write against a run-start snapshot, so the DB guards
-            // do the real protection against a concurrent manual change landing
-            // mid-turn: `.is(confirmed_at, null)` never clobbers a customer just
-            // confirmed by the owner (subscribed⇔confirmed invariant), and
-            // `.neq(tag, needs_human)` never auto-clears a needs_human escalation set
-            // concurrently. resolveTagWrite applies the same rules to the snapshot.
+            // Sticky/precedence write against a run-start snapshot; the DB guards do
+            // the real protection against a concurrent manual change landing mid-turn:
+            // `.is(confirmed_at, null)` never clobbers a just-confirmed customer, and a
+            // `.neq(tag, t)` for every STICKIER tag never auto-clears a needs_human /
+            // starting_later set concurrently. resolveTagWrite applies the same rules
+            // to the snapshot.
             const next = resolveTagWrite((existing?.tag as ConversationTag) ?? "lead", tag);
-            if (next !== existing?.tag) {
+            // Write when the tag changes, or to refresh a new start date on an
+            // already-starting_later thread ("actually make it Friday").
+            const startChanged = next === "starting_later" && (startOn !== null || startNote !== null);
+            if (next !== existing?.tag || startChanged) {
+              const payload: Record<string, unknown> = { tag: next };
+              if (next === "starting_later") {
+                // Only overwrite the date when the classifier produced one (don't
+                // clobber an existing date with nulls on a plain re-tag).
+                if (startOn !== null) payload.start_on = startOn;
+                if (startNote !== null) payload.start_note = startNote;
+              } else {
+                // Moving off starting_later (only needs_human can, via rank) — clear the
+                // scheduled-start so the badge/AI don't reference a stale date. Keeps the
+                // invariant: start fields set ⇔ tag = starting_later.
+                payload.start_on = null;
+                payload.start_note = null;
+              }
               let upd = supabase
                 .from("conversations")
-                .update({ tag: next })
+                .update(payload)
                 .eq("id", conversationId!)
                 .is("confirmed_at", null);
-              if (next !== "needs_human") upd = upd.neq("tag", "needs_human");
+              for (const t of CONVERSATION_TAGS) {
+                if (t !== "subscribed" && TAG_RANK[t] > TAG_RANK[next]) upd = upd.neq("tag", t);
+              }
               await upd;
             }
           }

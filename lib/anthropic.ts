@@ -83,7 +83,8 @@ export function buildSystemPrompt(
   memorySummary?: string | null,
   returning?: boolean,
   mediaCatalog?: string | null,
-  turnInstruction?: string | null
+  turnInstruction?: string | null,
+  scheduledStart?: { note: string | null; on: string | null } | null
 ): string {
   const persona = chatbot.persona_section?.trim() || "";
   const offers = chatbot.offers_section?.trim() || "";
@@ -122,6 +123,14 @@ export function buildSystemPrompt(
     ? `SENDABLE MEDIA — you may attach ONE of these saved assets to your reply by writing, on its OWN line, exactly: [[SEND_ASSET: key]] (use the exact key shown). Send one only when it genuinely helps (they asked for proof, a demo, pricing, or a link). Never invent a key that isn't listed, and keep your normal text reply too — the asset is delivered alongside it.\nAVAILABLE ASSETS:\n${catalog}`
     : "";
 
+  // Scheduled start — the lead said they'll begin on a future date. Remember it
+  // and don't re-pitch or pressure them to start now (see conversations.start_*).
+  const startNote = scheduledStart?.note?.trim() || "";
+  const startOn = scheduledStart?.on?.trim() || "";
+  const scheduledBlock = startNote || startOn
+    ? `SCHEDULED START — this lead plans to start on ${startNote || startOn}${startNote && startOn ? ` (${startOn})` : ""}. They asked to begin then, so acknowledge it naturally if it comes up and treat it as agreed. Do NOT re-pitch, pressure, or ask them to start now — wait until they're ready and reach out.`
+    : "";
+
   // SECTION MODE — the chatbot is authored as three editable sections. The
   // Personality section leads as identity VERBATIM (no generic preamble bolted
   // on top of a hand-written persona); offers/rebuttals follow when present;
@@ -137,6 +146,7 @@ export function buildSystemPrompt(
     if (offers) parts.push(`OFFERS, SERVICES & LINKS\n${offers}`);
     if (rebuttals) parts.push(`REBUTTALS & FAQ HANDLING\n${rebuttals}`);
     if (memoryBlock) parts.push(memoryBlock);
+    if (scheduledBlock) parts.push(scheduledBlock);
     if (mediaBlock) parts.push(mediaBlock);
     parts.push(
       `KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)\n${kbBlock}`
@@ -154,7 +164,7 @@ export function buildSystemPrompt(
   // bubble-split note.
   if (chatbot.system_prompt && chatbot.system_prompt.trim()) {
     return `${chatbot.system_prompt.trim()}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
 ${kbBlock}
 
@@ -174,7 +184,7 @@ ${chatbot.business_description || "(none provided)"}
 
 TONE
 ${TONE_GUIDES[chatbot.tone]}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)
 ${kbBlock}
 
@@ -202,6 +212,9 @@ export async function generateReply(opts: {
   // One-line instruction injected for THIS reply only (a matched keyword group's
   // on_repeat="instruction"); steers this turn without changing the persona.
   turnInstruction?: string | null;
+  // Deferred start the lead named (conversations.start_note/start_on); rendered as
+  // a SCHEDULED START block so the bot remembers when they want to begin.
+  scheduledStart?: { note: string | null; on: string | null } | null;
 }) {
   // Continuing conversation if there's any prior history — drives the
   // continuity directive so the bot doesn't restart the intro or re-ask.
@@ -212,7 +225,8 @@ export async function generateReply(opts: {
     opts.memorySummary,
     returning,
     opts.mediaCatalog,
-    opts.turnInstruction
+    opts.turnInstruction,
+    opts.scheduledStart
   );
   const images = opts.images ?? [];
 
