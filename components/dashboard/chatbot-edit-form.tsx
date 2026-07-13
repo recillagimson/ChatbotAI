@@ -11,18 +11,31 @@ import { SectionField } from "@/components/dashboard/section-field";
 import { Textarea } from "@/components/ui/textarea";
 import type { Chatbot } from "@/lib/types";
 
-export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
+export function ChatbotEditForm({
+  chatbot,
+  // Admins (superadmins) may edit Offers & Rebuttals directly here — both on their
+  // own bots and while viewing a client (view-as). Regular owners keep the
+  // read-only, team-reviewed Request Change flow. The write is authorized by the
+  // "admin all chatbots" RLS overlay; this prop only unlocks the UI.
+  canEditSections = false,
+}: {
+  chatbot: Chatbot;
+  canEditSections?: boolean;
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [name, setName] = useState(chatbot.name);
   const [instagramUsername, setInstagramUsername] = useState(
     chatbot.instagram_username ?? ""
   );
-  // Personality is the only section the owner edits directly. Fall back to the
+  // Personality is the only section the OWNER edits directly. Fall back to the
   // legacy prompt fields if the backfill hasn't populated persona_section yet.
   const [persona, setPersona] = useState(
     chatbot.persona_section ?? chatbot.system_prompt ?? chatbot.business_description ?? ""
   );
+  // Offers/Rebuttals state is only wired into the form when canEditSections (admin).
+  const [offers, setOffers] = useState(chatbot.offers_section ?? "");
+  const [rebuttals, setRebuttals] = useState(chatbot.rebuttals_section ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -43,6 +56,12 @@ export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
         name: name.trim(),
         instagram_username: instagramUsername.trim() || null,
         persona_section: persona.trim() || null,
+        // Only an admin's form carries Offers/Rebuttals; a regular owner's save
+        // must never touch these (they own the Request Change flow).
+        ...(canEditSections && {
+          offers_section: offers.trim() || null,
+          rebuttals_section: rebuttals.trim() || null,
+        }),
       })
       .eq("id", chatbot.id);
     setSaving(false);
@@ -96,17 +115,49 @@ export function ChatbotEditForm({ chatbot }: { chatbot: Chatbot }) {
         helper="This defines the bot's voice and identity. Upload a file (PDF, Word, or text) to drop its contents in, then edit. Safety rules and the knowledge base are added automatically."
       />
 
-      {/* 2 & 3. Offers and Rebuttals — read-only here; changed via Request Change (team-reviewed). */}
-      <ReadOnlySection
-        title="Offers & services / inclusions & exclusions / links"
-        value={chatbot.offers_section}
-        category="offers"
-      />
-      <ReadOnlySection
-        title="Rebuttals & FAQs"
-        value={chatbot.rebuttals_section}
-        category="rebuttals"
-      />
+      {/* 2 & 3. Offers and Rebuttals — read-only for owners (changed via Request
+          Change, team-reviewed); directly editable for admins (own bots + view-as). */}
+      {canEditSections ? (
+        <>
+          <SectionField
+            id="edit-offers"
+            label="Offers & services / inclusions & exclusions / links"
+            value={offers}
+            onChange={(next) => {
+              setOffers(next);
+              setSaved(false);
+            }}
+            rows={7}
+            placeholder="Offers, services, what's included/excluded, pricing, and links."
+            helper="Admin: editing directly — saves to the live bot, bypassing the Request Change review."
+          />
+          <SectionField
+            id="edit-rebuttals"
+            label="Rebuttals & FAQs"
+            value={rebuttals}
+            onChange={(next) => {
+              setRebuttals(next);
+              setSaved(false);
+            }}
+            rows={7}
+            placeholder="Common objections and how to handle them, plus FAQs."
+            helper="Admin: editing directly — saves to the live bot, bypassing the Request Change review."
+          />
+        </>
+      ) : (
+        <>
+          <ReadOnlySection
+            title="Offers & services / inclusions & exclusions / links"
+            value={chatbot.offers_section}
+            category="offers"
+          />
+          <ReadOnlySection
+            title="Rebuttals & FAQs"
+            value={chatbot.rebuttals_section}
+            category="rebuttals"
+          />
+        </>
+      )}
 
       {error && (
         <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded">

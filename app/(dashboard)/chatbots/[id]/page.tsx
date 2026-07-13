@@ -13,6 +13,7 @@ import { ChatbotTabsBar } from "@/components/dashboard/chatbot-tabs-bar";
 import { RetrainBotButton } from "@/components/dashboard/retrain-bot-button";
 import { resolveChatbotTab } from "@/lib/chatbot-tabs";
 import { stepAssetKeys } from "@/lib/followup-assets";
+import { requireSuperadmin } from "@/lib/admin";
 import { FOLLOWUP_ENABLED } from "@/lib/followup";
 import type { Chatbot, FollowupAsset } from "@/lib/types";
 import Link from "next/link";
@@ -71,6 +72,11 @@ export default async function ChatbotDetailPage({
       .order("created_at", { ascending: true });
     assets = (followupAssets ?? []) as FollowupAsset[];
   }
+
+  // Admins may edit Offers & Rebuttals directly on the Prompt tab (own bots AND
+  // while viewing a client — requireSuperadmin keys off the REAL user, not the
+  // impersonated one). Only checked on the Prompt tab to avoid the extra query.
+  const canEditSections = tab === "prompt" ? !!(await requireSuperadmin()) : false;
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const webhookUrl = `${appUrl}/api/webhooks/manychat`;
@@ -170,7 +176,7 @@ export default async function ChatbotDetailPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChatbotEditForm chatbot={safeChatbot} />
+            <ChatbotEditForm chatbot={safeChatbot} canEditSections={canEditSections} />
           </CardContent>
         </Card>
       )}
