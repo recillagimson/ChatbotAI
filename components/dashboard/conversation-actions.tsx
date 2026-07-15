@@ -39,6 +39,12 @@ export function ConversationActions({
   // subscribed ⇔ confirmed_at set: the tag and the conversion state move together.
   const confirmed = tag === "subscribed";
 
+  // Best-effort: mirror the new stop-follow-up state to ManyChat (server-only key,
+  // so we POST to a thin route). Fire-and-forget — a failure never affects the UI.
+  function fireFollowupFlagSync() {
+    fetch(`/api/conversations/${conversationId}/followup-flag`, { method: "POST" }).catch(() => {});
+  }
+
   function toggle() {
     const next = !paused;
     setPaused(next);
@@ -52,6 +58,7 @@ export function ConversationActions({
         setPaused(!next); // revert on failure
         return;
       }
+      fireFollowupFlagSync();
       router.refresh();
     });
   }
@@ -83,6 +90,7 @@ export function ConversationActions({
         setTag(prev); // revert on failure
         return;
       }
+      fireFollowupFlagSync();
       router.refresh();
     });
   }
@@ -123,6 +131,7 @@ export function ConversationActions({
         setMuted(true); // revert on failure
         return;
       }
+      fireFollowupFlagSync();
       router.refresh();
     });
   }

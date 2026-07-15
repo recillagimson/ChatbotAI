@@ -39,6 +39,8 @@ import {
 import { sanitizeReply } from "@/lib/sanitize";
 import { classifyConversation } from "@/lib/conversation-classify";
 import { screenDisqualify } from "@/lib/conversation-screen";
+import { syncNoFollowupFlag } from "@/lib/followup-flag";
+import { followupBlocked } from "@/lib/followup";
 import { resolveTagWrite, CONVERSATION_TAGS, TAG_RANK, type ConversationTag } from "@/lib/conversation-tags";
 import {
   checkRateLimit,
@@ -572,6 +574,9 @@ export async function POST(request: NextRequest) {
       .eq("id", conversationId!);
     if (unmuteErr) console.error("[manychat-webhook] unmute write failed", unmuteErr);
     await persistAndPush(supabase, conversationId!, body.subscriber_id, RESUME_CONFIRMATION, chatbot.user_id, chatbot.id, apiKey, platform);
+    // Un-mute may un-block the lead; reconcile the ManyChat flag post-response
+    // (reads truth — keeps the tag if the thread is still subscribed/disqualified).
+    after(() => syncNoFollowupFlag(supabase, conversationId!));
     return manychatReply(sanitizeReply(RESUME_CONFIRMATION), { ai_skipped: true, reason: "user_resumed" });
   }
   if (control === "stop" && !isMuted) {
@@ -585,6 +590,8 @@ export async function POST(request: NextRequest) {
       .eq("id", conversationId!);
     if (muteErr) console.error("[manychat-webhook] mute write failed", muteErr);
     await persistAndPush(supabase, conversationId!, body.subscriber_id, STOP_CONFIRMATION, chatbot.user_id, chatbot.id, apiKey, platform);
+    // A self-mute blocks follow-ups — mirror to ManyChat post-response.
+    after(() => syncNoFollowupFlag(supabase, conversationId!));
     return manychatReply(sanitizeReply(STOP_CONFIRMATION), { ai_skipped: true, reason: "user_paused" });
   }
   // Muted, and this wasn't the resume word → stay silent (no AI). A redundant
@@ -912,6 +919,9 @@ export async function POST(request: NextRequest) {
           console.error("[manychat-webhook] disqualify tag write failed", tagErr);
         }
         await releaseClaim(); // mirror the stand-down path (single-flight CAS release)
+        // Disqualified/bot blocks follow-ups — mirror to ManyChat (already in the
+        // after() background window, so await it; never throws).
+        await syncNoFollowupFlag(supabase, conversationId!);
         return null; // no reply pushed; the step-9a classifier is never reached
       }
     }
@@ -1127,6 +1137,11 @@ export async function POST(request: NextRequest) {
               })
               .eq("id", conversationId!)
               .is("confirmed_at", null);
+            // Subscribed blocks follow-ups. Sync only if the run-start state wasn't
+            // already blocked (avoids a redundant ManyChat call every confirmed turn).
+            if (!followupBlocked(existing ?? {})) {
+              await syncNoFollowupFlag(supabase, conversationId!);
+            }
           } else {
             // Sticky/precedence write against a run-start snapshot; the DB guards do
             // the real protection against a concurrent manual change landing mid-turn:
@@ -1161,6 +1176,13 @@ export async function POST(request: NextRequest) {
                 if (t !== "subscribed" && TAG_RANK[t] > TAG_RANK[next]) upd = upd.neq("tag", t);
               }
               await upd;
+              // Mirror to ManyChat only when the new tag actually flips the
+              // stop-follow-up verdict (e.g. lead→starting_later).
+              const blockedBefore = followupBlocked(existing ?? {});
+              const blockedAfter = followupBlocked({ ...(existing ?? {}), tag: next });
+              if (blockedBefore !== blockedAfter) {
+                await syncNoFollowupFlag(supabase, conversationId!);
+              }
             }
           }
         } catch (err) {

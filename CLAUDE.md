@@ -121,6 +121,48 @@ A SaaS platform (**SpeedSettr** — www.speedsettr.com) that auto-replies to Ins
     Fail-open: any screen error → a normal reply. Needs `2026-07-14-disqualify.sql`
     (7-value tag CHECK) applied before deploy. Screen prompt is generic (multi-tenant).
 
+23. **ManyChat "stop follow-up" flag bridge (`ss_no_followup`).** A native ManyChat
+    voice-note drip can't see SpeedSettr's tags, so it would keep following up
+    subscribed/disqualified/etc. leads. `lib/followup-flag.ts` `syncNoFollowupFlag`
+    mirrors SpeedSettr's "stop chasing" verdict — the pure `followupBlocked()`
+    predicate in `lib/followup.ts` (subscribed/`confirmed_at`, `disqualified`, `bot`,
+    `starting_later`, self-muted, or human-takeover `status != active`; `needs_human`
+    is NOT blocked, matching the native drip) — out to ManyChat as a subscriber tag
+    via `setSubscriberTag()` (add/removeTagByName). It fires from the webhook at the
+    3 server-side transitions (9a classifier flip, 7b disqualify pre-gate, gate 6-mute
+    set/clear) and from `POST /api/conversations/[id]/followup-flag`, which the inbox
+    (`conversation-actions.tsx`) calls after a manual change. Opt-in per chatbot
+    (`chatbots.followup_flag_enabled`, default false — toggle on the follow-up
+    settings form). Uses each chatbot's OWN key + the conversation's
+    `manychat_subscriber_id`; tag name is a generic constant (`MANYCHAT_NO_FOLLOWUP_TAG`,
+    default `ss_no_followup`). Fail-open everywhere (never throws into a reply/action);
+    the orchestrator reads DB truth so it's idempotent (an un-mute on a still-subscribed
+    thread keeps the tag). **Owner setup per customer:** create the `ss_no_followup`
+    tag in ManyChat + add a Condition on it to the voice flow, flip the chatbot toggle,
+    and apply `supabase/migrations/2026-07-15-followup-flag.sql` before deploy.
+    Tests: `scripts/test-followup-flag.ts` (predicate) + `tagEndpoint` cases in
+    `scripts/test-manychat-retry.ts`.
+
+24. **Follow-up delivery via ManyChat flow trigger (voice on IG).** A follow-up step
+    can carry a `flow_ns` (in `chatbots.auto_followup_steps` JSONB): when set,
+    `sendFollowup` triggers that native ManyChat flow via `sendManychatFlow()`
+    (ManyChat Send Flow API) instead of `sendManychatMedia` — this is how voice
+    follow-ups reach Instagram (sendContent is image-only on IG). SpeedSettr's engine
+    (`evaluateFollowup` + the cron) still owns ALL the timing/gating — real "N hours of
+    silence", reset-on-reply, tag skips (subscribed/disqualified/bot/starting_later/
+    muted), 24h window, loop modes, claim-before-send — so no ManyChat Smart Delays are
+    needed and the `ss_no_followup` tag (#23) becomes a backstop (tagged leads are never
+    triggered). A step is EITHER a flow OR media (`flow_ns` wins; text/assets ignored).
+    `sendManychatFlow` throws on hard failure (existing revert-and-retry) but treats a
+    client timeout/abort as assume-delivered (no retry — re-triggering double-sends the
+    voice note, gotcha #18). The owner picks a flow per step from a dropdown fed by
+    `GET /api/chatbots/[id]/manychat-flows` (`listManychatFlows` → ManyChat getFlows,
+    server-side key only). `resolveSteps` keeps a flow-only step (no text/asset). No
+    migration (JSONB). In-window only. Owner setup: make each ManyChat voice flow a
+    single voice-note send with NO internal Smart Delays, then pick it per step. Tests:
+    `scripts/test-followup.ts` (flow-step passthrough) + `parseManychatFlows` cases in
+    `scripts/test-manychat-retry.ts`.
+
 ## How to verify the local setup still works (resume sanity check)
 
 1. `npm run dev` in the project folder.

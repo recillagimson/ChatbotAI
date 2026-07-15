@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ const MAX_H = 22;
 const MAX_STEP_ASSETS = 5; // caption + up to 5 media bubbles stays under ManyChat's 10-per-call cap
 const clampHours = (n: number) => Math.min(MAX_H, Math.max(MIN_H, Math.round(n || 3)));
 
-type EditableStep = { delay_hours: number; asset_keys: string[]; text: string };
+type EditableStep = { delay_hours: number; asset_keys: string[]; text: string; flow_ns: string | null; flow_name: string | null };
 
 function toEditable(steps: FollowupStep[]): EditableStep[] {
   // auto_followup_steps is schemaless JSONB — drop any null/garbage element
@@ -28,12 +28,14 @@ function toEditable(steps: FollowupStep[]): EditableStep[] {
     ? steps.filter((s): s is FollowupStep => !!s && typeof s === "object")
     : [];
   if (arr.length === 0) {
-    return [{ delay_hours: 3, asset_keys: [], text: "" }];
+    return [{ delay_hours: 3, asset_keys: [], text: "", flow_ns: null, flow_name: null }];
   }
   return arr.map((s) => ({
     delay_hours: clampHours(Number(s.delay_hours)),
     asset_keys: stepAssetKeys(s), // back-compat: reads old single asset_key too
     text: s.text ?? "",
+    flow_ns: s.flow_ns ?? null,
+    flow_name: s.flow_name ?? null,
   }));
 }
 
@@ -58,6 +60,7 @@ export function FollowupSequenceForm({
       (chatbot.auto_followup_loop_last ? "repeat_last" : "stop")
   );
   const [aiMedia, setAiMedia] = useState(chatbot.ai_media_enabled);
+  const [noFollowupFlag, setNoFollowupFlag] = useState(chatbot.followup_flag_enabled);
   const [steps, setSteps] = useState<EditableStep[]>(toEditable(chatbot.auto_followup_steps));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +68,22 @@ export function FollowupSequenceForm({
   // Any edit flips dirty until a successful save — surfaced next to the Save
   // button so toggled switches aren't silently lost on navigation.
   const [dirty, setDirty] = useState(false);
+  // ManyChat flows for the per-step "deliver via flow" picker (Option B). Loaded
+  // once; null = loading, [] = none/failed (the picker just doesn't render).
+  const [flows, setFlows] = useState<{ ns: string; name: string }[] | null>(null);
+  const [flowsError, setFlowsError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/chatbots/${chatbot.id}/manychat-flows`)
+      .then(async (r) => {
+        const j = await r.json().catch(() => null);
+        if (!alive) return;
+        if (r.ok && Array.isArray(j?.flows)) setFlows(j.flows);
+        else { setFlows([]); setFlowsError(j?.error ?? "Couldn't load your ManyChat flows."); }
+      })
+      .catch(() => { if (alive) { setFlows([]); setFlowsError("Couldn't load your ManyChat flows."); } });
+    return () => { alive = false; };
+  }, [chatbot.id]);
 
   const knownKeys = new Set(assets.map((a) => a.key));
 
@@ -92,7 +111,7 @@ export function FollowupSequenceForm({
   }
   function addStep() {
     markDirty();
-    setSteps((prev) => [...prev, { delay_hours: 5, asset_keys: [], text: "" }]);
+    setSteps((prev) => [...prev, { delay_hours: 5, asset_keys: [], text: "", flow_ns: null, flow_name: null }]);
   }
   function removeStep(i: number) {
     markDirty();
@@ -108,16 +127,18 @@ export function FollowupSequenceForm({
     // plural asset_keys (canonical) and a singular asset_key mirror (= first key)
     // so anything still reading the legacy field keeps working.
     const cleaned: FollowupStep[] = steps
-      .filter((s) => s.text.trim() || s.asset_keys.length)
+      .filter((s) => s.text.trim() || s.asset_keys.length || s.flow_ns)
       .map((s) => ({
         delay_hours: clampHours(Number(s.delay_hours)),
         asset_keys: s.asset_keys,
         asset_key: s.asset_keys[0] ?? null,
         text: s.text.trim() || null,
+        flow_ns: s.flow_ns ?? null,
+        flow_name: s.flow_name ?? null,
       }));
 
     if (enabled && cleaned.length === 0) {
-      setError("Add at least one step (a message and/or an asset) to run the drip.");
+      setError("Add at least one step (a message, asset, or ManyChat flow) to run the drip.");
       return;
     }
 
@@ -131,6 +152,7 @@ export function FollowupSequenceForm({
         auto_followup_loop_mode: loopMode,
         auto_followup_loop_last: loopMode === "repeat_last", // keep the legacy flag consistent
         ai_media_enabled: aiMedia,
+        followup_flag_enabled: noFollowupFlag,
       })
       .eq("id", chatbot.id);
     setSaving(false);
@@ -174,6 +196,12 @@ export function FollowupSequenceForm({
             Instagram that step sends its text instead.
           </p>
 
+          {flowsError && (
+            <p className="rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {flowsError} You can still use message/asset steps; reconnect ManyChat to trigger voice flows.
+            </p>
+          )}
+
           {steps.map((step, i) => (
             <div key={i} className="space-y-3 rounded-md border p-3">
               <div className="flex items-center justify-between">
@@ -199,6 +227,34 @@ export function FollowupSequenceForm({
                 />
               </div>
 
+              {flows && flows.length > 0 && (
+                <div className="space-y-1">
+                  <Label htmlFor={`step-flow-${i}`}>Deliver via ManyChat flow (voice) — optional</Label>
+                  <select
+                    id={`step-flow-${i}`}
+                    value={step.flow_ns ?? ""}
+                    onChange={(e) => {
+                      const ns = e.target.value;
+                      const name = flows.find((f) => f.ns === ns)?.name ?? null;
+                      patch(i, { flow_ns: ns || null, flow_name: ns ? name : null });
+                    }}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">— none (send the message/assets below) —</option>
+                    {flows.map((f) => (
+                      <option key={f.ns} value={f.ns}>{f.name || f.ns}</option>
+                    ))}
+                  </select>
+                  {step.flow_ns && (
+                    <p className="text-xs text-muted-foreground">
+                      This step triggers your ManyChat flow (voice). The assets and message
+                      below are ignored for this step.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className={cn(step.flow_ns && "pointer-events-none opacity-40")}>
               {/* Attach assets — a thumbnail multi-picker (up to MAX_STEP_ASSETS). */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -277,6 +333,7 @@ export function FollowupSequenceForm({
                   placeholder="Hey {{name}}, still thinking it over? 😊"
                 />
               </div>
+              </div>
             </div>
           ))}
 
@@ -319,6 +376,23 @@ export function FollowupSequenceForm({
           </p>
         </div>
         <Switch id="ai-media" checked={aiMedia} onCheckedChange={(v) => { setAiMedia(v); markDirty(); }} />
+      </div>
+
+      <div className="flex items-center justify-between gap-4 border-t pt-5">
+        <div>
+          <Label htmlFor="mc-no-followup">Sync "stop follow-up" flag to ManyChat</Label>
+          <p className="text-sm text-muted-foreground">
+            When a lead is subscribed, disqualified, a bot, starting later, muted, or
+            handed to a human, tag them <code>ss_no_followup</code> in ManyChat so a
+            native voice-note drip skips them. Create that tag in ManyChat and add a
+            Condition on it to your flow before turning this on.
+          </p>
+        </div>
+        <Switch
+          id="mc-no-followup"
+          checked={noFollowupFlag}
+          onCheckedChange={(v) => { setNoFollowupFlag(v); markDirty(); }}
+        />
       </div>
 
       {error && (

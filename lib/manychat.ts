@@ -342,6 +342,76 @@ export async function sendManychatMessage(opts: {
   });
 }
 
+/**
+ * ManyChat subscriber-tag endpoints. Pure so the on→add / off→remove mapping is
+ * unit-testable (scripts/test-manychat-retry.ts).
+ */
+export function tagEndpoint(on: boolean): string {
+  return on
+    ? "https://api.manychat.com/fb/subscriber/addTagByName"
+    : "https://api.manychat.com/fb/subscriber/removeTagByName";
+}
+
+/**
+ * Add (`on: true`) or remove (`on: false`) a ManyChat tag on a subscriber by name.
+ * Used to mirror SpeedSettr's "stop follow-up" verdict to ManyChat (lib/followup-flag.ts)
+ * so a native drip can Condition on the tag. This is a non-message write (no 24h
+ * window concern, no message_tag).
+ *
+ * BEST-EFFORT: never throws. Retries 429/5xx and transport errors a couple of
+ * times; a permanent 4xx or exhausted retries resolve to `false` (logged). Adding
+ * an existing tag / removing an absent one is a ManyChat no-op, so a redundant call
+ * is harmless.
+ */
+export async function setSubscriberTag(opts: {
+  subscriberId: string;
+  tagName: string;
+  on: boolean;
+  apiKey: string;
+}): Promise<boolean> {
+  const endpoint = tagEndpoint(opts.on);
+  const body = JSON.stringify({ subscriber_id: opts.subscriberId, tag_name: opts.tagName });
+  const ATTEMPTS = 3;
+  const BACKOFF_MS = [1_000, 3_000];
+  const TIMEOUT_MS = 8_000;
+  let lastReason = "";
+
+  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${opts.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body,
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (res.ok) return true;
+      // Permanent client error (except 429) → give up.
+      if (res.status !== 429 && res.status < 500) {
+        console.error(
+          `[manychat] setSubscriberTag ${res.status}`,
+          await res.text().catch(() => "")
+        );
+        return false;
+      }
+      // 429 / 5xx → fall through to retry.
+      lastReason = `status ${res.status}`;
+    } catch (err) {
+      // Transport error → retry (this is not a message send, so no duplicate risk).
+      lastReason = err instanceof Error ? err.message : String(err);
+    }
+    if (attempt < ATTEMPTS - 1) {
+      await new Promise((r) => setTimeout(r, BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)]));
+    }
+  }
+  console.error(
+    `[manychat] setSubscriberTag exhausted retries (${opts.on ? "add" : "remove"} ${opts.tagName}): ${lastReason}`
+  );
+  return false;
+}
+
 /** A media/link asset to push: its kind + a public HTTPS URL. */
 export interface OutboundAsset {
   kind: FollowupAssetKind; // image | video | audio | link
@@ -627,4 +697,100 @@ export async function validateManychatApiKey(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "network error" };
   }
+}
+
+/**
+ * Trigger a ManyChat flow for a subscriber (ManyChat Send Flow API). Used by the
+ * follow-up engine to deliver a native voice-note flow at a due step (Option B).
+ *
+ * THROWS on hard failure so sendFollowup's existing claim-revert-and-retry runs
+ * (exactly like sendManychatMedia). A client TIMEOUT/ABORT is treated as
+ * assume-delivered (returns success, no retry) — re-triggering would double-send
+ * the voice note, the same rule as duplicate media (gotcha #18). A genuine
+ * connection failure (request never completed) is retried. 429/5xx are retried.
+ */
+export async function sendManychatFlow(opts: {
+  subscriberId: string;
+  flowNs: string;
+  apiKey: string;
+}): Promise<unknown> {
+  const body = JSON.stringify({ subscriber_id: opts.subscriberId, flow_ns: opts.flowNs });
+  const ATTEMPTS = 3;
+  const BACKOFF_MS = [1_000, 3_000];
+  const TIMEOUT_MS = 15_000;
+  let lastError: Error = new Error("ManyChat sendFlow: no attempts made");
+
+  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch("https://api.manychat.com/fb/sending/sendFlow", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${opts.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body,
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (res.ok) return res.json().catch(() => ({}));
+      const errText = await res.text().catch(() => "");
+      lastError = new Error(
+        `ManyChat sendFlow failed: ${res.status} ${errText} (attempt ${attempt + 1}/${ATTEMPTS})`
+      );
+      if (res.status !== 429 && res.status < 500) throw lastError; // permanent
+    } catch (err) {
+      if (err === lastError) throw err;
+      // Client timeout/abort → the request was already sent; assume the flow
+      // triggered and STOP (re-triggering double-sends the voice note).
+      if (classifySendError(err, {}) === "assume_delivered") return { assumedDelivered: true };
+      lastError = new Error(
+        `ManyChat sendFlow failed: ${err instanceof Error ? err.message : String(err)} (attempt ${attempt + 1}/${ATTEMPTS})`
+      );
+    }
+    if (attempt < ATTEMPTS - 1) {
+      await new Promise((r) => setTimeout(r, BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)]));
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Parse ManyChat's getFlows response into { ns, name }[]. Pure + unit-tested.
+ * Tolerates both `data.flows` and a bare `data` array; drops entries without an ns.
+ */
+export function parseManychatFlows(json: unknown): { ns: string; name: string }[] {
+  const data = (json as { data?: unknown } | null)?.data;
+  const arr: unknown[] = Array.isArray((data as { flows?: unknown })?.flows)
+    ? (data as { flows: unknown[] }).flows
+    : Array.isArray(data)
+      ? (data as unknown[])
+      : [];
+  return arr
+    .map((f) => {
+      const o = (f ?? {}) as { ns?: unknown; name?: unknown };
+      return {
+        ns: typeof o.ns === "string" ? o.ns : "",
+        name: typeof o.name === "string" ? o.name : "",
+      };
+    })
+    .filter((f) => f.ns);
+}
+
+/**
+ * List a page's ManyChat flows for the follow-up step picker. Throws on failure
+ * (the endpoint turns that into a clean 502 the UI shows).
+ */
+export async function listManychatFlows(
+  apiKey: string
+): Promise<{ ns: string; name: string }[]> {
+  const res = await fetch("https://api.manychat.com/fb/page/getFlows", {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(8_000),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || (json as { status?: string } | null)?.status !== "success") {
+    throw new Error(
+      (json as { message?: string } | null)?.message || `ManyChat getFlows returned ${res.status}`
+    );
+  }
+  return parseManychatFlows(json);
 }

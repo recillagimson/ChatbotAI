@@ -62,6 +62,7 @@ export interface Chatbot {
   ai_media_enabled: boolean;              // allow the live AI to emit [[SEND_ASSET]] directives
   keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)
   keyword_gate_enabled: boolean;          // ON = reply ONLY to DMs matching a keyword group; else silent
+  followup_flag_enabled: boolean;         // ON = mirror stop-follow-up state to ManyChat tag `ss_no_followup`
   created_at: string;
 }
 
@@ -98,6 +99,8 @@ export interface FollowupStep {
   asset_key?: string | null;   // LEGACY single key — still read for steps saved before multi-asset
   asset_keys?: string[];       // keys of FollowupAssets to send in this step (supersedes asset_key)
   text?: string | null;        // caption / message body; supports {{name}}. Always sent when present.
+  flow_ns?: string | null;     // when set, this step TRIGGERS this ManyChat flow (voice) instead of sending media
+  flow_name?: string | null;   // display label for the flow (from ManyChat getFlows); UI-only
 }
 
 export type FollowupAssetKind = "image" | "video" | "audio" | "link";

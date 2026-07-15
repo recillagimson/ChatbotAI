@@ -17,7 +17,7 @@
  * the I/O.
  */
 import type { Chatbot, Conversation, FollowupStep, FollowupAsset } from "@/lib/types";
-import { sendManychatMedia, type OutboundAsset } from "@/lib/manychat";
+import { sendManychatMedia, sendManychatFlow, type OutboundAsset } from "@/lib/manychat";
 import { assetToOutbound, stepAssetKeys } from "@/lib/followup-assets";
 import { cleanContactField } from "@/lib/contact";
 import { type Platform, PLATFORM_META, toPlatform, canPushPlatform } from "@/lib/platforms";
@@ -70,6 +70,33 @@ export function renderTemplate(
   return template.replace(/\{\{\s*name\s*\}\}/gi, name);
 }
 
+/**
+ * True when SpeedSettr has stopped following up this lead — the same lead-states
+ * that pause the drip (evaluateFollowup's status/confirmed/starting_later/
+ * disqualified gates + the cron's user_muted_at filter), collapsed to one boolean.
+ * Used to mirror the "stop chasing" verdict to ManyChat as a subscriber tag
+ * (lib/followup-flag.ts) so a native voice-note drip can Condition-exit on it.
+ *
+ * Loose input type so it accepts a raw Supabase row. `needs_human` is intentionally
+ * NOT blocked (it doesn't pause the native drip either). Missing/unknown status
+ * reads as blocked (safe-direction: never over-message).
+ */
+export function followupBlocked(c: {
+  status?: string | null;
+  confirmed_at?: string | null;
+  user_muted_at?: string | null;
+  tag?: string | null;
+}): boolean {
+  return (
+    c.status !== "active" ||
+    !!c.confirmed_at ||
+    !!c.user_muted_at ||
+    c.tag === "disqualified" ||
+    c.tag === "bot" ||
+    c.tag === "starting_later"
+  );
+}
+
 export type FollowupChatbot = Pick<
   Chatbot,
   | "auto_followup_enabled"
@@ -94,12 +121,14 @@ export function resolveSteps(chatbot: FollowupChatbot): FollowupStep[] {
   const raw = Array.isArray(chatbot.auto_followup_steps) ? chatbot.auto_followup_steps : [];
   const valid = raw
     .map((s) => ({ step: s, keys: s ? stepAssetKeys(s) : [] }))
-    .filter(({ step, keys }) => step && ((step.text ?? "").trim() || keys.length))
+    .filter(({ step, keys }) => step && ((step.text ?? "").trim() || keys.length || step.flow_ns))
     .map(({ step, keys }) => ({
       delay_hours: clampDelayHours(step.delay_hours),
       asset_keys: keys,             // canonical, normalized (back-compat: reads old asset_key)
       asset_key: keys[0] ?? null,   // keep the singular in sync for any legacy consumer
       text: step.text ?? null,
+      flow_ns: step.flow_ns ?? null,
+      flow_name: step.flow_name ?? null,
     }));
   if (valid.length) return valid;
 
@@ -213,6 +242,11 @@ export function evaluateFollowup(
   }
   const step = steps[sendIdx];
 
+  // Flow-trigger steps carry no message tag, so they can only deliver inside the
+  // standard 24h window. `outOfWindow` is only ever true on the RN path (past 24h);
+  // never select a flow step there — it would fire tag-less and fail/retry-loop.
+  if (step.flow_ns && outOfWindow) return { due: false, reason: "window_closed" };
+
   // Delay is measured from the previous send, or the contact's last message for
   // the very first step.
   const refMs = conversation.last_followup_at
@@ -303,19 +337,31 @@ export async function sendFollowup(
   // (ManyChat would no-op anyway), don't log a phantom "delivered" message, and
   // don't count it as a send. Returning null makes the cron record a skip; the
   // per-key followup_asset_missing diagnostics already fired upstream.
-  if (outbound.length === 0 && !text.trim()) {
+  if (outbound.length === 0 && !text.trim() && !step.flow_ns) {
     return null;
   }
 
   try {
-    await sendManychatMedia({
-      subscriberId: conversation.manychat_subscriber_id,
-      assets: outbound,
-      text,
-      apiKey,
-      platform,
-      messageTag: opts?.messageTag,
-    });
+    if (step.flow_ns) {
+      // Option B: this step delivers a native ManyChat flow (voice) rather than
+      // media. SpeedSettr owns the timing (this drip step's delay); ManyChat sends
+      // the flow's content. Ignore the step's media/caption. sendManychatFlow throws
+      // on hard failure -> the catch below reverts the claim and re-throws (retry).
+      await sendManychatFlow({
+        subscriberId: conversation.manychat_subscriber_id,
+        flowNs: step.flow_ns,
+        apiKey,
+      });
+    } else {
+      await sendManychatMedia({
+        subscriberId: conversation.manychat_subscriber_id,
+        assets: outbound,
+        text,
+        apiKey,
+        platform,
+        messageTag: opts?.messageTag,
+      });
+    }
   } catch (err) {
     // 2a. Send failed: best-effort revert of OUR claim (guarded on the values we
     // wrote) so the next cron run retries this step. If the revert itself fails,
@@ -341,14 +387,17 @@ export async function sendFollowup(
   // model); the first asset is the representative media. content is NOT NULL —
   // use the caption, or a note for media-only steps. media_type stays a real MIME
   // (or null): the inbox renderer matches on startsWith("image/"|"audio/"|"video/").
-  const first = assets[0] ?? null;
-  const mediaNote =
-    assets.length === 0
+  const first = step.flow_ns ? null : (assets[0] ?? null);
+  const mediaNote = step.flow_ns
+    ? step.flow_name
+      ? `(sent flow: ${step.flow_name})`
+      : "(sent voice follow-up)"
+    : assets.length === 0
       ? "(follow-up)"
       : assets.length === 1
         ? `(sent ${assets[0].kind})`
         : `(sent ${assets.length} assets)`;
-  const content = text || mediaNote;
+  const content = step.flow_ns ? mediaNote : (text || mediaNote);
   await supabase.from("messages").insert({
     conversation_id: conversation.id,
     role: "assistant",
