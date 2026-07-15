@@ -38,6 +38,7 @@ import {
 } from "@/lib/user-controls";
 import { sanitizeReply } from "@/lib/sanitize";
 import { classifyConversation } from "@/lib/conversation-classify";
+import { screenDisqualify } from "@/lib/conversation-screen";
 import { resolveTagWrite, CONVERSATION_TAGS, TAG_RANK, type ConversationTag } from "@/lib/conversation-tags";
 import {
   checkRateLimit,
@@ -506,6 +507,16 @@ export async function POST(request: NextRequest) {
     return manychatReply("", { ai_skipped: true, reason: "subscribed_stopped" });
   }
 
+  // 6-disqualified. A disqualified / detected-bot thread gets NO automated
+  // messages — same full silence as a subscribed customer (gate 6 above). This
+  // catches every turn AFTER the first; the first offending message is silenced
+  // by the pre-reply screen (step 7b below). The owner reopens by changing the
+  // tag in the inbox; this gate reads existing.tag, so replies resume the moment
+  // it changes.
+  if (existing?.tag === "disqualified" || existing?.tag === "bot") {
+    return manychatReply("", { ai_skipped: true, reason: "disqualified_stopped" });
+  }
+
   // 6-gate. Keyword-only reply mode — the OUTERMOST filter for a gated bot (only
   // human-takeover above it). When ON, the bot only engages contacts who have
   // shown intent via a keyword (personal/private accounts that don't want the AI
@@ -877,6 +888,34 @@ export async function POST(request: NextRequest) {
       priorHistory = (history ?? []).slice(1).reverse();
     }
 
+    // 7b. Disqualify screen (best-effort, PRE-reply). If the lead is abusive, has
+    // clearly rejected the service, or is itself a bot, go silent on THIS message:
+    // write the tag and stop before generating/pushing anything (also skips the
+    // step-9a classifier, since we return before it). Runs before KB/reply so a
+    // disqualified turn does no extra work. Same gate conditions as auto-tagging.
+    // Fail-open: screenDisqualify swallows errors -> 'none' -> a normal reply, so
+    // an API blip never wrongly silences a lead.
+    if (AUTO_TAG_ENABLED && !confirmedAt && canPushPlatform(platform)) {
+      const lastBotMessage =
+        [...priorHistory].reverse().find((m) => m.role === "assistant")?.content ?? "";
+      const { outcome } = await screenDisqualify({ message: effectiveMessage, lastBotMessage });
+      if (outcome !== "none") {
+        const { error: tagErr } = await supabase
+          .from("conversations")
+          .update({ tag: outcome, start_on: null, start_note: null })
+          .eq("id", conversationId!)
+          .is("confirmed_at", null); // never overwrite a just-confirmed customer
+        if (tagErr) {
+          // Surface a rejected write (e.g. the 2026-07-14 migration not yet applied,
+          // so the tag CHECK rejects disqualified/bot) instead of silently no-opping —
+          // otherwise the bot keeps replying to abuse with nothing in the logs (gotcha #15).
+          console.error("[manychat-webhook] disqualify tag write failed", tagErr);
+        }
+        await releaseClaim(); // mirror the stand-down path (single-flight CAS release)
+        return null; // no reply pushed; the step-9a classifier is never reached
+      }
+    }
+
     // 7a. Follow-up media library — only when the bot may send AI-triggered media.
     // Fetched once here so the same list feeds the system-prompt catalog AND the
     // directive resolution below.
@@ -1236,7 +1275,11 @@ export async function POST(request: NextRequest) {
   // text is returned here; AI media is a push-channel feature.
   let replyText = "Thanks for the message, a teammate will follow up shortly.";
   try {
-    // "single" mode never returns null; the guard is just for the type.
+    // On a normal response (non-push) channel the pre-reply disqualify screen is
+    // skipped (it's gated by canPushPlatform). It could still evaluate on the rare
+    // misconfig where a push-capable platform reaches this path with no API key —
+    // but a null (stood-down) result just falls back to the default replyText
+    // below, so this path never wrongly silences a lead.
     const result = await generateAndPersistReply("single");
     if (result) replyText = result.text;
   } catch (err) {

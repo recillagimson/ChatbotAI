@@ -110,6 +110,17 @@ A SaaS platform (**SpeedSettr** — www.speedsettr.com) that auto-replies to Ins
 
 21. **`starting_later` tag — pause the drip, keep AI on, remember the date.** A 5th tag `starting_later` for a lead who says they'll begin on a future date ("Wednesday", "in a week"). It **pauses the auto follow-up drip** — `evaluateFollowup` returns `reason:"starting_later"` when `conversation.tag === "starting_later"` (the cron selects `tag`) — but **NOT** the reactive AI replies (the webhook/`shouldStandDown` don't consult it). It **stays paused** until the owner changes the tag (no date-based auto-resume — owner decision). The classifier ([lib/conversation-classify.ts](lib/conversation-classify.ts)) now returns a struct `{tag, startOn, startNote}` (JSON, `maxTokens 60`) and is passed `today` so it resolves the phrase → an ISO date; the pure `parseClassification()` (tested in `scripts/test-classify-parse.ts`) keeps the never-throws contract. Two columns `conversations.start_on` (date) + `start_note` (phrase) are informational: shown as a chip beside the badge and fed to the AI via a new **SCHEDULED START** block in `buildSystemPrompt` (7th param `scheduledStart`, threaded from `generateReply`) so the bot references the date and doesn't re-pitch. Stickiness: `resolveTagWrite` is now **rank-based** (`TAG_RANK` — `lead`/`wants_call` 0, `starting_later` 2, `needs_human` 3, `subscribed` 4); `starting_later` sticks above lead/wants_call but yields to needs_human/subscribed. The webhook 9a write generalizes the DB concurrency guard to `.neq("tag", t)` for every stickier `t` (excludes `subscribed`, which the `.is("confirmed_at",null)` guard covers). Manual date picker + clear-on-leave in [conversation-actions.tsx](components/dashboard/conversation-actions.tsx). **Owner action: apply `supabase/migrations/2026-07-13-starting-later.sql` BEFORE deploying** (extends the tag CHECK to 5 values + adds `start_on`/`start_note`; the cron/pages read them). Multi-tenant-safe; no new env.
 
+22. **Disqualify / go-silent tags (`disqualified`, `bot`).** A pre-reply AI screen
+    (`lib/conversation-screen.ts` `screenDisqualify`) runs in the webhook background
+    job BEFORE `generateReply` (route.ts step 7b). If the lead is abusive, clearly
+    rejects the service, or is itself a bot, it writes `tag = disqualified|bot` and
+    returns `null` — so the offending message gets NO reply and step-9a is skipped.
+    A synchronous gate beside gate 6-subscribed then silences every later turn.
+    `evaluateFollowup` pauses the drip for both tags. Both are TERMINAL in
+    `resolveTagWrite` (owner-only reopen — change the tag in the inbox to resume).
+    Fail-open: any screen error → a normal reply. Needs `2026-07-14-disqualify.sql`
+    (7-value tag CHECK) applied before deploy. Screen prompt is generic (multi-tenant).
+
 ## How to verify the local setup still works (resume sanity check)
 
 1. `npm run dev` in the project folder.

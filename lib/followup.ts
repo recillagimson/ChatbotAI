@@ -126,6 +126,7 @@ export interface FollowupDecision {
     | "not_active"
     | "confirmed"
     | "starting_later"
+    | "disqualified"
     | "channel_unsupported"
     | "window_closed"
     | "sequence_done"
@@ -161,6 +162,12 @@ export function evaluateFollowup(
   // A lead who asked to start on a future date is paused (AI replies stay on, this
   // only gates the proactive drip). Stays paused until the owner changes the tag.
   if (conversation.tag === "starting_later") return { due: false, reason: "starting_later" };
+
+  // Disqualified / detected-bot threads are dead — no drip, ever (owner-only
+  // reopen). The bot is also fully silent on the reactive path via the webhook.
+  if (conversation.tag === "disqualified" || conversation.tag === "bot") {
+    return { due: false, reason: "disqualified" };
+  }
 
   // Channels with no ManyChat send API (TikTok) can't receive follow-ups.
   const platform = toPlatform(conversation.platform);

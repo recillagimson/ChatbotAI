@@ -15,6 +15,8 @@ export const CONVERSATION_TAGS = [
   "starting_later",
   "needs_human",
   "subscribed",
+  "disqualified",
+  "bot",
 ] as const;
 export type ConversationTag = (typeof CONVERSATION_TAGS)[number];
 
@@ -25,18 +27,24 @@ export const TAG_LABEL: Record<ConversationTag, string> = {
   starting_later: "Starting later",
   needs_human: "Needs attention",
   subscribed: "Subscribed",
+  disqualified: "Disqualified",
+  bot: "Bot / Spam",
 };
 
-/** Badge variant per tag (from components/ui/badge.tsx). */
+/** Badge variant per tag (from components/ui/badge.tsx). `secondary` is the muted
+ *  gray used for the "dead" buckets (disqualified/bot) — distinct from the red
+ *  needs_human "urgent" and green subscribed. */
 export const TAG_VARIANT: Record<
   ConversationTag,
-  "outline" | "default" | "destructive" | "success" | "warning"
+  "outline" | "default" | "destructive" | "success" | "warning" | "secondary"
 > = {
   lead: "outline",
   wants_call: "default",
   starting_later: "warning",
   needs_human: "destructive",
   subscribed: "success",
+  disqualified: "secondary",
+  bot: "secondary",
 };
 
 /**
@@ -51,6 +59,8 @@ export const TAG_RANK: Record<ConversationTag, number> = {
   starting_later: 2,
   needs_human: 3,
   subscribed: 4,
+  disqualified: 4,
+  bot: 4,
 };
 
 export function isTag(v: unknown): v is ConversationTag {
@@ -64,17 +74,18 @@ export function tagOf(v: unknown): ConversationTag {
 }
 
 /**
- * Precedence/stickiness for an AUTO-classified tag write. `subscribed` is terminal
- * (never auto-downgrade a customer). Otherwise a lower-ranked incoming tag can't
- * clobber a stickier current one: `needs_human` (attention) and `starting_later`
- * (paused/dated) persist until the owner changes them by hand, the contact
+ * Precedence/stickiness for an AUTO-classified tag write. `subscribed`,
+ * `disqualified`, and `bot` are TERMINAL — auto-classification never moves a
+ * thread off them (owner-only reopen via the inbox dropdown). Otherwise a
+ * lower-ranked incoming tag can't clobber a stickier current one: `needs_human`
+ * and `starting_later` persist until the owner changes them, the contact
  * converts, or a higher signal fires. `lead` ↔ `wants_call` still move freely.
  */
 export function resolveTagWrite(
   current: ConversationTag | null | undefined,
   incoming: ConversationTag
 ): ConversationTag {
-  if (current === "subscribed") return "subscribed";
+  if (current === "subscribed" || current === "disqualified" || current === "bot") return current;
   if (current && TAG_RANK[current] > TAG_RANK[incoming]) return current;
   return incoming;
 }

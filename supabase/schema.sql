@@ -785,7 +785,7 @@ alter table public.conversations
   add column if not exists start_note text;                   -- starting_later: the human phrase
 alter table public.conversations drop constraint if exists conversations_tag_check;
 alter table public.conversations add constraint conversations_tag_check
-  check (tag in ('lead','wants_call','starting_later','needs_human','subscribed'));
+  check (tag in ('lead','wants_call','starting_later','needs_human','subscribed','disqualified','bot'));
 -- Existing confirmed customers are subscribers.
 update public.conversations set tag = 'subscribed' where confirmed_at is not null and tag = 'lead';
 create index if not exists conversations_tag_idx on public.conversations (user_id, tag);
