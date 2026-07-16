@@ -104,8 +104,11 @@ export interface FollowupStep {
   asset_key?: string | null;   // LEGACY single key — still read for steps saved before multi-asset
   asset_keys?: string[];       // keys of FollowupAssets to send in this step (supersedes asset_key)
   text?: string | null;        // caption / message body; supports {{name}}. Always sent when present.
+  ai_generate?: boolean;       // when true, the AI writes this step's message from the conversation; `text` (if any) is guidance for the AI. Ignored when a flow fires.
   flow_ns?: string | null;     // when set, this step TRIGGERS this ManyChat flow (voice) instead of sending media
   flow_name?: string | null;   // display label for the flow (from ManyChat getFlows); UI-only
+  flow_ns_fb?: string | null;   // Facebook (Messenger) flow; when set, fires for messenger subscribers (falls back to flow_ns)
+  flow_name_fb?: string | null; // display label for the Facebook flow (from ManyChat getFlows); UI-only
 }
 
 export type FollowupAssetKind = "image" | "video" | "audio" | "link";

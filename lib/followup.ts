@@ -123,7 +123,7 @@ export function resolveSteps(chatbot: FollowupChatbot): FollowupStep[] {
   const raw = Array.isArray(chatbot.auto_followup_steps) ? chatbot.auto_followup_steps : [];
   const valid = raw
     .map((s) => ({ step: s, keys: s ? stepAssetKeys(s) : [] }))
-    .filter(({ step, keys }) => step && ((step.text ?? "").trim() || keys.length || step.flow_ns))
+    .filter(({ step, keys }) => step && ((step.text ?? "").trim() || keys.length || step.flow_ns || step.flow_ns_fb || step.ai_generate))
     .map(({ step, keys }) => ({
       delay_hours: clampDelayHours(step.delay_hours),
       asset_keys: keys,             // canonical, normalized (back-compat: reads old asset_key)
@@ -131,6 +131,9 @@ export function resolveSteps(chatbot: FollowupChatbot): FollowupStep[] {
       text: step.text ?? null,
       flow_ns: step.flow_ns ?? null,
       flow_name: step.flow_name ?? null,
+      flow_ns_fb: step.flow_ns_fb ?? null,
+      flow_name_fb: step.flow_name_fb ?? null,
+      ai_generate: !!step.ai_generate,
     }));
   if (valid.length) return valid;
 
@@ -247,10 +250,11 @@ export function evaluateFollowup(
   }
   const step = steps[sendIdx];
 
-  // Flow-trigger steps carry no message tag, so they can only deliver inside the
-  // standard 24h window. `outOfWindow` is only ever true on the RN path (past 24h);
-  // never select a flow step there — it would fire tag-less and fail/retry-loop.
-  if (step.flow_ns && outOfWindow) return { due: false, reason: "window_closed" };
+  // A step that fires a flow (Instagram or Facebook slot) carries no message tag,
+  // so it can only deliver inside the standard 24h window. `outOfWindow` is only
+  // ever true on the RN path (past 24h); never select a flow step there — it
+  // would fire tag-less and fail/retry-loop.
+  if (selectFlow(step, platform) && outOfWindow) return { due: false, reason: "window_closed" };
 
   // Delay is measured from the previous send, or the contact's last message for
   // the very first step.
@@ -260,6 +264,27 @@ export function evaluateFollowup(
   if (nowMs - refMs < step.delay_hours * HOUR_MS) return { due: false, reason: "not_due_yet" };
 
   return { due: true, reason: "due", step, nextStepIndex: idx + 1, outOfWindow };
+}
+
+/**
+ * Choose which ManyChat flow a step fires for this subscriber's platform.
+ * `flow_ns` is the default / Instagram slot; `flow_ns_fb` is the Facebook
+ * (Messenger) override. Set one → it fires for every platform (won't miss);
+ * set both → each platform gets its own. Returns null when no flow is set
+ * (the step then sends its media/caption instead).
+ */
+export function selectFlow(
+  step: FollowupStep,
+  platform: Platform
+): { ns: string; name: string | null } | null {
+  const def = step.flow_ns ?? null;
+  const fb = step.flow_ns_fb ?? null;
+  if (platform === "messenger") {
+    if (fb) return { ns: fb, name: step.flow_name_fb ?? null };
+    return def ? { ns: def, name: step.flow_name ?? null } : null;
+  }
+  if (def) return { ns: def, name: step.flow_name ?? null };
+  return fb ? { ns: fb, name: step.flow_name_fb ?? null } : null;
 }
 
 /**
@@ -297,7 +322,7 @@ export async function sendFollowup(
   now: Date,
   apiKey: string,
   nextStepIndex: number,
-  opts?: { messageTag?: string }
+  opts?: { messageTag?: string; overrideText?: string | null }
 ): Promise<string | null> {
   const prevIndex = conversation.followup_step_index ?? 0;
   const prevFollowupAt = conversation.last_followup_at ?? null;
@@ -328,10 +353,11 @@ export async function sendFollowup(
 
   // 2. Send. Clean the stored name so a never-resolved "{{first_name}}" doesn't
   // get sent; renderTemplate falls back to "there" when name is null.
-  const text = renderTemplate(step.text ?? "", {
+  const text = renderTemplate(opts?.overrideText ?? step.text ?? "", {
     name: cleanContactField(conversation.contact_name),
   });
   const platform = toPlatform(conversation.platform);
+  const flow = selectFlow(step, platform);
   const outbound = assets
     .map(assetToOutbound)
     .filter((a): a is OutboundAsset => a !== null);
@@ -342,19 +368,19 @@ export async function sendFollowup(
   // (ManyChat would no-op anyway), don't log a phantom "delivered" message, and
   // don't count it as a send. Returning null makes the cron record a skip; the
   // per-key followup_asset_missing diagnostics already fired upstream.
-  if (outbound.length === 0 && !text.trim() && !step.flow_ns) {
+  if (outbound.length === 0 && !text.trim() && !flow) {
     return null;
   }
 
   try {
-    if (step.flow_ns) {
+    if (flow) {
       // Option B: this step delivers a native ManyChat flow (voice) rather than
       // media. SpeedSettr owns the timing (this drip step's delay); ManyChat sends
       // the flow's content. Ignore the step's media/caption. sendManychatFlow throws
       // on hard failure -> the catch below reverts the claim and re-throws (retry).
       await sendManychatFlow({
         subscriberId: conversation.manychat_subscriber_id,
-        flowNs: step.flow_ns,
+        flowNs: flow.ns,
         apiKey,
       });
     } else {
@@ -392,22 +418,24 @@ export async function sendFollowup(
   // model); the first asset is the representative media. content is NOT NULL —
   // use the caption, or a note for media-only steps. media_type stays a real MIME
   // (or null): the inbox renderer matches on startsWith("image/"|"audio/"|"video/").
-  const first = step.flow_ns ? null : (assets[0] ?? null);
-  const mediaNote = step.flow_ns
-    ? step.flow_name
-      ? `(sent flow: ${step.flow_name})`
+  const first = flow ? null : (assets[0] ?? null);
+  const mediaNote = flow
+    ? flow.name
+      ? `(sent flow: ${flow.name})`
       : "(sent voice follow-up)"
     : assets.length === 0
       ? "(follow-up)"
       : assets.length === 1
         ? `(sent ${assets[0].kind})`
         : `(sent ${assets.length} assets)`;
-  const content = step.flow_ns ? mediaNote : (text || mediaNote);
+  const content = flow ? mediaNote : (text || mediaNote);
   await supabase.from("messages").insert({
     conversation_id: conversation.id,
     role: "assistant",
     content,
-    ai_generated: false,
+    // AI-composed follow-up (overrideText from generateFollowupText) is genuinely
+    // model-authored — tag it like the reactive AI path does; static/flow steps stay false.
+    ai_generated: !!opts?.overrideText,
     tokens_used: 0,
     media_url: first?.url ?? null,
     media_type: first?.mime ?? null,

@@ -753,7 +753,7 @@ create policy "admin upload update" on storage.objects for update to authenticat
 -- bucket (ManyChat needs a public HTTPS URL). Per-contact drip state, lead
 -- confirmation, and Recurring-Notifications opt-in live on conversations.
 alter table public.chatbots
-  add column if not exists auto_followup_steps jsonb not null default '[]'::jsonb,  -- ordered drip steps: [{delay_hours, asset_keys?: string[] (legacy asset_key? still read), text?}]
+  add column if not exists auto_followup_steps jsonb not null default '[]'::jsonb,  -- ordered drip steps: [{delay_hours, asset_keys?: string[] (legacy asset_key? still read), text?, flow_ns?/flow_name? (Instagram/default voice flow), flow_ns_fb?/flow_name_fb? (Facebook voice flow), ai_generate?: boolean (AI writes the message; text becomes optional guidance)}]
   add column if not exists auto_followup_loop_last boolean not null default false,  -- legacy; superseded by auto_followup_loop_mode (see 2026-07-07-followup-loop-mode.sql)
   add column if not exists auto_followup_loop_mode text not null default 'stop',    -- after last step: stop | repeat last | cycle through all
   add column if not exists ai_media_enabled boolean not null default false;         -- allow [[SEND_ASSET]] directives from the live AI

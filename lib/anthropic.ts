@@ -344,3 +344,56 @@ export async function generateReply(opts: {
     cacheWriteTokens: usage?.cache_creation_input_tokens ?? 0,
   };
 }
+
+/**
+ * Build the instruction that asks the model to write a re-engagement follow-up.
+ * Pure/deterministic so it is unit-testable without the API. `instruction` is the
+ * step's optional guidance (blank = the model decides from the conversation).
+ */
+export function buildFollowupInstruction(
+  hoursSilent: number,
+  instruction?: string | null
+): string {
+  const h = Math.max(1, Math.round(hoursSilent || 1));
+  const base =
+    `The contact has gone quiet for about ${h} hour${h === 1 ? "" : "s"} since the last message. ` +
+    `Write ONE short, natural follow-up (1-2 sentences) to re-engage them, in your normal voice, ` +
+    `based on the conversation so far. Reference what you were discussing; do NOT restate your ` +
+    `intro, do NOT repeat your last message, and do NOT be pushy. Output only the message text.`;
+  const extra =
+    instruction && instruction.trim()
+      ? ` Focus this follow-up on: ${instruction.trim()}`
+      : "";
+  return base + extra;
+}
+
+/**
+ * Generate a context-aware follow-up message from the chatbot's persona + KB +
+ * conversation history, reusing generateReply (same provider/trim/sanitize path).
+ * The instruction is passed as the final "user" turn. NEVER throws: returns null on
+ * empty output or any error so the caller falls back to the static step text.
+ */
+export async function generateFollowupText(opts: {
+  chatbot: Chatbot;
+  kbBlock: string;
+  history: Pick<Message, "role" | "content">[];
+  memorySummary?: string | null;
+  instruction?: string | null; // the step's `text` (may be blank)
+  hoursSilent: number;
+}): Promise<{ text: string; tokensUsed: number } | null> {
+  try {
+    const userMessage = buildFollowupInstruction(opts.hoursSilent, opts.instruction);
+    const { text, tokensUsed } = await generateReply({
+      chatbot: opts.chatbot,
+      kbBlock: opts.kbBlock,
+      history: opts.history,
+      userMessage,
+      memorySummary: opts.memorySummary ?? null,
+    });
+    const clean = text.trim();
+    return clean ? { text: clean, tokensUsed } : null;
+  } catch (err) {
+    console.error("[generateFollowupText] failed", err);
+    return null;
+  }
+}

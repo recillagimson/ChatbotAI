@@ -3,17 +3,23 @@ import { createServiceClient } from "@/lib/supabase/server";
 import {
   evaluateFollowup,
   sendFollowup,
+  selectFlow,
   IG_WINDOW_DAYS,
   FOLLOWUP_ENABLED,
   RN_ENABLED,
 } from "@/lib/followup";
+import { toPlatform } from "@/lib/platforms";
 import { resolveManychatApiKey } from "@/lib/manychat";
 import { fetchFollowupAssets, resolveAssetByKey, stepAssetKeys } from "@/lib/followup-assets";
 import { hasActiveAccess } from "@/lib/access";
+import { generateFollowupText } from "@/lib/anthropic";
+import { buildKbBlock } from "@/lib/retrieval";
+import { HISTORY_TURNS } from "@/lib/memory";
 import type {
   Chatbot,
   Conversation,
   FollowupAsset,
+  Message,
   SubscriptionStatus,
 } from "@/lib/types";
 
@@ -53,6 +59,7 @@ type CandidateRow = Pick<
   | "rn_opt_in_at"
   | "keyword_fired"
   | "tag"
+  | "memory_summary"
 > & { chatbots: FollowupChatbotRow };
 
 function bump(map: Record<string, number>, key: string) {
@@ -71,7 +78,7 @@ async function run() {
   const { data, error } = await supabase
     .from("conversations")
     .select(
-      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, bot_off_at, rn_opt_in_at, keyword_fired, tag, " +
+      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, bot_off_at, rn_opt_in_at, keyword_fired, tag, memory_summary, " +
         "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_template, auto_followup_steps, auto_followup_loop_last, auto_followup_loop_mode, keyword_gate_enabled, manychat_api_key_enc)"
     )
     .eq("status", "active")
@@ -119,6 +126,21 @@ async function run() {
       assetCache.set(chatbotId, cached);
     }
     return cached;
+  };
+
+  // Full chatbot rows for AI-generated follow-ups (persona/KB assembly needs the
+  // whole row). Fetched lazily + cached; only touched when an AI step is due.
+  const fullChatbotCache = new Map<string, Chatbot | null>();
+  const fullChatbotFor = async (chatbotId: string): Promise<Chatbot | null> => {
+    if (!fullChatbotCache.has(chatbotId)) {
+      const { data } = await supabase
+        .from("chatbots")
+        .select("*")
+        .eq("id", chatbotId)
+        .maybeSingle();
+      fullChatbotCache.set(chatbotId, (data as Chatbot) ?? null);
+    }
+    return fullChatbotCache.get(chatbotId) ?? null;
   };
 
   let sent = 0;
@@ -189,6 +211,51 @@ async function run() {
         }
       }
     }
+    // AI Follow up: when this step is AI-driven, write the message from the
+    // conversation. Best-effort — on empty/failure overrideText stays undefined and
+    // sendFollowup falls back to the step's static text (or safely skips).
+    // Only generate when the step is AI-driven AND no flow will fire for this
+    // subscriber's platform — a flow trigger ignores the caption, so generating
+    // would waste an LLM call and mislabel the recorded message.
+    let overrideText: string | null | undefined;
+    if (decision.step.ai_generate && !selectFlow(decision.step, toPlatform(row.platform))) {
+      const full = await fullChatbotFor(cb.id);
+      if (full) {
+        const { data: msgs } = await supabase
+          .from("messages")
+          .select("role, content")
+          .eq("conversation_id", row.id)
+          .order("created_at", { ascending: false })
+          .limit(HISTORY_TURNS)
+          .returns<Pick<Message, "role" | "content">[]>();
+        const history = (msgs ?? []).reverse();
+        const lastUser = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
+        const kb = await buildKbBlock({ supabase, chatbot: full, history, userMessage: lastUser });
+        const gen = await generateFollowupText({
+          chatbot: full,
+          kbBlock: kb.block,
+          history,
+          memorySummary: row.memory_summary ?? null,
+          instruction: decision.step.text ?? null,
+          hoursSilent: decision.step.delay_hours,
+        });
+        if (gen?.text) {
+          overrideText = gen.text;
+          bump(reasons, "ai_generated");
+          await supabase
+            .from("usage_log")
+            .insert({
+              user_id: cb.user_id,
+              chatbot_id: cb.id,
+              event_type: "followup_ai",
+              tokens_used: gen.tokensUsed,
+            })
+            .then(() => {}, () => {});
+        } else {
+          bump(reasons, "ai_generate_failed");
+        }
+      }
+    }
     try {
       const content = await sendFollowup(
         supabase,
@@ -206,6 +273,7 @@ async function run() {
             decision.outOfWindow && row.platform === "instagram"
               ? "HUMAN_AGENT"
               : undefined,
+          overrideText,
         }
       );
       if (content === null) {

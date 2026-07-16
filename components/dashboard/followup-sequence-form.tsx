@@ -19,7 +19,7 @@ const MAX_H = 22;
 const MAX_STEP_ASSETS = 5; // caption + up to 5 media bubbles stays under ManyChat's 10-per-call cap
 const clampHours = (n: number) => Math.min(MAX_H, Math.max(MIN_H, Math.round(n || 3)));
 
-type EditableStep = { delay_hours: number; asset_keys: string[]; text: string; flow_ns: string | null; flow_name: string | null };
+type EditableStep = { delay_hours: number; asset_keys: string[]; text: string; flow_ns: string | null; flow_name: string | null; flow_ns_fb: string | null; flow_name_fb: string | null; ai_generate: boolean };
 
 function toEditable(steps: FollowupStep[]): EditableStep[] {
   // auto_followup_steps is schemaless JSONB — drop any null/garbage element
@@ -28,7 +28,7 @@ function toEditable(steps: FollowupStep[]): EditableStep[] {
     ? steps.filter((s): s is FollowupStep => !!s && typeof s === "object")
     : [];
   if (arr.length === 0) {
-    return [{ delay_hours: 3, asset_keys: [], text: "", flow_ns: null, flow_name: null }];
+    return [{ delay_hours: 3, asset_keys: [], text: "", flow_ns: null, flow_name: null, flow_ns_fb: null, flow_name_fb: null, ai_generate: false }];
   }
   return arr.map((s) => ({
     delay_hours: clampHours(Number(s.delay_hours)),
@@ -36,6 +36,9 @@ function toEditable(steps: FollowupStep[]): EditableStep[] {
     text: s.text ?? "",
     flow_ns: s.flow_ns ?? null,
     flow_name: s.flow_name ?? null,
+    flow_ns_fb: s.flow_ns_fb ?? null,
+    flow_name_fb: s.flow_name_fb ?? null,
+    ai_generate: !!s.ai_generate,
   }));
 }
 
@@ -111,7 +114,7 @@ export function FollowupSequenceForm({
   }
   function addStep() {
     markDirty();
-    setSteps((prev) => [...prev, { delay_hours: 5, asset_keys: [], text: "", flow_ns: null, flow_name: null }]);
+    setSteps((prev) => [...prev, { delay_hours: 5, asset_keys: [], text: "", flow_ns: null, flow_name: null, flow_ns_fb: null, flow_name_fb: null, ai_generate: false }]);
   }
   function removeStep(i: number) {
     markDirty();
@@ -127,7 +130,7 @@ export function FollowupSequenceForm({
     // plural asset_keys (canonical) and a singular asset_key mirror (= first key)
     // so anything still reading the legacy field keeps working.
     const cleaned: FollowupStep[] = steps
-      .filter((s) => s.text.trim() || s.asset_keys.length || s.flow_ns)
+      .filter((s) => s.text.trim() || s.asset_keys.length || s.flow_ns || s.flow_ns_fb || s.ai_generate)
       .map((s) => ({
         delay_hours: clampHours(Number(s.delay_hours)),
         asset_keys: s.asset_keys,
@@ -135,6 +138,9 @@ export function FollowupSequenceForm({
         text: s.text.trim() || null,
         flow_ns: s.flow_ns ?? null,
         flow_name: s.flow_name ?? null,
+        flow_ns_fb: s.flow_ns_fb ?? null,
+        flow_name_fb: s.flow_name_fb ?? null,
+        ai_generate: s.ai_generate,
       }));
 
     if (enabled && cleaned.length === 0) {
@@ -228,33 +234,53 @@ export function FollowupSequenceForm({
               </div>
 
               {flows && flows.length > 0 && (
-                <div className="space-y-1">
-                  <Label htmlFor={`step-flow-${i}`}>Deliver via ManyChat flow (voice) — optional</Label>
-                  <select
-                    id={`step-flow-${i}`}
-                    value={step.flow_ns ?? ""}
-                    onChange={(e) => {
-                      const ns = e.target.value;
-                      const name = flows.find((f) => f.ns === ns)?.name ?? null;
-                      patch(i, { flow_ns: ns || null, flow_name: ns ? name : null });
-                    }}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">— none (send the message/assets below) —</option>
-                    {flows.map((f) => (
-                      <option key={f.ns} value={f.ns}>{f.name || f.ns}</option>
-                    ))}
-                  </select>
-                  {step.flow_ns && (
-                    <p className="text-xs text-muted-foreground">
-                      This step triggers your ManyChat flow (voice). The assets and message
-                      below are ignored for this step.
-                    </p>
-                  )}
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor={`step-flow-ig-${i}`}>ManyChat flow — Instagram (voice) — optional</Label>
+                    <select
+                      id={`step-flow-ig-${i}`}
+                      value={step.flow_ns ?? ""}
+                      onChange={(e) => {
+                        const ns = e.target.value;
+                        const name = flows.find((f) => f.ns === ns)?.name ?? null;
+                        patch(i, { flow_ns: ns || null, flow_name: ns ? name : null });
+                      }}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">— none (send the message/assets below) —</option>
+                      {flows.map((f) => (
+                        <option key={f.ns} value={f.ns}>{f.name || f.ns}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={`step-flow-fb-${i}`}>ManyChat flow — Facebook (voice) — optional</Label>
+                    <select
+                      id={`step-flow-fb-${i}`}
+                      value={step.flow_ns_fb ?? ""}
+                      onChange={(e) => {
+                        const ns = e.target.value;
+                        const name = flows.find((f) => f.ns === ns)?.name ?? null;
+                        patch(i, { flow_ns_fb: ns || null, flow_name_fb: ns ? name : null });
+                      }}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">— none (use the Instagram flow / message below) —</option>
+                      {flows.map((f) => (
+                        <option key={f.ns} value={f.ns}>{f.name || f.ns}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Pick the matching flow per platform (both lists show all your flows — ManyChat
+                    doesn&apos;t tag them by channel). Set one and it fires for everyone; set both and
+                    each platform gets its own. When a flow fires, the assets and message below are
+                    ignored for that send.
+                  </p>
                 </div>
               )}
 
-              <div className={cn(step.flow_ns && "pointer-events-none opacity-40")}>
+              <div className={cn((step.flow_ns || step.flow_ns_fb) && "pointer-events-none opacity-40")}>
               {/* Attach assets — a thumbnail multi-picker (up to MAX_STEP_ASSETS). */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -321,16 +347,32 @@ export function FollowupSequenceForm({
                 )}
               </div>
 
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor={`step-ai-${i}`}>AI Follow up</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Let the AI write this follow-up from the conversation. Leave the box below blank
+                    to let it decide, or add an instruction to steer it.
+                  </p>
+                </div>
+                <Switch
+                  id={`step-ai-${i}`}
+                  checked={step.ai_generate}
+                  onCheckedChange={(v) => patch(i, { ai_generate: v })}
+                />
+              </div>
               <div className="space-y-1">
                 <Label htmlFor={`step-text-${i}`}>
-                  Message {step.asset_keys.length ? "/ caption" : ""}
+                  {step.ai_generate
+                    ? "Instruction for the AI (optional — leave blank to let it decide)"
+                    : `Message ${step.asset_keys.length ? "/ caption" : ""}`}
                 </Label>
                 <Textarea
                   id={`step-text-${i}`}
                   rows={2}
                   value={step.text}
                   onChange={(e) => patch(i, { text: e.target.value })}
-                  placeholder="Hey {{name}}, still thinking it over? 😊"
+                  placeholder={step.ai_generate ? "e.g. gently ask if they still want to hit their goal" : "Hey {{name}}, still thinking it over? 😊"}
                 />
               </div>
               </div>
