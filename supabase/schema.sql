@@ -925,6 +925,19 @@ alter table public.conversations
 -- alter table public.conversations drop column if exists user_muted_at;
 
 -- ===========================================================================
+-- ManyChat BOT_OFF tag sync (2026-07-16)
+-- ===========================================================================
+-- Per-conversation ManyChat BOT_OFF sync. Set/cleared by the webhook from a
+-- bot_off flag (posted by the owner's BOT_OFF tag automation). While set, the bot
+-- is fully silent for this subscriber (webhook 6-bot-off gate + follow-up cron skip).
+-- Null = bot on. Fail-open on webhook reads; the cron filter is fail-closed.
+alter table public.conversations
+  add column if not exists bot_off_at timestamptz;
+
+-- Teardown:
+-- alter table public.conversations drop column if exists bot_off_at;
+
+-- ===========================================================================
 -- Lead tagging via webhook (2026-07-07)
 -- ===========================================================================
 -- `is_leads: 1` on the ManyChat webhook silently tags a contact as an engaged

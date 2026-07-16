@@ -122,9 +122,12 @@ const BodySchema = z.object({
   // entry_point:"comment" (with the comment text in `message`) so the welcome gate
   // force-fires the Welcome VM (a keyword comment IS the opener). Absent for DMs.
   entry_point: z.string().optional().nullable(),
+  // ManyChat BOT_OFF tag sync: a tag-change automation posts bot_off=true (tag added)
+  // or bot_off=false (tag removed). Sets/clears conversations.bot_off_at.
+  bot_off: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
 });
 
-/** Truthy check for the RN opt-in flag (accepts "true"/"1"/1/true). */
+/** Truthy check for a ManyChat boolean flag (rn_opt_in, bot_off; accepts "true"/"1"/1/true). */
 function isTruthyFlag(v: unknown): boolean {
   if (v === true) return true;
   if (typeof v === "number") return v === 1;
@@ -556,6 +559,22 @@ export async function POST(request: NextRequest) {
       );
   }
 
+  // 4c. ManyChat BOT_OFF tag sync. A tag-change automation posts bot_off=true (tag
+  // added) or bot_off=false (tag removed), with no message. Set/clear the per-subscriber
+  // silence flag and ack — the flag never reaches the AI. Runs before the empty-message
+  // ack so a no-message control request is handled here. When bot_off is absent (a normal
+  // message) this is skipped; a bot-off subscriber's later DMs are silenced by the
+  // 6-bot-off gate below. Fail-open: a DB error is logged, the request is still acked.
+  if (conversationId && body.bot_off != null) {
+    const off = isTruthyFlag(body.bot_off);
+    const { error: botOffErr } = await supabase
+      .from("conversations")
+      .update({ bot_off_at: off ? new Date().toISOString() : null })
+      .eq("id", conversationId);
+    if (botOffErr) console.error("[manychat-webhook] bot_off sync error", botOffErr);
+    return manychatReply("", { ai_skipped: true, reason: off ? "bot_off_set" : "bot_off_cleared" });
+  }
+
   // 4.5. Nothing to act on (no text and no media): ack without a reply.
   if (!baseText && !hasMedia) {
     return manychatReply("", { ai_skipped: true, reason: "empty_message" });
@@ -591,6 +610,14 @@ export async function POST(request: NextRequest) {
   // follow-up cron already excludes confirmed_at, so the drip is stopped too.
   if (existing?.confirmed_at) {
     return manychatReply("", { ai_skipped: true, reason: "subscribed_stopped" });
+  }
+
+  // 6-bot-off. A subscriber tagged BOT_OFF in ManyChat (synced to bot_off_at by the
+  // 4c handler) gets NO automated messages — fully silent, same as subscribed/human-
+  // takeover. The inbound is already persisted + unread-bumped (step 5) so the owner
+  // sees it to answer by hand. Fail-open: a missing column reads as not-off.
+  if (existing?.bot_off_at) {
+    return manychatReply("", { ai_skipped: true, reason: "bot_off_stopped" });
   }
 
   // 6-disqualified. A disqualified / detected-bot thread gets NO automated

@@ -105,6 +105,9 @@ export default async function ConversationDetailPage({
           {conversation.user_muted_at && (
             <Badge variant="secondary">Muted by user</Badge>
           )}
+          {conversation.bot_off_at && (
+            <Badge variant="secondary">Bot off</Badge>
+          )}
           {(conversation.extraction_attempts ?? 0) > 0 && (
             <Badge variant="destructive">
               Flagged{conversation.extraction_attempts > 1 ? ` ×${conversation.extraction_attempts}` : ""}

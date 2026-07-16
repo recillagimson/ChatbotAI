@@ -198,6 +198,9 @@ export default async function ConversationsPage({
                     {c.user_muted_at && (
                       <Badge variant="secondary">Muted by user</Badge>
                     )}
+                    {c.bot_off_at && (
+                      <Badge variant="secondary">Bot off</Badge>
+                    )}
                     {(c.extraction_attempts ?? 0) > 0 && (
                       <Badge variant="destructive">
                         Flagged{c.extraction_attempts > 1 ? ` ×${c.extraction_attempts}` : ""}

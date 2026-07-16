@@ -164,6 +164,7 @@ export interface Conversation {
   extraction_attempts: number;       // prompt-extraction detections on this thread (red "Flagged" badge when > 0)
   flagged_at: string | null;         // when the newest extraction attempt was detected
   user_muted_at: string | null;      // lead self-paused the AI via "stopmessage" (null = not muted); independent of status
+  bot_off_at: string | null;         // ManyChat BOT_OFF tag sync (null = bot on); fully silences the bot for this subscriber
   welcomed_at: string | null;
   unread_count: number;
   memory_summary: string | null;     // rolling summary of turns older than the verbatim window

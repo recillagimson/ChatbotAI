@@ -49,6 +49,7 @@ type CandidateRow = Pick<
   | "followup_count"
   | "followup_step_index"
   | "confirmed_at"
+  | "bot_off_at"
   | "rn_opt_in_at"
   | "keyword_fired"
   | "tag"
@@ -70,7 +71,7 @@ async function run() {
   const { data, error } = await supabase
     .from("conversations")
     .select(
-      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, rn_opt_in_at, keyword_fired, tag, " +
+      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, bot_off_at, rn_opt_in_at, keyword_fired, tag, " +
         "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_template, auto_followup_steps, auto_followup_loop_last, auto_followup_loop_mode, keyword_gate_enabled, manychat_api_key_enc)"
     )
     .eq("status", "active")
@@ -81,6 +82,7 @@ async function run() {
     // 2026-07-06-user-mute migration applied (an unknown column errors the whole
     // query, unlike the webhook's fail-open reads).
     .is("user_muted_at", null)
+    .is("bot_off_at", null)
     .eq("chatbots.auto_followup_enabled", true)
     .gte("last_message_at", lookbackStart)
     .limit(500);

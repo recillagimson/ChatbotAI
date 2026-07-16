@@ -72,8 +72,8 @@ export function renderTemplate(
 
 /**
  * True when SpeedSettr has stopped following up this lead — the same lead-states
- * that pause the drip (evaluateFollowup's status/confirmed/starting_later/
- * disqualified gates + the cron's user_muted_at filter), collapsed to one boolean.
+ * that pause the drip (evaluateFollowup's status/confirmed/bot_off/starting_later/
+ * disqualified gates + the cron's user_muted_at/bot_off_at filters), collapsed to one boolean.
  * Used to mirror the "stop chasing" verdict to ManyChat as a subscriber tag
  * (lib/followup-flag.ts) so a native voice-note drip can Condition-exit on it.
  *
@@ -85,12 +85,14 @@ export function followupBlocked(c: {
   status?: string | null;
   confirmed_at?: string | null;
   user_muted_at?: string | null;
+  bot_off_at?: string | null;
   tag?: string | null;
 }): boolean {
   return (
     c.status !== "active" ||
     !!c.confirmed_at ||
     !!c.user_muted_at ||
+    !!c.bot_off_at ||
     c.tag === "disqualified" ||
     c.tag === "bot" ||
     c.tag === "starting_later"
@@ -110,7 +112,7 @@ export type FollowupChatbot = Pick<
 export type FollowupConversation = Pick<
   Conversation,
   "status" | "last_message_at" | "last_followup_at" | "followup_count" | "followup_step_index" | "confirmed_at"
-> & { platform?: Platform; rn_opt_in_at?: string | null; tag?: Conversation["tag"] | null };
+> & { platform?: Platform; rn_opt_in_at?: string | null; tag?: Conversation["tag"] | null; bot_off_at?: string | null };
 
 /**
  * Resolve a chatbot's drip steps. Uses `auto_followup_steps` when present; else
@@ -154,6 +156,7 @@ export interface FollowupDecision {
     | "no_steps"
     | "not_active"
     | "confirmed"
+    | "bot_off"
     | "starting_later"
     | "disqualified"
     | "channel_unsupported"
@@ -188,6 +191,8 @@ export function evaluateFollowup(
 
   if (conversation.status !== "active") return { due: false, reason: "not_active" };
   if (conversation.confirmed_at) return { due: false, reason: "confirmed" };
+  // Silenced by a ManyChat BOT_OFF tag sync — no drip while bot_off_at is set.
+  if (conversation.bot_off_at) return { due: false, reason: "bot_off" };
   // A lead who asked to start on a future date is paused (AI replies stay on, this
   // only gates the proactive drip). Stays paused until the owner changes the tag.
   if (conversation.tag === "starting_later") return { due: false, reason: "starting_later" };
