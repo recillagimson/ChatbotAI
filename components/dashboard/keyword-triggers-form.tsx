@@ -78,6 +78,7 @@ export function KeywordTriggersForm({
   const [, startTransition] = useTransition();
   const [groups, setGroups] = useState<EditableGroup[]>(toEditable(chatbot.keyword_triggers));
   const [gateEnabled, setGateEnabled] = useState(!!chatbot.keyword_gate_enabled);
+  const [strictEnabled, setStrictEnabled] = useState(!!chatbot.keyword_strict_enabled);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -170,7 +171,7 @@ export function KeywordTriggersForm({
     const supabase = createClient();
     const { error } = await supabase
       .from("chatbots")
-      .update({ keyword_triggers: cleaned, keyword_gate_enabled: gateEnabled })
+      .update({ keyword_triggers: cleaned, keyword_gate_enabled: gateEnabled, keyword_strict_enabled: strictEnabled })
       .eq("id", chatbot.id);
     setSaving(false);
     if (error) {
@@ -218,6 +219,26 @@ export function KeywordTriggersForm({
             one enabled keyword group below.
           </p>
         )}
+      </div>
+
+      {/* Strict keyword matching: whole-message equals instead of contains. */}
+      <div className="space-y-2 rounded-md border p-3">
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium">Use strict keywords (exact message only)</span>
+          <Switch
+            checked={strictEnabled}
+            onCheckedChange={(v) => {
+              markDirty();
+              setStrictEnabled(v);
+            }}
+            aria-label="Use strict keywords (exact message only)"
+          />
+        </label>
+        <p className="text-xs text-muted-foreground">
+          When on, a keyword only triggers if it&apos;s the whole message — &quot;credit&quot; starts the
+          chat, but &quot;i have a problem with my credit&quot; does not. When off, a keyword matches
+          anywhere in the message.
+        </p>
       </div>
 
       {groups.map((g, i) => (

@@ -68,7 +68,7 @@ export async function classifyConversation(opts: {
       model: CLASSIFY_MODEL,
       system:
         "You classify a sales/DM lead's LATEST message into exactly one tag:\n" +
-        "- subscribed     = they CLEARLY converted: paid, signed up, joined, or confirmed purchasing the paid program/community. Conservative — when unsure, do NOT pick this.\n" +
+        "- subscribed     = the lead states or clearly indicates they have ALREADY COMPLETED payment or enrollment (a done action) — e.g. 'just paid', 'payment went through', 'I'm in, just signed up/joined', 'done, subscribed'. A promise, agreement, or intent is NOT enough: a bare 'yes'/'ok'/'sure'/'let's do it'/'I'll do it'/'send me the link' — especially right after the assistant sent a payment/checkout link or asked them to sign up — is INTENT to buy, so tag it 'lead', not 'subscribed'. When unsure, choose 'lead'.\n" +
         "- needs_human    = they are angry or frustrated, explicitly ask for a human/real person, or raise a complex issue the bot can't resolve.\n" +
         "- starting_later = they want to START but at a FUTURE time/date they name or imply (e.g. 'Wednesday', 'next week', 'after payday', 'in a month', 'let's do it Monday').\n" +
         "- wants_call     = they want to book or schedule a call, appointment, or demo (NOT a start date).\n" +

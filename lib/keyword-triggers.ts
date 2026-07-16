@@ -36,25 +36,58 @@ export function containsWord(normalizedText: string, keyword: string): boolean {
   return re.test(normalizedText);
 }
 
-/** True if `text` matches this group (ANY include keyword present, NO exclude keyword present). */
-export function messageMatchesGroup(text: string, group: KeywordGroup): boolean {
+/**
+ * Strip surrounding non-alphanumerics (punctuation, emoji, spaces) after normalize,
+ * keeping internal words intact. Same edge-strip the reset keyword uses
+ * (lib/reset-keyword.ts) — kept local so this module stays self-contained.
+ */
+function stripEdges(s: string): string {
+  return normalize(typeof s === "string" ? s : "").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+}
+
+/**
+ * Strict whole-message match: the message must BE the keyword (after normalize +
+ * stripping surrounding punctuation/emoji), not merely contain it. So keyword
+ * "credit" matches "Credit!" / "🔥 credit" but NOT "i have a problem with my credit"
+ * or "credit repair". Empty text or empty keyword -> false. Pure + synchronous.
+ * Mirrors matchesResetKeyword in lib/reset-keyword.ts.
+ */
+export function equalsWholeMessage(text: string, keyword: string): boolean {
+  const k = stripEdges(keyword);
+  if (!k) return false;
+  const phrase = stripEdges(text);
+  if (!phrase) return false;
+  return phrase === k;
+}
+
+/**
+ * True if `text` matches this group (ANY include keyword present, NO exclude keyword
+ * present). When `strict`, matching is whole-message "equals" (equalsWholeMessage);
+ * otherwise whole-word "contains" (containsWord). Default non-strict = legacy behavior.
+ */
+export function messageMatchesGroup(text: string, group: KeywordGroup, strict = false): boolean {
+  const includes = Array.isArray(group?.keywords) ? group.keywords : [];
+  const excludes = Array.isArray(group?.exclude) ? group.exclude : [];
+  if (strict) {
+    if (!includes.some((k) => equalsWholeMessage(text, k))) return false;
+    return !excludes.some((k) => equalsWholeMessage(text, k));
+  }
   const normalized = normalize(text);
   if (!normalized) return false;
-  const includes = Array.isArray(group?.keywords) ? group.keywords : [];
   if (!includes.some((k) => containsWord(normalized, k))) return false;
-  const excludes = Array.isArray(group?.exclude) ? group.exclude : [];
   return !excludes.some((k) => containsWord(normalized, k));
 }
 
-/** First ENABLED group (top-down) that matches `text`, or null. */
+/** First ENABLED group (top-down) that matches `text`, or null. `strict` picks the matcher. */
 export function firstMatchingGroup(
   text: string,
-  groups: KeywordGroup[] | null | undefined
+  groups: KeywordGroup[] | null | undefined,
+  strict = false
 ): KeywordGroup | null {
   const list = Array.isArray(groups) ? groups : [];
   for (const g of list) {
     if (!g?.enabled) continue;
-    if (messageMatchesGroup(text, g)) return g;
+    if (messageMatchesGroup(text, g, strict)) return g;
   }
   return null;
 }

@@ -952,6 +952,16 @@ alter table public.chatbots
 -- alter table public.chatbots drop column if exists keyword_gate_enabled;
 
 -- ===========================================================================
+-- Per-chatbot toggle: keyword match requires the WHOLE message to equal a keyword
+-- (strict), instead of the default whole-word "contains". Enforced in the webhook
+-- (gate 6-gate). Default false; fail-open (missing column = contains-match).
+alter table public.chatbots
+  add column if not exists keyword_strict_enabled boolean not null default false;
+
+-- Teardown:
+-- alter table public.chatbots drop column if exists keyword_strict_enabled;
+
+-- ===========================================================================
 -- ManyChat stop-follow-up flag bridge (2026-07-15)
 -- ===========================================================================
 -- Per-chatbot opt-in for the ManyChat "stop follow-up" flag feature. When true,

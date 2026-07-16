@@ -62,6 +62,7 @@ export interface Chatbot {
   ai_media_enabled: boolean;              // allow the live AI to emit [[SEND_ASSET]] directives
   keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)
   keyword_gate_enabled: boolean;          // ON = reply ONLY to DMs matching a keyword group; else silent
+  keyword_strict_enabled: boolean;        // ON = keyword match requires the whole message to equal the keyword (else contains-match)
   followup_flag_enabled: boolean;         // ON = mirror stop-follow-up state to ManyChat tag `ss_no_followup`
   welcome_enabled: boolean;
   welcome_flow_ns: string | null;

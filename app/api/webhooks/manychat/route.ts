@@ -624,7 +624,7 @@ export async function POST(request: NextRequest) {
   // a gated message in the inbox to answer manually — only the AUTO reply is
   // withheld, like human-takeover.
   const keywordGroup = baseText
-    ? firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [])
+    ? firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [], chatbot.keyword_strict_enabled ?? false)
     : null;
   // Engaged = matched a keyword before (keyword_fired non-empty). Lead-tagging via
   // is_leads is PARKED (see the note where the branch was), so is_lead is no longer
