@@ -40,6 +40,7 @@ import {
 import { sanitizeReply } from "@/lib/sanitize";
 import { classifyConversation } from "@/lib/conversation-classify";
 import { shouldSendWelcome, coerceKeywords } from "@/lib/welcome";
+import { matchesResetKeyword } from "@/lib/reset-keyword";
 import { screenDisqualify } from "@/lib/conversation-screen";
 import { syncNoFollowupFlag } from "@/lib/followup-flag";
 import { followupBlocked } from "@/lib/followup";
@@ -365,9 +366,15 @@ export async function POST(request: NextRequest) {
   // share empty/identical text). Control words (stopmessage/resumemessage) are
   // ALSO exempt: they toggle state, so a stop→resume→stop within 30s must not
   // have the 3rd command swallowed as a "duplicate" and leave the lead in the
-  // wrong state. Trade-off: a deliberate identical re-send within 30s won't
-  // appear in the owner's inbox — the reply would be the same.
-  if (!hasMedia && baseText && !detectUserControl(baseText)) {
+  // wrong state. The reset keyword is exempt for the same reason (a re-reset within
+  // 30s must reset, not be absorbed). Trade-off: a deliberate identical re-send
+  // within 30s won't appear in the owner's inbox — the reply would be the same.
+  if (
+    !hasMedia &&
+    baseText &&
+    !detectUserControl(baseText) &&
+    !matchesResetKeyword(baseText, process.env.RESET_KEYWORD)
+  ) {
     const dup = await checkDuplicate(chatbot.id, body.subscriber_id, baseText);
     if (dup.isDuplicate) {
       return manychatReply("", { ai_skipped: true, reason: "duplicate" });
@@ -459,6 +466,77 @@ export async function POST(request: NextRequest) {
         ...(muted ? {} : { last_followup_at: null }),
       })
       .eq("id", existing.id);
+  }
+
+  // Reset keyword (testing tool). A universal, admin-set control word (RESET_KEYWORD
+  // env var; blank/unset = feature OFF) that wipes THIS conversation back to a
+  // brand-new state so the full funnel (welcome VM, keyword triggers, follow-ups) can
+  // be re-tested. Runs right after the step-4 upsert but BEFORE the inbound is recorded
+  // (step 5), BEFORE the "4a" RN opt-in below, and BEFORE every silencing gate
+  // (human-takeover/subscribed/disqualified/keyword-gate/mute) — so it can recover a
+  // stuck (subscribed/muted/paused) thread and leaves no trace of the reset word.
+  // Scoped to the sender's OWN conversation. Universal admin secret, not a tenant
+  // literal (like the stop/resume words). Fail-open: on any error it returns an honest
+  // "couldn't reset" (still ai_skipped, so the magic word never reaches the AI).
+  if (conversationId && matchesResetKeyword(baseText, process.env.RESET_KEYWORD)) {
+    const RESET_ACK = "Conversation reset. Send your opener to start fresh.";
+    const RESET_FAILED = "Couldn't reset the conversation, please try again.";
+    try {
+      // Wipe the transcript so the next inbound is a true first contact.
+      const { error: wipeErr } = await supabase
+        .from("messages")
+        .delete()
+        .eq("conversation_id", conversationId);
+      // Reset the row to fresh-conversation defaults (identity fields kept).
+      const { error: rowErr } = await supabase
+        .from("conversations")
+        .update({
+          confirmed_at: null,
+          confirmed_by: null,
+          tag: "lead",
+          welcomed_at: null,
+          user_muted_at: null,
+          status: "active",
+          keyword_fired: [],
+          followup_step_index: 0,
+          followup_count: 0,
+          last_followup_at: null,
+          start_on: null,
+          start_note: null,
+          memory_summary: null,
+          memory_summary_at: null,
+          extraction_attempts: 0,
+          flagged_at: null,
+          reply_claimed_for: null,
+          rn_opt_in_at: null,
+          rn_topic_id: null,
+          unread_count: 0,
+        })
+        .eq("id", conversationId);
+      // supabase-js resolves a DB failure as { error } instead of throwing, so an RLS
+      // deny / transient error would slip past the catch and return a FALSE "reset done"
+      // on the exact stuck thread this tool exists to recover, with no log. Check both
+      // and surface the failure honestly.
+      if (wipeErr || rowErr) {
+        console.error("[manychat-webhook] reset gate DB error", wipeErr ?? rowErr);
+        return manychatReply(sanitizeReply(RESET_FAILED), { ai_skipped: true, reason: "reset_failed" });
+      }
+      // Best-effort ack — NOT persisted, so the thread stays empty. On push channels
+      // this is the visible confirmation; the response body below covers other channels.
+      if (apiKey && canPushPlatform(platform)) {
+        await sendManychatMessage({
+          subscriberId: body.subscriber_id,
+          text: RESET_ACK,
+          apiKey,
+          platform,
+        }).catch((err) => console.error("[manychat-webhook] reset ack push failed", err));
+      }
+    } catch (err) {
+      // Any unexpected throw → honest failure, not a false success.
+      console.error("[manychat-webhook] reset gate error", err);
+      return manychatReply(sanitizeReply(RESET_FAILED), { ai_skipped: true, reason: "reset_failed" });
+    }
+    return manychatReply(sanitizeReply(RESET_ACK), { ai_skipped: true, reason: "conversation_reset" });
   }
 
   // 4a. Recurring Notifications opt-in (Phase 6): if this inbound carries the RN

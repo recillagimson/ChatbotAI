@@ -210,6 +210,36 @@ A SaaS platform (**SpeedSettr** — www.speedsettr.com) that auto-replies to Ins
     conversations created between deploy and the day a tenant enables would otherwise still read
     NULL and fire a first-contact greeting at an ongoing lead the next time they said "hey".
 
+26. **Reset-conversation keyword (`RESET_KEYWORD`) — a universal admin testing secret.** A
+    magic word set **only** in the `RESET_KEYWORD` env var (blank/unset = **feature OFF**; it is
+    off by default) that, when a contact texts it as their **whole message**, wipes **their own**
+    conversation back to a brand-new state so the full funnel (welcome VM, keyword triggers,
+    follow-ups) can be re-tested without hand-editing the DB or inbox. It is **not** a per-tenant
+    literal and there is **no column and no settings UI** — it is one universal env var shared by
+    every chatbot (like the stop/resume control words), so **never hardcode a client's word** into
+    it. Match is the pure, whole-message `matchesResetKeyword(text, process.env.RESET_KEYWORD)` in
+    [lib/reset-keyword.ts](lib/reset-keyword.ts) — normalized (lowercase + collapsed whitespace) with
+    surrounding punctuation/emoji stripped, so "resetnow99" / "RESETNOW99!" / "🔄 resetnow99 🔄"
+    reset but "can you reset my score" does **not** (tested in `scripts/test-reset-keyword.ts`, 14
+    cases). The **reset gate** in [route.ts](app/api/webhooks/manychat/route.ts) sits right after the
+    step-4 conversation upsert but **BEFORE** the inbound is recorded (step 5), the "4a" RN opt-in,
+    and **every silencing gate** (human-takeover/subscribed/disqualified/keyword-gate/mute) — so it
+    can recover a **stuck** (falsely-subscribed / muted / paused) thread, which is its main use. It
+    `delete`s the conversation's messages (transcript wipe) and `update`s the row to fresh-conversation
+    defaults (`confirmed_at`, `tag:"lead"`, `welcomed_at`, `user_muted_at`, `status:"active"`,
+    `keyword_fired:[]`, all follow-up counters, memory summary, `reply_claimed_for`, RN fields, etc.),
+    pushes a best-effort **un-persisted** ack (so the thread stays empty), and returns
+    `manychatReply(..., { ai_skipped: true, reason: "conversation_reset" })` — `ai_skipped` so the
+    magic word itself **never reaches the AI**. The reset word is **exempt from the step-3c Redis
+    dedup** (like the control words) so a re-reset within 30s actually resets instead of being
+    swallowed. **Fail-open + honest:** supabase-js resolves a DB failure as `{ error }` (it does NOT
+    throw), so the gate checks **both** the delete and update errors and, on either — or on any thrown
+    error — logs and returns `reason: "reset_failed"` (still `ai_skipped`), **never a false
+    "reset done"** on the exact stuck thread the tool exists to recover. **The transcript wipe is
+    irreversible** — that is why the value should be obscure while testing and left **blank in
+    production**. **Owner action: set `RESET_KEYWORD` in Vercel env only while testing; leave it
+    blank/unset in production.** No migration, no column, no deploy step beyond the env var.
+
 ## How to verify the local setup still works (resume sanity check)
 
 1. `npm run dev` in the project folder.
