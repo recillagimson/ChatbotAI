@@ -8,6 +8,7 @@ import { WelcomeForm } from "@/components/dashboard/welcome-form";
 import { KeywordTriggersForm } from "@/components/dashboard/keyword-triggers-form";
 import { FollowupAssetManager } from "@/components/dashboard/followup-asset-manager";
 import { ChatbotEditForm } from "@/components/dashboard/chatbot-edit-form";
+import { BotActiveToggle } from "@/components/dashboard/bot-active-toggle";
 import { ManychatKeyField } from "@/components/dashboard/manychat-key-field";
 import { WebhookSecretField } from "@/components/dashboard/webhook-secret-field";
 import { ChatbotTabsBar } from "@/components/dashboard/chatbot-tabs-bar";
@@ -132,12 +133,7 @@ export default async function ChatbotDetailPage({
               <CardDescription>A quick look at how this chatbot is wired up.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">AI replies</span>
-                <Badge variant={chatbot.is_active ? "success" : "secondary"}>
-                  {chatbot.is_active ? "Active" : "Paused"}
-                </Badge>
-              </div>
+              <BotActiveToggle chatbotId={chatbot.id} initialActive={chatbot.is_active} />
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Instagram</span>
                 <span className="font-medium">
