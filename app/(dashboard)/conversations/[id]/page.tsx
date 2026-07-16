@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { requireSuperadmin } from "@/lib/admin";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ export default async function ConversationDetailPage({
   const { id } = await params;
   const supabase = await createClient();
   const user = await getCurrentUser();
+  const isAdmin = !!(await requireSuperadmin());
 
   const { data: conversation } = await supabase
     .from("conversations")
@@ -136,6 +138,7 @@ export default async function ConversationDetailPage({
           currentTag={tagOf(conversation.tag)}
           currentStartOn={conversation.start_on ?? null}
           userMutedAt={conversation.user_muted_at ?? null}
+          isAdmin={isAdmin}
         />
       </div>
 

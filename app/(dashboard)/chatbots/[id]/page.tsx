@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FollowupSequenceForm } from "@/components/dashboard/followup-sequence-form";
+import { WelcomeForm } from "@/components/dashboard/welcome-form";
 import { KeywordTriggersForm } from "@/components/dashboard/keyword-triggers-form";
 import { FollowupAssetManager } from "@/components/dashboard/followup-asset-manager";
 import { ChatbotEditForm } from "@/components/dashboard/chatbot-edit-form";
@@ -200,24 +201,38 @@ export default async function ChatbotDetailPage({
 
       {/* ── Follow-ups ── */}
       {tab === "followups" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Auto follow-up</CardTitle>
-            <CardDescription>
-              A timed sequence that re-engages contacts who stop replying, escalating with
-              media until they convert.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {FOLLOWUP_ENABLED ? (
-              <FollowupSequenceForm chatbot={safeChatbot} assets={assets} />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Auto follow-up is currently disabled for this deployment.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Welcome message</CardTitle>
+              <CardDescription>
+                Greet brand-new contacts with a voice/video note when they open with a greeting
+                or keyword — but let the AI read and answer openers that carry an image or real detail.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <WelcomeForm chatbot={safeChatbot} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Auto follow-up</CardTitle>
+              <CardDescription>
+                A timed sequence that re-engages contacts who stop replying, escalating with
+                media until they convert.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {FOLLOWUP_ENABLED ? (
+                <FollowupSequenceForm chatbot={safeChatbot} assets={assets} />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Auto follow-up is currently disabled for this deployment.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* ── Media ── */}

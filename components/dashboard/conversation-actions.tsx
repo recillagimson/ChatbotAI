@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Pause, Play, CheckCircle2, RotateCcw } from "lucide-react";
+import { Pause, Play, CheckCircle2, RotateCcw, Send } from "lucide-react";
 import {
   CONVERSATION_TAGS,
   TAG_LABEL,
@@ -17,12 +17,14 @@ export function ConversationActions({
   currentTag,
   currentStartOn = null,
   userMutedAt = null,
+  isAdmin = false,
 }: {
   conversationId: string;
   currentStatus: string;
   currentTag: ConversationTag;
   currentStartOn?: string | null;
   userMutedAt?: string | null;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -36,6 +38,9 @@ export function ConversationActions({
   // auto replies without waiting for the lead to text "resumemessage".
   const [muted, setMuted] = useState(!!userMutedAt);
 
+  // ADMIN-ONLY test button result (e.g. "Follow-up sent."). Null = idle/hidden.
+  const [testResult, setTestResult] = useState<string | null>(null);
+
   // subscribed ⇔ confirmed_at set: the tag and the conversion state move together.
   const confirmed = tag === "subscribed";
 
@@ -43,6 +48,40 @@ export function ConversationActions({
   // so we POST to a thin route). Fire-and-forget — a failure never affects the UI.
   function fireFollowupFlagSync() {
     fetch(`/api/conversations/${conversationId}/followup-flag`, { method: "POST" }).catch(() => {});
+  }
+
+  // ADMIN-ONLY: fire the conversation's NEXT follow-up step right now (bypassing the
+  // silence-delay + tag gates) to test the real ManyChat flow/media delivery. The
+  // endpoint (requireSuperadmin) is the real gate; this button only shows for admins.
+  function sendTestFollowup() {
+    setTestResult(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch(
+          `/api/conversations/${conversationId}/test-followup`,
+          { method: "POST" }
+        );
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          sent?: boolean;
+          reason?: string;
+        };
+        if (res.ok && data.ok && data.sent) {
+          setTestResult("Follow-up sent.");
+          router.refresh();
+        } else if (res.ok && data.ok) {
+          setTestResult("Skipped — lead is muted/paused or the step has nothing to send.");
+        } else if (data.reason === "no_steps") {
+          setTestResult("No follow-up steps configured.");
+        } else if (data.reason === "no_subscriber") {
+          setTestResult("No ManyChat subscriber on this conversation.");
+        } else {
+          setTestResult("Couldn't send — check the ManyChat connection.");
+        }
+      } catch {
+        setTestResult("Couldn't send — network error.");
+      }
+    });
   }
 
   function toggle() {
@@ -197,6 +236,21 @@ export function ConversationActions({
           </>
         )}
       </Button>
+      {isAdmin && (
+        <>
+          <Button
+            onClick={sendTestFollowup}
+            disabled={isPending}
+            variant="secondary"
+            size="sm"
+          >
+            <Send className="h-4 w-4 mr-2" /> Send follow-up now
+          </Button>
+          {testResult && (
+            <span className="text-xs text-muted-foreground">{testResult}</span>
+          )}
+        </>
+      )}
     </div>
   );
 }

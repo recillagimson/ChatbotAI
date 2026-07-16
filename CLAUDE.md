@@ -163,6 +163,53 @@ A SaaS platform (**SpeedSettr** — www.speedsettr.com) that auto-replies to Ins
     `scripts/test-followup.ts` (flow-step passthrough) + `parseManychatFlows` cases in
     `scripts/test-manychat-retry.ts`.
 
+25. **Welcome VM is SpeedSettr-owned, not a ManyChat Condition.** The first-message
+    "greet vs analyze" decision lives in the webhook gate **6-welcome**, not in ManyChat.
+    Old broken behaviour: ManyChat's Default Reply fired the welcome voicenote on first
+    contact via a `VN Welcome is unknown` Condition — *before* SpeedSettr saw the message —
+    so a lead who opened with a credit-score screenshot or real detail got a canned greeting
+    instead of an answer (ManyChat can't classify text or read an image). Now: for an
+    opted-in bot (`chatbots.welcome_enabled` **and** `welcome_flow_ns`), a brand-new contact
+    whose opener is a bare greeting or one of `chatbots.welcome_keywords` (and carries **no
+    media**) — or a comment-campaign opt-in (`entry_point:"comment"` in the webhook body) —
+    triggers the native ManyChat Welcome VM flow via `sendManychatFlow` and **skips the AI**;
+    any substantive opener (image/detail/question) falls through to the AI, which reads it.
+    The decision is the pure, rules-first (no AI call) classifier `shouldSendWelcome()` in
+    [lib/welcome.ts](lib/welcome.ts) — exact normalized match against a built-in greeting list
+    ∪ the bot's keywords, so "hey" welcomes but "hey my score is 649" does not (tested in
+    `scripts/test-welcome.ts`). Rule order matters: not-configured → already-welcomed →
+    comment-force → has-media → is-opener. **`conversations.welcomed_at` is the single source
+    of truth**, set the moment the decision resolves — VM sent **OR** first message went to
+    the AI — which is the fix for the old `VN Welcome` bug (that flag was only set when the VM
+    sent, so a substantive opener left it unset and re-greeted later). The gate sits below the
+    human-takeover/subscribed/disqualified/keyword-gate/mute floors and above rate-limit/
+    trivial-ack/keyword-triggers/AI, so a first-contact "hey" can't be swallowed by the
+    trivial-ack and a muted/gated contact is never greeted. It is **opted-in-only** (every
+    `welcomed_at` write is inside the `welcome_enabled && welcome_flow_ns` guard — an
+    un-set-up bot is provably unaffected), **race-safe** (atomic `welcomed_at IS NULL` claim →
+    a first-message burst fires the VM at most once; a real DB error on the claim throws so the
+    catch falls through to the AI rather than silently dropping the message), and **fail-open**
+    (any gate error → normal AI path). The flow trigger runs in `after()` so the webhook still
+    fast-acks (same push-channel fast-ack + `unstable_after` pattern as #9). Voice **cannot**
+    be pushed via sendContent (image-only on IG — see #24), so the Welcome VM MUST be a native
+    ManyChat flow. Owner ManyChat setup: Default Reply → **always** the External Request;
+    comment automation → External Request with the comment text in `message` +
+    `entry_point:"comment"`; keep one single-send Welcome VM flow (no internal Smart Delays —
+    SpeedSettr owns timing); delete the old `VN Welcome` / `comment_campaign` Conditions. UI:
+    [welcome-form.tsx](components/dashboard/welcome-form.tsx) on the chatbot Follow-ups tab
+    (reuses the `manychat-flows` dropdown from #24).
+    **Owner action: apply `supabase/migrations/2026-07-15-welcome-vm.sql` BEFORE deploying** —
+    it adds the `chatbots.welcome_*` columns and creates `conversations.welcomed_at` **inside a
+    guarded `do $$` block that backfills every pre-existing conversation to `now()`**. That
+    backfill is load-bearing: without it every existing conversation reads as `welcomed_at IS
+    NULL` = "brand new". Because `welcomed_at IS NULL` = "brand new", there are **TWO** backfills
+    and both are required: (1) the migration resolves rows predating the column; (2) the
+    settings form ([welcome-form.tsx](components/dashboard/welcome-form.tsx)) resolves the bot's
+    remaining `NULL` rows **at the OFF→ON enable transition, before flipping `welcome_enabled`**
+    — because the migration runs at deploy while the feature is off for every bot, so
+    conversations created between deploy and the day a tenant enables would otherwise still read
+    NULL and fire a first-contact greeting at an ongoing lead the next time they said "hey".
+
 ## How to verify the local setup still works (resume sanity check)
 
 1. `npm run dev` in the project folder.

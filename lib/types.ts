@@ -63,6 +63,10 @@ export interface Chatbot {
   keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)
   keyword_gate_enabled: boolean;          // ON = reply ONLY to DMs matching a keyword group; else silent
   followup_flag_enabled: boolean;         // ON = mirror stop-follow-up state to ManyChat tag `ss_no_followup`
+  welcome_enabled: boolean;
+  welcome_flow_ns: string | null;
+  welcome_flow_name: string | null;
+  welcome_keywords: string[];
   created_at: string;
 }
 
@@ -159,6 +163,7 @@ export interface Conversation {
   extraction_attempts: number;       // prompt-extraction detections on this thread (red "Flagged" badge when > 0)
   flagged_at: string | null;         // when the newest extraction attempt was detected
   user_muted_at: string | null;      // lead self-paused the AI via "stopmessage" (null = not muted); independent of status
+  welcomed_at: string | null;
   unread_count: number;
   memory_summary: string | null;     // rolling summary of turns older than the verbatim window
   memory_summary_at: string | null;  // created_at watermark of the newest message folded into the summary

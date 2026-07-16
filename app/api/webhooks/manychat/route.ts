@@ -6,6 +6,7 @@ import {
   sendManychatMessage,
   sendManychatMessagePaced,
   sendManychatMedia,
+  sendManychatFlow,
   pacingEnabled,
   resolveManychatApiKey,
   ManychatKeyError,
@@ -38,6 +39,7 @@ import {
 } from "@/lib/user-controls";
 import { sanitizeReply } from "@/lib/sanitize";
 import { classifyConversation } from "@/lib/conversation-classify";
+import { shouldSendWelcome, coerceKeywords } from "@/lib/welcome";
 import { screenDisqualify } from "@/lib/conversation-screen";
 import { syncNoFollowupFlag } from "@/lib/followup-flag";
 import { followupBlocked } from "@/lib/followup";
@@ -115,6 +117,10 @@ const BodySchema = z.object({
   // a stray is_leads=1 can no longer silently swallow a real DM. To un-park, restore
   // the branch from git history and re-consult is_lead in the keyword gate (#19).
   is_leads: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
+  // Entry point for this inbound. The comment-campaign automation sends
+  // entry_point:"comment" (with the comment text in `message`) so the welcome gate
+  // force-fires the Welcome VM (a keyword comment IS the opener). Absent for DMs.
+  entry_point: z.string().optional().nullable(),
 });
 
 /** Truthy check for the RN opt-in flag (accepts "true"/"1"/1/true). */
@@ -598,6 +604,97 @@ export async function POST(request: NextRequest) {
   // "stopmessage" while already muted also lands here (no duplicate confirmation).
   if (isMuted) {
     return manychatReply("", { ai_skipped: true, reason: "user_muted" });
+  }
+
+  // 6-welcome. First-contact greeting decision — opted-in bots only, and placed
+  // below the subscribed/disqualified/keyword-gate/mute floors so we never greet
+  // those. If the opener is a bare greeting/keyword (or a comment-campaign opt-in)
+  // fire the native ManyChat Welcome VM flow and skip the AI; a substantive opener
+  // (image/detail/question) falls through to the AI, which reads it. welcomed_at is
+  // set either way, making this a one-time decision per contact (the fix for the old
+  // ManyChat behaviour that re-greeted whenever the VM wasn't sent). The flow trigger
+  // runs in after() so the webhook still fast-acks. Fail-open: any error → AI path.
+  if (chatbot.welcome_enabled && chatbot.welcome_flow_ns) {
+    try {
+      const sendWelcome = shouldSendWelcome({
+        welcomedAt: existing?.welcomed_at ?? null,
+        entryPoint: body.entry_point ?? null,
+        hasMedia,
+        text: baseText,
+        chatbot: {
+          welcome_enabled: chatbot.welcome_enabled,
+          welcome_flow_ns: chatbot.welcome_flow_ns,
+          welcome_keywords: coerceKeywords(chatbot.welcome_keywords),
+        },
+      });
+      if (sendWelcome && apiKey) {
+        // Race-safe claim so a first-message burst fires the VM at most once.
+        const { data: claimed, error: claimError } = await supabase
+          .from("conversations")
+          .update({ welcomed_at: new Date().toISOString() })
+          .eq("id", conversationId!)
+          .is("welcomed_at", null)
+          .select("id");
+        // supabase-js resolves a DB failure as { data: null, error } instead of
+        // throwing, which would look EXACTLY like a lost claim below and silently
+        // drop this message (no VM, no AI). Throw so the catch falls through to the
+        // normal AI path — fail-open.
+        if (claimError) throw new Error(`welcome claim failed: ${claimError.message}`);
+        if (claimed?.length) {
+          await supabase.from("messages").insert({
+            conversation_id: conversationId!,
+            role: "assistant",
+            content: "(sent welcome voice)",
+            ai_generated: false,
+            tokens_used: 0,
+          });
+          // Engagement bridge for keyword-gated bots. The welcome path returns before
+          // 6c (the only place keyword_fired is written), so a welcomed contact whose
+          // opener matched a keyword group would otherwise be stranded: their next
+          // non-keyword message is silenced at 6-gate and the follow-up cron skips them
+          // (both key off keyword_fired). Record the match here, mirroring 6c's markFired,
+          // so a welcomed lead stays "engaged". Best-effort: a lost update just leaves
+          // them gated — the same failure mode 6c already tolerates. Only the welcome-FIRED
+          // path needs this; the substantive fall-through still reaches 6c normally.
+          if (keywordGroup) {
+            const firedIds: string[] = Array.isArray(existing?.keyword_fired)
+              ? (existing!.keyword_fired as string[])
+              : [];
+            if (!firedIds.includes(keywordGroup.id)) {
+              await supabase
+                .from("conversations")
+                .update({ keyword_fired: Array.from(new Set([...firedIds, keywordGroup.id])) })
+                .eq("id", conversationId!)
+                .then(() => {}, () => {});
+            }
+          }
+          const welcomeFlowNs = chatbot.welcome_flow_ns;
+          const welcomeSubId = body.subscriber_id;
+          const welcomeKey = apiKey;
+          after(() =>
+            sendManychatFlow({ subscriberId: welcomeSubId, flowNs: welcomeFlowNs, apiKey: welcomeKey }).catch(
+              (err) => console.error("[manychat-webhook] welcome flow send failed", err)
+            )
+          );
+          return manychatReply("", { ai_skipped: true, reason: "welcome_sent" });
+        }
+        // Lost the claim → another run already welcomed. No AI, no second VM.
+        return manychatReply("", { ai_skipped: true, reason: "welcome_duplicate" });
+      }
+      if (!sendWelcome && !existing?.welcomed_at) {
+        // First contact, but substantive / non-opener → mark the decision resolved so
+        // a later greeting can't re-trigger the VM, then fall through to the AI.
+        await supabase
+          .from("conversations")
+          .update({ welcomed_at: new Date().toISOString() })
+          .eq("id", conversationId!)
+          .is("welcomed_at", null);
+      }
+      // sendWelcome && !apiKey → can't trigger the flow; fall through to the AI
+      // WITHOUT marking welcomed_at, so a later turn with a working key can still greet.
+    } catch (err) {
+      console.error("[manychat-webhook] welcome gate error (falling through to AI)", err);
+    }
   }
 
   // 6a. Rate limit per (chatbot, subscriber). Silent drop on flood — no push,
