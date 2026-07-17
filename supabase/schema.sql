@@ -939,6 +939,20 @@ alter table public.conversations
 -- alter table public.conversations drop column if exists bot_off_at;
 
 -- ===========================================================================
+-- ManyChat BOT_ON tag sync (2026-07-17)
+-- ===========================================================================
+-- Per-conversation manual override, the inverse of BOT_OFF. Set by the webhook from
+-- a bot_on flag (the owner's BOT_ON tag automation). While set, the contact is treated
+-- as "engaged" so the keyword-only gate (keyword_gate_enabled) is bypassed and the bot
+-- replies to them regardless of whether their message matches a keyword. Null = no
+-- override (normal keyword-gate behavior). Fail-open on webhook reads.
+alter table public.conversations
+  add column if not exists bot_forced_on_at timestamptz;
+
+-- Teardown:
+-- alter table public.conversations drop column if exists bot_forced_on_at;
+
+-- ===========================================================================
 -- Lead tagging via webhook (2026-07-07)
 -- ===========================================================================
 -- `is_leads: 1` on the ManyChat webhook silently tags a contact as an engaged

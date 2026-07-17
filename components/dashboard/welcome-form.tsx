@@ -84,7 +84,18 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
     // Resolve them BEFORE flipping the flag, so no webhook can fire a welcome at an
     // ongoing lead mid-save. If this fails, do NOT enable — leaving the flag off is the
     // safe direction. Idempotent + tenant-scoped (chatbot_id, and RLS scopes to the owner).
-    if (enabled && !chatbot.welcome_enabled) {
+    //
+    // The SAME hazard reopens when "use my Keyword triggers" is turned ON while the
+    // welcome is already live: it widens what counts as a first-contact opener from an
+    // exact greeting/keyword to any message CONTAINING a keyword. An ongoing lead whose
+    // welcomed_at is still NULL only because they have so far only ever hit an upstream
+    // gate (mute / disqualified / subscribed / human-takeover — all return before the
+    // welcome decision) could then get a first-contact VM from an ordinary keyword-bearing
+    // message. Run the same backfill on that transition too.
+    const welcomeTurningOn = enabled && !chatbot.welcome_enabled;
+    const syncTurningOn =
+      enabled && useKeywordTriggers && !chatbot.welcome_use_keyword_triggers;
+    if (welcomeTurningOn || syncTurningOn) {
       const { error: backfillError } = await supabase
         .from("conversations")
         .update({ welcomed_at: new Date().toISOString() })
@@ -194,8 +205,11 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
               <p className="text-sm text-muted-foreground">
                 When on, a first message that matches any keyword in your{" "}
                 <span className="font-medium">Keywords</span> tab also fires the welcome — so you
-                don&rsquo;t keep a separate list here. Uses the same matching as the Keywords tab
-                (which can match a keyword anywhere in the message, not just an exact opener).
+                don&rsquo;t keep a separate list here. It uses the same matching as the Keywords
+                tab, which looks for a keyword <span className="font-medium">anywhere</span> in the
+                message — so even a longer, detailed first message that mentions a keyword gets the
+                welcome VM instead of an AI reply. If that keyword also has its own first-reply set
+                on the Keywords tab, the welcome VM takes its place for that contact.
               </p>
             </div>
             <Switch

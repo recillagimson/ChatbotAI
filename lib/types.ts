@@ -181,6 +181,7 @@ export interface Conversation {
   flagged_at: string | null;         // when the newest extraction attempt was detected
   user_muted_at: string | null;      // lead self-paused the AI via "stopmessage" (null = not muted); independent of status
   bot_off_at: string | null;         // ManyChat BOT_OFF tag sync (null = bot on); fully silences the bot for this subscriber
+  bot_forced_on_at: string | null;   // ManyChat BOT_ON tag sync (null = no override); force-engages the contact so the keyword gate is bypassed
   welcomed_at: string | null;
   unread_count: number;
   memory_summary: string | null;     // rolling summary of turns older than the verbatim window

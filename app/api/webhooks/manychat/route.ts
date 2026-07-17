@@ -544,21 +544,40 @@ export async function POST(request: NextRequest) {
   // checked FIRST so an explicit resume wins even if a stray `bot_off` field rides along
   // in the same payload (a cloned tag-sync template can carry both). bot_on=true HANDS
   // THE CONVERSATION BACK TO THE BOT: clear the OWNER pauses — bot_off_at (BOT_OFF tag)
-  // and status ai_paused→active (dashboard human-takeover) — so the bot resumes. It
-  // deliberately does NOT clear the lead's own user_muted_at ("stopmessage" opt-out; the
-  // lead re-enables with "resumemessage"), nor business/safety states (subscribed
-  // confirmed_at, disqualified/flagged) — so BOT_ON never re-engages a converted customer,
-  // a detected bot, or someone who opted out. (status→active would also clear a
-  // hypothetical extraction auto-pause, dormant today since AUTO_PAUSE_ON_EXTRACTION is
-  // false — give that its own marker if it's ever enabled.) reply_claimed_for is left
-  // untouched so a concurrent in-flight burst reply's single-flight claim isn't dropped.
-  // Runs before the empty-message ack. Fail-open: a DB error is logged, still acked.
+  // and status ai_paused→active (dashboard human-takeover) — AND stamp bot_forced_on_at,
+  // a persistent manual override that force-engages the contact so the keyword-only gate
+  // (6-gate) is bypassed: the bot then replies to this contact regardless of whether
+  // their message matches a keyword. This is the "ignore the keywords I set" behavior —
+  // a keyword-gated bot would otherwise silence a never-matched contact forever. The
+  // reply lands on the contact's NEXT inbound (this tag-sync request carries no message),
+  // symmetric with how BOT_OFF silences the next message. It deliberately does NOT clear
+  // the lead's own user_muted_at ("stopmessage" opt-out; the lead re-enables with
+  // "resumemessage"), nor business/safety states (subscribed confirmed_at,
+  // disqualified/flagged) — so BOT_ON never re-engages a converted customer, a detected
+  // bot, or someone who opted out; those gates (6-subscribed/6-disqualified) sit above
+  // 6-gate and still silence. (status→active would also clear a hypothetical extraction
+  // auto-pause, dormant today since AUTO_PAUSE_ON_EXTRACTION is false — give that its own
+  // marker if it's ever enabled.) reply_claimed_for is left untouched so a concurrent
+  // in-flight burst reply's single-flight claim isn't dropped. Runs before the
+  // empty-message ack. Fail-open: a DB error is logged, still acked.
   if (conversationId && isTruthyFlag(body.bot_on)) {
+    // TWO writes on purpose. PostgREST rejects an UPDATE that references an un-migrated
+    // column ATOMICALLY, so folding bot_forced_on_at into the resume update would ALSO
+    // drop bot_off_at:null + status:active in any deploy-before-migrate window — silently
+    // regressing BOT_ON's pre-existing resume. Do the resume first (always-present columns,
+    // order-independent), then stamp the override separately + best-effort so a missing
+    // column fails THIS write alone and leaves the resume standing (same fail-soft idiom
+    // as the keyword_fired bridge / markFired below).
     const { error: botOnErr } = await supabase
       .from("conversations")
       .update({ bot_off_at: null, status: "active" })
       .eq("id", conversationId);
     if (botOnErr) console.error("[manychat-webhook] bot_on sync error", botOnErr);
+    await supabase
+      .from("conversations")
+      .update({ bot_forced_on_at: new Date().toISOString() })
+      .eq("id", conversationId)
+      .then(() => {}, () => {});
     // Resuming may re-allow follow-ups — reconcile the ManyChat no-followup flag.
     after(() => syncNoFollowupFlag(supabase, conversationId!));
     return manychatReply("", { ai_skipped: true, reason: "bot_on_set" });
@@ -663,7 +682,11 @@ export async function POST(request: NextRequest) {
   // consulted here — engagement is keyword-only.
   const alreadyEngaged =
     Array.isArray(existing?.keyword_fired) && existing!.keyword_fired.length > 0;
-  if (keywordGateBlocks(chatbot.keyword_gate_enabled ?? false, !!keywordGroup, alreadyEngaged)) {
+  // BOT_ON manual override (4b-on): the owner tagged this contact BOT_ON to force the bot
+  // to engage them regardless of the keyword gate — treat them as engaged so a
+  // never-matched contact still gets a reply. Fail-open: a missing column reads as off.
+  const forcedOn = !!existing?.bot_forced_on_at;
+  if (keywordGateBlocks(chatbot.keyword_gate_enabled ?? false, !!keywordGroup, alreadyEngaged || forcedOn)) {
     return manychatReply("", { ai_skipped: true, reason: "keyword_gate_blocked" });
   }
 
