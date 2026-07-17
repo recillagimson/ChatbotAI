@@ -127,9 +127,14 @@ const BodySchema = z.object({
   // ManyChat BOT_OFF tag sync: a tag-change automation posts bot_off=true (tag added)
   // or bot_off=false (tag removed). Sets/clears conversations.bot_off_at.
   bot_off: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
+  // ManyChat BOT_ON tag sync (the inverse of BOT_OFF): a tag-change automation posts
+  // bot_on=true (tag added) to hand the conversation back to the bot — clears the
+  // owner-set pauses (bot_off_at + status ai_paused). Handled just before the 4c BOT_OFF
+  // sync; it does NOT clear the lead's own "stopmessage" mute.
+  bot_on: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
 });
 
-/** Truthy check for a ManyChat boolean flag (rn_opt_in, bot_off; accepts "true"/"1"/1/true). */
+/** Truthy check for a ManyChat boolean flag (rn_opt_in, bot_off, bot_on; accepts "true"/"1"/1/true). */
 function isTruthyFlag(v: unknown): boolean {
   if (v === true) return true;
   if (typeof v === "number") return v === 1;
@@ -533,6 +538,30 @@ export async function POST(request: NextRequest) {
         () => {},
         () => {}
       );
+  }
+
+  // 4b-on. ManyChat BOT_ON tag sync — the inverse of the 4c BOT_OFF handler below, and
+  // checked FIRST so an explicit resume wins even if a stray `bot_off` field rides along
+  // in the same payload (a cloned tag-sync template can carry both). bot_on=true HANDS
+  // THE CONVERSATION BACK TO THE BOT: clear the OWNER pauses — bot_off_at (BOT_OFF tag)
+  // and status ai_paused→active (dashboard human-takeover) — so the bot resumes. It
+  // deliberately does NOT clear the lead's own user_muted_at ("stopmessage" opt-out; the
+  // lead re-enables with "resumemessage"), nor business/safety states (subscribed
+  // confirmed_at, disqualified/flagged) — so BOT_ON never re-engages a converted customer,
+  // a detected bot, or someone who opted out. (status→active would also clear a
+  // hypothetical extraction auto-pause, dormant today since AUTO_PAUSE_ON_EXTRACTION is
+  // false — give that its own marker if it's ever enabled.) reply_claimed_for is left
+  // untouched so a concurrent in-flight burst reply's single-flight claim isn't dropped.
+  // Runs before the empty-message ack. Fail-open: a DB error is logged, still acked.
+  if (conversationId && isTruthyFlag(body.bot_on)) {
+    const { error: botOnErr } = await supabase
+      .from("conversations")
+      .update({ bot_off_at: null, status: "active" })
+      .eq("id", conversationId);
+    if (botOnErr) console.error("[manychat-webhook] bot_on sync error", botOnErr);
+    // Resuming may re-allow follow-ups — reconcile the ManyChat no-followup flag.
+    after(() => syncNoFollowupFlag(supabase, conversationId!));
+    return manychatReply("", { ai_skipped: true, reason: "bot_on_set" });
   }
 
   // 4c. ManyChat BOT_OFF tag sync. A tag-change automation posts bot_off=true (tag
