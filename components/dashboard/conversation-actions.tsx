@@ -94,6 +94,16 @@ export function ConversationActions({
   // greeting. The endpoint (requireSuperadmin) is the real gate; this button only shows
   // for admins. Re-clickable; the server records the send + one-time-stamps welcomed_at.
   function sendWelcome() {
+    // Fires a real DM to a real contact via ManyChat — confirm so a misclick (e.g. while
+    // pausing AI on an already-welcomed live thread) can't push a surprise welcome VM.
+    if (
+      !window.confirm(
+        "Send the welcome message now? This fires the welcome VM/video flow to this " +
+          "contact via ManyChat right away."
+      )
+    ) {
+      return;
+    }
     setWelcomeResult(null);
     startTransition(async () => {
       try {
@@ -109,6 +119,8 @@ export function ConversationActions({
         if (res.ok && data.ok && data.sent) {
           setWelcomeResult("Welcome message sent.");
           router.refresh();
+        } else if (res.status === 403) {
+          setWelcomeResult("Not allowed.");
         } else if (data.reason === "no_welcome_flow") {
           setWelcomeResult("No welcome flow configured on this chatbot.");
         } else if (data.reason === "no_subscriber") {

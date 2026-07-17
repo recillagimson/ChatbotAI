@@ -6,15 +6,11 @@ import type { Chatbot, Conversation } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-type WelcomeChatbot = Pick<
-  Chatbot,
-  "id" | "welcome_enabled" | "welcome_flow_ns" | "manychat_api_key_enc"
->;
+type WelcomeChatbot = Pick<Chatbot, "welcome_flow_ns" | "manychat_api_key_enc">;
 
-type WelcomeRow = Pick<
-  Conversation,
-  "id" | "manychat_subscriber_id" | "platform" | "welcomed_at"
-> & { chatbots: WelcomeChatbot };
+type WelcomeRow = Pick<Conversation, "id" | "manychat_subscriber_id"> & {
+  chatbots: WelcomeChatbot;
+};
 
 /**
  * ADMIN-ONLY test affordance: fire this conversation's Welcome VM flow right now,
@@ -24,10 +20,12 @@ type WelcomeRow = Pick<
  * "Send follow-up now" tool. Gated on the REAL superadmin (never the impersonated
  * client); operates cross-tenant via the service client. Never throws to the client.
  *
- * On success it records a "(sent welcome voice)" message (so the send shows in the
- * transcript) and stamps welcomed_at IF it was unset — so the auto-welcome gate won't
- * later fire a SECOND VM at the same lead. Re-clicking always re-sends (the manual
- * path does not consult welcomed_at before sending).
+ * Deliberately IGNORES `welcome_enabled` (an admin override — the only requirement is a
+ * configured welcome flow) and IGNORES `welcomed_at` for the send decision, so the
+ * button is re-clickable to re-test. But to avoid a double-VM with a concurrent genuine
+ * first-contact webhook, it CLAIMS `welcomed_at` the same atomic way the webhook does
+ * BEFORE sending, and reverts the claim if the send fails — so a real lead is never left
+ * marked "welcomed" without actually receiving the VM.
  */
 export async function POST(
   _request: Request,
@@ -44,8 +42,7 @@ export async function POST(
   const { data, error } = await supabase
     .from("conversations")
     .select(
-      "id, manychat_subscriber_id, platform, welcomed_at, " +
-        "chatbots!inner(id, welcome_enabled, welcome_flow_ns, manychat_api_key_enc)"
+      "id, manychat_subscriber_id, chatbots!inner(welcome_flow_ns, manychat_api_key_enc)"
     )
     .eq("id", id)
     .single();
@@ -72,6 +69,24 @@ export async function POST(
     );
   }
 
+  // Claim welcomed_at atomically BEFORE sending, the same way the webhook's welcome gate
+  // does, so a concurrent genuine first-contact inbound can't ALSO auto-fire the VM
+  // (double send). Claim won → this is the first welcome; claim lost → already welcomed
+  // (or a concurrent claim), so this is a deliberate admin RE-send — send anyway and
+  // leave welcomed_at as-is.
+  const { data: claimed, error: claimErr } = await supabase
+    .from("conversations")
+    .update({ welcomed_at: new Date().toISOString() })
+    .eq("id", id)
+    .is("welcomed_at", null)
+    .select("id");
+  if (claimErr) {
+    // A DB error here is NOT a lost claim — surface it rather than risk a double-send.
+    console.error("[send-welcome] welcome claim failed", id, claimErr);
+    return NextResponse.json({ ok: false, reason: "claim_failed" }, { status: 502 });
+  }
+  const wonClaim = !!claimed?.length;
+
   try {
     await sendManychatFlow({
       subscriberId: row.manychat_subscriber_id,
@@ -80,27 +95,28 @@ export async function POST(
     });
   } catch (err) {
     console.error("[send-welcome] flow send failed", id, err);
+    // Revert our own claim so the auto-welcome gate can still greet this lead later
+    // (never leave them marked welcomed without having received the VM).
+    if (wonClaim) {
+      await supabase
+        .from("conversations")
+        .update({ welcomed_at: null })
+        .eq("id", id)
+        .then(() => {}, () => {});
+    }
     return NextResponse.json({ ok: false, reason: "send_failed" }, { status: 502 });
   }
 
-  // Record the send + stamp welcomed_at only if unset (so the auto gate won't ALSO
-  // greet later). Both best-effort — a failed bookkeeping write never fails the send.
-  await supabase
-    .from("messages")
-    .insert({
-      conversation_id: id,
-      role: "assistant",
-      content: "(sent welcome voice)",
-      ai_generated: false,
-      tokens_used: 0,
-    })
-    .then(() => {}, () => {});
-  await supabase
-    .from("conversations")
-    .update({ welcomed_at: new Date().toISOString() })
-    .eq("id", id)
-    .is("welcomed_at", null)
-    .then(() => {}, () => {});
+  // Record the send in the transcript so it's visible in the inbox. Best-effort, but log
+  // failures (never silently swallow — a missing record is worth seeing in logs).
+  const { error: msgErr } = await supabase.from("messages").insert({
+    conversation_id: id,
+    role: "assistant",
+    content: "(sent welcome voice)",
+    ai_generated: false,
+    tokens_used: 0,
+  });
+  if (msgErr) console.error("[send-welcome] transcript record failed", id, msgErr);
 
   return NextResponse.json({ ok: true, sent: true });
 }
