@@ -225,10 +225,11 @@ A SaaS platform (**SpeedSettr** — www.speedsettr.com) that auto-replies to Ins
     step-4 conversation upsert but **BEFORE** the inbound is recorded (step 5), the "4a" RN opt-in,
     and **every silencing gate** (human-takeover/subscribed/disqualified/keyword-gate/mute) — so it
     can recover a **stuck** (falsely-subscribed / muted / paused) thread, which is its main use. It
-    `delete`s the conversation's messages (transcript wipe) and `update`s the row to fresh-conversation
-    defaults (`confirmed_at`, `tag:"lead"`, `welcomed_at`, `user_muted_at`, `status:"active"`,
-    `keyword_fired:[]`, all follow-up counters, memory summary, `reply_claimed_for`, RN fields, etc.),
-    pushes a best-effort **un-persisted** ack (so the thread stays empty), and returns
+    runs the shared `resetConversation()` in [lib/reset-conversation.ts](lib/reset-conversation.ts) —
+    `delete`s the conversation's messages (transcript wipe) and `update`s the row to the
+    `FRESH_CONVERSATION_RESET` defaults (`confirmed_at`, `tag:"lead"`, `welcomed_at`, `user_muted_at`,
+    `status:"active"`, `keyword_fired:[]`, all follow-up counters, memory summary, `reply_claimed_for`,
+    RN fields, etc.) — pushes a best-effort **un-persisted** ack (so the thread stays empty), and returns
     `manychatReply(..., { ai_skipped: true, reason: "conversation_reset" })` — `ai_skipped` so the
     magic word itself **never reaches the AI**. The reset word is **exempt from the step-3c Redis
     dedup** (like the control words) so a re-reset within 30s actually resets instead of being
@@ -239,6 +240,14 @@ A SaaS platform (**SpeedSettr** — www.speedsettr.com) that auto-replies to Ins
     irreversible** — that is why the value should be obscure while testing and left **blank in
     production**. **Owner action: set `RESET_KEYWORD` in Vercel env only while testing; leave it
     blank/unset in production.** No migration, no column, no deploy step beyond the env var.
+    **Also exposed as an admin-only UI button** (so an admin can reset any thread from the inbox with
+    no env var): the conversation detail page shows a destructive **"Reset conversation"** button in
+    [conversation-actions.tsx](components/dashboard/conversation-actions.tsx), gated by the same
+    `requireSuperadmin`-derived `isAdmin` flag as "Send follow-up now" (shown even while "viewing as" a
+    client, since `isAdmin` reads the REAL user), that `window.confirm`s the irreversible wipe then
+    POSTs to [/api/conversations/[id]/reset](app/api/conversations/[id]/reset/route.ts) →
+    `requireSuperadmin` + service client → the **same** `resetConversation()` helper. The button and
+    the webhook keyword share one code path and **cannot drift**.
 
 27. **Strict keyword matching (`keyword_strict_enabled`, per-chatbot, default off).** A toggle that changes *what counts as a keyword match* for both the keyword-triggers feature (#13) and the keyword gate (#16): when ON, a group matches only when the **whole inbound message equals** a keyword — after `normalize` + stripping surrounding punctuation/emoji (the pure `equalsWholeMessage` in [lib/keyword-triggers.ts](lib/keyword-triggers.ts), same edge-strip the reset keyword uses) — instead of the default whole-word "contains" (`containsWord`). So `credit` / `Credit!` / `🔥 credit` engage, but `i have a problem with my credit` and `credit repair` do NOT. It's threaded as a trailing optional `strict` param through `messageMatchesGroup`/`firstMatchingGroup` (default `false` = legacy contains-match) and read at the ONE webhook 6-gate call `firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [], chatbot.keyword_strict_enabled ?? false)` — so it governs BOTH the entry gate (#16) and the canned trigger replies (#13), since both consume that one `keywordGroup`. **Independent of `keyword_gate_enabled`**: gate ON + strict ON = only an exact keyword message ever engages a stranger; gate OFF + strict ON = the bot still answers everyone via AI, but the canned keyword reply fires only on an exact keyword message. It does **NOT** touch the Welcome VM opener match (`lib/welcome.ts` `isWelcomeOpener`), which is already whole-message exact. Fail-open: a missing column reads as `false` (contains-match). UI: a Switch below the keyword-gate toggle in [keyword-triggers-form.tsx](components/dashboard/keyword-triggers-form.tsx) (saved alongside `keyword_triggers`/`keyword_gate_enabled`). **Owner action: apply `supabase/migrations/2026-07-16-keyword-strict.sql` (adds `chatbots.keyword_strict_enabled`, default false — no backfill, false = legacy behavior) BEFORE deploying** (the dashboard save + webhook read the column; the webhook read is fail-open but the save writes it). Tests: the strict-mode cases in `scripts/test-keyword-match.ts`.
 

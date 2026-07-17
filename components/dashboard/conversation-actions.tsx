@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Pause, Play, CheckCircle2, RotateCcw, Send } from "lucide-react";
+import { Pause, Play, CheckCircle2, RotateCcw, Send, RefreshCw } from "lucide-react";
 import {
   CONVERSATION_TAGS,
   TAG_LABEL,
@@ -40,6 +40,8 @@ export function ConversationActions({
 
   // ADMIN-ONLY test button result (e.g. "Follow-up sent."). Null = idle/hidden.
   const [testResult, setTestResult] = useState<string | null>(null);
+  // ADMIN-ONLY reset button result. Null = idle/hidden.
+  const [resetResult, setResetResult] = useState<string | null>(null);
 
   // subscribed ⇔ confirmed_at set: the tag and the conversion state move together.
   const confirmed = tag === "subscribed";
@@ -80,6 +82,44 @@ export function ConversationActions({
         }
       } catch {
         setTestResult("Couldn't send — network error.");
+      }
+    });
+  }
+
+  // ADMIN-ONLY: wipe this conversation back to brand-new state — deletes the whole
+  // transcript and clears welcomed_at / keyword_fired / tag / mute / follow-up progress
+  // so the full funnel (welcome VM, keyword triggers, follow-ups) can be re-tested. Same
+  // reset the RESET_KEYWORD webhook word runs. Destructive + irreversible → confirm
+  // first. The endpoint (requireSuperadmin) is the real gate; this button only shows for
+  // admins. Fires the follow-up-flag sync after, since the thread is now a fresh lead.
+  function resetConversation() {
+    if (
+      !window.confirm(
+        "Reset this conversation? This permanently deletes the entire transcript and " +
+          "returns the thread to brand-new state so the welcome, keyword triggers, and " +
+          "follow-ups can fire again. This can't be undone."
+      )
+    ) {
+      return;
+    }
+    setResetResult(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch(`/api/conversations/${conversationId}/reset`, {
+          method: "POST",
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+        if (res.ok && data.ok) {
+          setResetResult("Conversation reset — send the opener to test the welcome.");
+          fireFollowupFlagSync();
+          router.refresh();
+        } else if (res.status === 403) {
+          setResetResult("Not allowed.");
+        } else {
+          setResetResult("Couldn't reset — try again.");
+        }
+      } catch {
+        setResetResult("Couldn't reset — network error.");
       }
     });
   }
@@ -248,6 +288,17 @@ export function ConversationActions({
           </Button>
           {testResult && (
             <span className="text-xs text-muted-foreground">{testResult}</span>
+          )}
+          <Button
+            onClick={resetConversation}
+            disabled={isPending}
+            variant="destructive"
+            size="sm"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" /> Reset conversation
+          </Button>
+          {resetResult && (
+            <span className="text-xs text-muted-foreground">{resetResult}</span>
           )}
         </>
       )}
