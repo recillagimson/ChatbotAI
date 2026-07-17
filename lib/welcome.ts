@@ -40,10 +40,15 @@ export interface WelcomeInput {
   entryPoint: string | null; // body.entry_point ("comment" = comment-campaign opt-in)
   hasMedia: boolean;
   text: string; // baseText (media URLs already stripped)
+  // Did this opener match one of the chatbot's Keywords-tab triggers? The webhook
+  // already computes this (firstMatchingGroup) for the keyword gate; passing it in lets
+  // the welcome reuse the EXACT same match when welcome_use_keyword_triggers is on.
+  keywordMatched: boolean;
   chatbot: {
     welcome_enabled: boolean;
     welcome_flow_ns: string | null;
     welcome_keywords: string[];
+    welcome_use_keyword_triggers: boolean;
   };
 }
 
@@ -54,7 +59,9 @@ export interface WelcomeInput {
  *   2. already resolved (welcomedAt set)   -> false
  *   3. comment-campaign opt-in             -> true  (the comment keyword IS the opener)
  *   4. any inbound media                   -> false (substantive -> AI)
- *   5. else: message is exactly a greeting/keyword?
+ *   5. message is exactly a greeting / welcome_keyword       -> true
+ *   6. (opt-in) message matched a Keywords-tab trigger, when
+ *      welcome_use_keyword_triggers is on                    -> true
  */
 export function shouldSendWelcome(input: WelcomeInput): boolean {
   const { chatbot } = input;
@@ -62,5 +69,9 @@ export function shouldSendWelcome(input: WelcomeInput): boolean {
   if (input.welcomedAt) return false;
   if (input.entryPoint === "comment") return true;
   if (input.hasMedia) return false;
-  return isWelcomeOpener(input.text, chatbot.welcome_keywords);
+  if (isWelcomeOpener(input.text, chatbot.welcome_keywords)) return true;
+  // Sync with the Keywords tab: treat a keyword-trigger match as a welcome opener too,
+  // so the owner maintains one keyword list instead of a separate welcome list.
+  if (chatbot.welcome_use_keyword_triggers && input.keywordMatched) return true;
+  return false;
 }

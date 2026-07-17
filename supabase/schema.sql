@@ -1002,7 +1002,10 @@ alter table public.chatbots
   add column if not exists welcome_enabled boolean not null default false,
   add column if not exists welcome_flow_ns text,
   add column if not exists welcome_flow_name text,
-  add column if not exists welcome_keywords jsonb not null default '[]'::jsonb;
+  add column if not exists welcome_keywords jsonb not null default '[]'::jsonb,
+  -- ON = the Welcome VM also fires when a new contact's opener matches the chatbot's
+  -- Keywords-tab triggers (keyword_triggers), so the owner keeps ONE keyword list.
+  add column if not exists welcome_use_keyword_triggers boolean not null default false;
 
 -- welcomed_at is created + backfilled together, inside one guard, so the backfill
 -- happens ONLY when the column is first added. Every conversation that predates this
@@ -1033,4 +1036,5 @@ end $$;
 -- alter table public.chatbots     drop column if exists welcome_flow_ns;
 -- alter table public.chatbots     drop column if exists welcome_flow_name;
 -- alter table public.chatbots     drop column if exists welcome_keywords;
+-- alter table public.chatbots     drop column if exists welcome_use_keyword_triggers;
 -- alter table public.conversations drop column if exists welcomed_at;

@@ -731,10 +731,14 @@ export async function POST(request: NextRequest) {
         entryPoint: body.entry_point ?? null,
         hasMedia,
         text: baseText,
+        // Reuse the keyword-gate's own match (computed above) so the welcome fires on the
+        // SAME rule as the Keywords tab when welcome_use_keyword_triggers is on.
+        keywordMatched: !!keywordGroup,
         chatbot: {
           welcome_enabled: chatbot.welcome_enabled,
           welcome_flow_ns: chatbot.welcome_flow_ns,
           welcome_keywords: coerceKeywords(chatbot.welcome_keywords),
+          welcome_use_keyword_triggers: !!chatbot.welcome_use_keyword_triggers,
         },
       });
       if (sendWelcome && apiKey) {

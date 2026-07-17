@@ -24,6 +24,9 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
   const [flowNs, setFlowNs] = useState<string | null>(chatbot.welcome_flow_ns ?? null);
   const [flowName, setFlowName] = useState<string | null>(chatbot.welcome_flow_name ?? null);
   const [keywords, setKeywords] = useState(coerceKeywords(chatbot.welcome_keywords).join(", "));
+  const [useKeywordTriggers, setUseKeywordTriggers] = useState(
+    chatbot.welcome_use_keyword_triggers
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -100,6 +103,7 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
         welcome_flow_ns: flowNs,
         welcome_flow_name: flowNs ? flowName : null,
         welcome_keywords: list,
+        welcome_use_keyword_triggers: useKeywordTriggers,
       })
       .eq("id", chatbot.id);
     setSaving(false);
@@ -182,6 +186,26 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
               like &ldquo;hey&rdquo;) triggers the welcome; everything else goes to the AI.
               Comment-campaign opt-ins always get the welcome.
             </p>
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Label htmlFor="welcome-use-keywords">Also use my Keyword triggers</Label>
+              <p className="text-sm text-muted-foreground">
+                When on, a first message that matches any keyword in your{" "}
+                <span className="font-medium">Keywords</span> tab also fires the welcome — so you
+                don&rsquo;t keep a separate list here. Uses the same matching as the Keywords tab
+                (which can match a keyword anywhere in the message, not just an exact opener).
+              </p>
+            </div>
+            <Switch
+              id="welcome-use-keywords"
+              checked={useKeywordTriggers}
+              onCheckedChange={(v) => {
+                setUseKeywordTriggers(v);
+                markDirty();
+              }}
+            />
           </div>
         </div>
       )}

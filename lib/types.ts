@@ -69,6 +69,7 @@ export interface Chatbot {
   welcome_flow_ns: string | null;
   welcome_flow_name: string | null;
   welcome_keywords: string[];
+  welcome_use_keyword_triggers: boolean;  // ON = Welcome VM also fires on a keyword_triggers match
   created_at: string;
 }
 
