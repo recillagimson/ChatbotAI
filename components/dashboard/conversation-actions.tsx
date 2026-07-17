@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Pause, Play, CheckCircle2, RotateCcw, Send, RefreshCw } from "lucide-react";
+import { Pause, Play, CheckCircle2, RotateCcw, Send, RefreshCw, Voicemail } from "lucide-react";
 import {
   CONVERSATION_TAGS,
   TAG_LABEL,
@@ -42,6 +42,8 @@ export function ConversationActions({
   const [testResult, setTestResult] = useState<string | null>(null);
   // ADMIN-ONLY reset button result. Null = idle/hidden.
   const [resetResult, setResetResult] = useState<string | null>(null);
+  // ADMIN-ONLY "send welcome" button result. Null = idle/hidden.
+  const [welcomeResult, setWelcomeResult] = useState<string | null>(null);
 
   // subscribed ⇔ confirmed_at set: the tag and the conversion state move together.
   const confirmed = tag === "subscribed";
@@ -82,6 +84,42 @@ export function ConversationActions({
         }
       } catch {
         setTestResult("Couldn't send — network error.");
+      }
+    });
+  }
+
+  // ADMIN-ONLY: fire this conversation's Welcome VM flow right now, bypassing the
+  // shouldSendWelcome gate (welcomed_at / opener / keyword-gate), to test the real
+  // ManyChat welcome delivery — the same flow the webhook triggers on a first-contact
+  // greeting. The endpoint (requireSuperadmin) is the real gate; this button only shows
+  // for admins. Re-clickable; the server records the send + one-time-stamps welcomed_at.
+  function sendWelcome() {
+    setWelcomeResult(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch(
+          `/api/conversations/${conversationId}/send-welcome`,
+          { method: "POST" }
+        );
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          sent?: boolean;
+          reason?: string;
+        };
+        if (res.ok && data.ok && data.sent) {
+          setWelcomeResult("Welcome message sent.");
+          router.refresh();
+        } else if (data.reason === "no_welcome_flow") {
+          setWelcomeResult("No welcome flow configured on this chatbot.");
+        } else if (data.reason === "no_subscriber") {
+          setWelcomeResult("No ManyChat subscriber on this conversation.");
+        } else if (data.reason === "manychat_key_unavailable") {
+          setWelcomeResult("ManyChat key unavailable — check the connection.");
+        } else {
+          setWelcomeResult("Couldn't send — check the ManyChat connection.");
+        }
+      } catch {
+        setWelcomeResult("Couldn't send — network error.");
       }
     });
   }
@@ -278,6 +316,17 @@ export function ConversationActions({
       </Button>
       {isAdmin && (
         <>
+          <Button
+            onClick={sendWelcome}
+            disabled={isPending}
+            variant="secondary"
+            size="sm"
+          >
+            <Voicemail className="h-4 w-4 mr-2" /> Send welcome message
+          </Button>
+          {welcomeResult && (
+            <span className="text-xs text-muted-foreground">{welcomeResult}</span>
+          )}
           <Button
             onClick={sendTestFollowup}
             disabled={isPending}
