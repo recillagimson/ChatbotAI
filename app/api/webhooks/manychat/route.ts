@@ -15,6 +15,7 @@ import {
 import { generateReply } from "@/lib/anthropic";
 import { splitIntoMessages } from "@/lib/message-split";
 import { buildKbBlock } from "@/lib/retrieval";
+import { renderTrainedResponses } from "@/lib/training";
 import { parseAssetDirectives } from "@/lib/ai-media";
 import {
   fetchFollowupAssets,
@@ -1165,6 +1166,8 @@ export async function POST(request: NextRequest) {
           existing?.start_note || existing?.start_on
             ? { note: existing.start_note ?? null, on: existing.start_on ?? null }
             : null,
+        // Owner-trained scenario corrections (Bot Trainer). chatbot is select("*").
+        trainedResponses: renderTrainedResponses(chatbot.training_pairs),
       });
       if (text) {
         replyText = text;

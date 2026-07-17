@@ -95,7 +95,8 @@ export function buildSystemPrompt(
   returning?: boolean,
   mediaCatalog?: string | null,
   turnInstruction?: string | null,
-  scheduledStart?: { note: string | null; on: string | null } | null
+  scheduledStart?: { note: string | null; on: string | null } | null,
+  trainedResponses?: string | null
 ): string {
   const persona = chatbot.persona_section?.trim() || "";
   const offers = chatbot.offers_section?.trim() || "";
@@ -142,6 +143,10 @@ export function buildSystemPrompt(
     ? `SCHEDULED START — this lead plans to start on ${startNote || startOn}${startNote && startOn ? ` (${startOn})` : ""}. They asked to begin then, so acknowledge it naturally if it comes up and treat it as agreed. Do NOT re-pitch, pressure, or ask them to start now — wait until they're ready and reach out.`
     : "";
 
+  // Owner-trained scenario corrections. Placed AFTER the KB and declares precedence
+  // over it. Rendered upstream (renderTrainedResponses); stable-per-bot, cache-safe.
+  const trainedBlock = trainedResponses?.trim() || "";
+
   // SECTION MODE — the chatbot is authored as three editable sections. The
   // Personality section leads as identity VERBATIM (no generic preamble bolted
   // on top of a hand-written persona); offers/rebuttals follow when present;
@@ -162,6 +167,7 @@ export function buildSystemPrompt(
     parts.push(
       `KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)\n${kbBlock}`
     );
+    if (trainedBlock) parts.push(trainedBlock);
     parts.push(GUARDRAILS);
     parts.push(HUMANIZER_STYLE);
     parts.push(CONVERSION_CONFIRM);
@@ -178,7 +184,7 @@ export function buildSystemPrompt(
     return `${chatbot.system_prompt.trim()}
 ${continuityBlock ? `\n${continuityBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
-${kbBlock}
+${kbBlock}${trainedBlock ? `\n\n${trainedBlock}` : ""}
 
 DELIVERY FORMAT
 To send several short messages, separate each one with a blank line. Each block is delivered as its own separate Instagram DM bubble. Keep each bubble short.
@@ -200,7 +206,7 @@ TONE
 ${TONE_GUIDES[chatbot.tone]}
 ${continuityBlock ? `\n${continuityBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)
-${kbBlock}
+${kbBlock}${trainedBlock ? `\n\n${trainedBlock}` : ""}
 
 ${GUARDRAILS}
 
@@ -231,6 +237,8 @@ export async function generateReply(opts: {
   // Deferred start the lead named (conversations.start_note/start_on); rendered as
   // a SCHEDULED START block so the bot remembers when they want to begin.
   scheduledStart?: { note: string | null; on: string | null } | null;
+  // Rendered TRAINED RESPONSES block (renderTrainedResponses output); empty/absent = none.
+  trainedResponses?: string | null;
 }) {
   // Continuing conversation if there's any prior history — drives the
   // continuity directive so the bot doesn't restart the intro or re-ask.
@@ -242,7 +250,8 @@ export async function generateReply(opts: {
     returning,
     opts.mediaCatalog,
     opts.turnInstruction,
-    opts.scheduledStart
+    opts.scheduledStart,
+    opts.trainedResponses ?? null
   );
   const images = opts.images ?? [];
 

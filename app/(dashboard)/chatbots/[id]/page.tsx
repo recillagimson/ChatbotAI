@@ -12,6 +12,7 @@ import { BotActiveToggle } from "@/components/dashboard/bot-active-toggle";
 import { ManychatKeyField } from "@/components/dashboard/manychat-key-field";
 import { WebhookSecretField } from "@/components/dashboard/webhook-secret-field";
 import { ChatbotTabsBar } from "@/components/dashboard/chatbot-tabs-bar";
+import { BotTrainer } from "@/components/dashboard/bot-trainer";
 import { RetrainBotButton } from "@/components/dashboard/retrain-bot-button";
 import { resolveChatbotTab } from "@/lib/chatbot-tabs";
 import { stepAssetKeys } from "@/lib/followup-assets";
@@ -191,6 +192,23 @@ export default async function ChatbotDetailPage({
           </CardHeader>
           <CardContent>
             <KeywordTriggersForm chatbot={safeChatbot} assets={assets} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Training ── */}
+      {tab === "training" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Bot trainer</CardTitle>
+            <CardDescription>
+              Chat with your bot to test it, then correct any reply — &ldquo;say this instead&rdquo; — to
+              teach it how to handle that scenario. The sandbox is private and nothing here is sent to a
+              real contact.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BotTrainer chatbot={safeChatbot} />
           </CardContent>
         </Card>
       )}

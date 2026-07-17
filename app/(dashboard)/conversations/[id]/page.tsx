@@ -5,12 +5,12 @@ import { requireSuperadmin } from "@/lib/admin";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDate, cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import { ConversationActions } from "@/components/dashboard/conversation-actions";
 import { ConversationReplyBox } from "@/components/dashboard/conversation-reply-box";
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { PlatformBadge } from "@/components/dashboard/platform-badge";
+import { MessageBubble } from "@/components/dashboard/message-bubble";
 import { contactDisplayName, contactHandle } from "@/lib/contact";
 import { signAttachment } from "@/lib/storage";
 import { TAG_LABEL, TAG_VARIANT, tagOf } from "@/lib/conversation-tags";
@@ -152,84 +152,9 @@ export default async function ConversationDetailPage({
               No messages yet.
             </p>
           )}
-          {messages?.map((m) => {
-            const fromCustomer = m.role === "user";
-            return (
-              <div
-                key={m.id}
-                className={cn(
-                  "flex",
-                  fromCustomer ? "justify-start" : "justify-end"
-                )}
-              >
-                <div
-                  className={cn(
-                    "max-w-[75%] rounded-lg px-3 py-2",
-                    fromCustomer
-                      ? "bg-secondary"
-                      : m.role === "human_agent"
-                        ? "bg-amber-100 text-amber-900"
-                        : "bg-primary text-primary-foreground"
-                  )}
-                >
-                  {m.media_url && mediaUrls.get(m.id) && (
-                    <div className="mb-1.5">
-                      {(() => {
-                        const url = mediaUrls.get(m.id)!;
-                        const t = m.media_type ?? "";
-                        if (t.startsWith("image/")) {
-                          return (
-                            <a href={url} target="_blank" rel="noreferrer">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={url}
-                                alt="attachment"
-                                className="rounded-md max-h-60 max-w-full object-cover"
-                              />
-                            </a>
-                          );
-                        }
-                        if (t.startsWith("audio/")) {
-                          return <audio controls src={url} className="max-w-full" />;
-                        }
-                        if (t.startsWith("video/")) {
-                          return (
-                            <video controls src={url} className="rounded-md max-h-60 max-w-full" />
-                          );
-                        }
-                        return (
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-xs underline"
-                          >
-                            📎 Attachment
-                          </a>
-                        );
-                      })()}
-                    </div>
-                  )}
-                  {m.content && m.content !== "(media message)" && (
-                    <p className="text-sm whitespace-pre-wrap">{m.content}</p>
-                  )}
-                  <p
-                    className={cn(
-                      "text-[10px] mt-1 opacity-70",
-                      fromCustomer ? "text-muted-foreground" : ""
-                    )}
-                  >
-                    {m.role === "human_agent"
-                      ? "You · "
-                      : m.role === "assistant"
-                        ? "AI · "
-                        : ""}
-                    {formatDate(m.created_at)}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+          {messages?.map((m) => (
+            <MessageBubble key={m.id} message={m} mediaUrl={mediaUrls.get(m.id)} />
+          ))}
         </ChatScroll>
       </Card>
 

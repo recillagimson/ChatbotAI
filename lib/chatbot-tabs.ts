@@ -8,6 +8,7 @@ export const CHATBOT_TABS = [
   { key: "overview", label: "Overview" },
   { key: "prompt", label: "Prompt" },
   { key: "keywords", label: "Keywords" },
+  { key: "training", label: "Training" },
   { key: "followups", label: "Follow-ups" },
   { key: "media", label: "Media" },
   { key: "connection", label: "Connection" },

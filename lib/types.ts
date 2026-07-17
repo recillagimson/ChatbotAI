@@ -61,6 +61,7 @@ export interface Chatbot {
   auto_followup_loop_mode: FollowupLoopMode; // after the last step: stop | repeat last | cycle through all
   ai_media_enabled: boolean;              // allow the live AI to emit [[SEND_ASSET]] directives
   keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)
+  training_pairs: TrainingPair[];         // Bot Trainer scenario corrections (JSONB)
   keyword_gate_enabled: boolean;          // ON = reply ONLY to DMs matching a keyword group; else silent
   keyword_strict_enabled: boolean;        // ON = keyword match requires the whole message to equal the keyword (else contains-match)
   followup_flag_enabled: boolean;         // ON = mirror stop-follow-up state to ManyChat tag `ss_no_followup`
@@ -69,6 +70,17 @@ export interface Chatbot {
   welcome_flow_name: string | null;
   welcome_keywords: string[];
   created_at: string;
+}
+
+/** One Bot Trainer correction: in a scenario, reply THIS instead. */
+export interface TrainingPair {
+  id: string;                 // stable uuid
+  scenario: string;           // the triggering user message / situation ("what is your price")
+  reply: string;              // what to say in this scenario
+  bad_reply?: string | null;  // the bot's original (rejected) reply, for an "instead of X, say Y" contrast
+  exact?: boolean;            // true = reply verbatim; false/absent = reworded into the bot's voice
+  note?: string | null;       // optional owner note
+  enabled: boolean;
 }
 
 /** How a keyword group behaves when a contact matches it AGAIN (already got the first reply). */

@@ -884,7 +884,8 @@ alter table public.conversations
 -- the group's on_repeat action. keyword_fired is best-effort per-contact state
 -- (a lost update just re-sends a canned reply once; never strands the contact).
 alter table public.chatbots
-  add column if not exists keyword_triggers jsonb not null default '[]'::jsonb;
+  add column if not exists keyword_triggers jsonb not null default '[]'::jsonb,
+  add column if not exists training_pairs jsonb not null default '[]'::jsonb;   -- Bot Trainer scenario corrections: [{id, scenario, reply, bad_reply?, exact?, note?, enabled}]
 
 alter table public.conversations
   add column if not exists keyword_fired jsonb not null default '[]'::jsonb;
