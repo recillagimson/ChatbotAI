@@ -211,7 +211,7 @@ export default async function AdminClientDetailPage({
                   See and act in their dashboard as them.
                 </p>
               </div>
-              <div className="grid grid-cols-3 gap-2 border-t pt-3 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t pt-3 text-center">
                 <div>
                   <p className="text-lg font-semibold tabular-nums">{chatbots.length}</p>
                   <p className="text-xs text-muted-foreground">Chatbots</p>

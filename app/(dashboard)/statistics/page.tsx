@@ -236,7 +236,7 @@ export default async function StatisticsPage({
     : [];
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
       {/* ── Page header ── */}
       <div className="mb-6">
         <h1 className="text-3xl font-display font-semibold tracking-tight">
@@ -303,7 +303,7 @@ export default async function StatisticsPage({
       {!!chatbots?.length && overview !== null && (
         <>
           {/* ── KPI strip — 4 cards (Reply Rate + Total Conversations moved to funnel column) ── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {/* 1. AI Replies */}
             <KpiStatCard
               label="AI Replies"
@@ -360,7 +360,7 @@ export default async function StatisticsPage({
           {tab === "funnel" && (
             <>
               {/* ── ST4b: Funnel (2/3 width) + side KPI cards (1/3 width) ── */}
-              <div className="grid lg:grid-cols-3 gap-6 mb-8">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                 {/* Left 2 cols: conversation funnel */}
                 <div className="lg:col-span-2">
                   <Funnel

@@ -28,7 +28,7 @@ export default async function SettingsPage() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-display font-semibold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">

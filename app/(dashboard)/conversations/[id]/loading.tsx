@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 export default function ConversationDetailLoading() {
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
       <Skeleton className="h-8 w-40 mb-4" />
 
       <div className="flex items-center justify-between mb-6">

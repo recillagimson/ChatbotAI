@@ -92,7 +92,7 @@ export default async function AdminClientsPage() {
       {clients.length === 0 ? (
         <p className="text-muted-foreground">No clients yet.</p>
       ) : (
-        <div className="rounded-lg border overflow-hidden">
+        <div className="rounded-lg border overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/30">

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Sora, Manrope } from "next/font/google";
 import "./globals.css";
 
@@ -17,6 +17,15 @@ const sora = Sora({
   display: "swap",
   weight: ["500", "600", "700", "800"],
 });
+
+// Mobile viewport: fit the true device width and honor safe areas (notch /
+// home indicator) via `viewport-fit=cover`. No `maximumScale` — pinch-zoom
+// must stay available for accessibility.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.speedsettr.com"),

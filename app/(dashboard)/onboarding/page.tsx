@@ -11,7 +11,7 @@ import { CheckCircle2, CreditCard, Bot, BookOpen, Instagram } from "lucide-react
 
 export default function OnboardingPage() {
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
       <div className="text-center mb-10">
         <CheckCircle2 className="h-12 w-12 text-primary mx-auto mb-3" />
         <h1 className="text-3xl font-display font-semibold tracking-tight">You&apos;re in.</h1>

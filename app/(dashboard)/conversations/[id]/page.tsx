@@ -61,7 +61,7 @@ export default async function ConversationDetailPage({
   }
 
   return (
-    <div className="h-screen flex flex-col p-6 max-w-3xl mx-auto w-full">
+    <div className="h-full flex flex-col p-4 sm:p-6 max-w-3xl mx-auto w-full">
       <Button
         asChild
         variant="ghost"
@@ -74,7 +74,7 @@ export default async function ConversationDetailPage({
         </Link>
       </Button>
 
-      <div className="flex items-center justify-between mb-4 shrink-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 shrink-0">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-display font-semibold tracking-tight">

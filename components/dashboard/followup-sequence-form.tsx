@@ -175,7 +175,7 @@ export function FollowupSequenceForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Label htmlFor="fu-enabled">Enable auto follow-up</Label>
           <p className="text-sm text-muted-foreground">
@@ -306,7 +306,7 @@ export function FollowupSequenceForm({
                   ))}
 
                 {hasAssets ? (
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {assets.map((a) => {
                       const selected = step.asset_keys.includes(a.key);
                       const atCap = step.asset_keys.length >= MAX_STEP_ASSETS;
@@ -347,7 +347,7 @@ export function FollowupSequenceForm({
                 )}
               </div>
 
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <Label htmlFor={`step-ai-${i}`}>AI Follow up</Label>
                   <p className="text-xs text-muted-foreground">
@@ -409,7 +409,7 @@ export function FollowupSequenceForm({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-4 border-t pt-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t pt-5">
         <div>
           <Label htmlFor="ai-media">Let the AI send media on its own</Label>
           <p className="text-sm text-muted-foreground">
@@ -420,7 +420,7 @@ export function FollowupSequenceForm({
         <Switch id="ai-media" checked={aiMedia} onCheckedChange={(v) => { setAiMedia(v); markDirty(); }} />
       </div>
 
-      <div className="flex items-center justify-between gap-4 border-t pt-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t pt-5">
         <div>
           <Label htmlFor="mc-no-followup">Sync "stop follow-up" flag to ManyChat</Label>
           <p className="text-sm text-muted-foreground">

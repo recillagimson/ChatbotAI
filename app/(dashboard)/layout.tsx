@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient, getRealUser } from "@/lib/supabase/server";
 import { getImpersonation } from "@/lib/impersonation";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { MobileNav } from "@/components/dashboard/mobile-nav";
 import { ImpersonationBanner } from "@/components/dashboard/impersonation-banner";
 
 export default async function DashboardLayout({
@@ -33,6 +34,9 @@ export default async function DashboardLayout({
           hide the Admin link (the real admin returns via the banner's Exit). */}
       <Sidebar isSuperadmin={!active && !!profile?.is_superadmin} impersonating={active} />
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+        {/* Mobile/tablet top bar + slide-in drawer; hidden from `lg` up where the
+            desktop rail takes over. */}
+        <MobileNav isSuperadmin={!active && !!profile?.is_superadmin} impersonating={active} />
         {active && target && (
           <ImpersonationBanner clientLabel={clientLabel} clientId={target.id} />
         )}

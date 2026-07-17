@@ -83,7 +83,7 @@ export function FollowupSequences({
 
         <CardContent>
           {/* ── REAL aggregate section ── */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             <div className="flex flex-col gap-1">
               <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
                 Follow-ups sent

@@ -16,7 +16,7 @@ export default async function NewChatbotPage() {
   if (!user) redirect("/login");
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
       <h1 className="text-3xl font-display font-semibold tracking-tight mb-2">New chatbot</h1>
       <p className="text-muted-foreground mb-8">
         Give your chatbot a name and a personality. You can add offers, rebuttals,

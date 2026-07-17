@@ -86,7 +86,7 @@ export default async function BillingPage({
   const canceling = subscription?.cancel_at_period_end;
 
   return (
-    <div className="p-6 sm:p-8 max-w-3xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-3xl mx-auto">
       <div className="mb-6">
         <h1 className="text-3xl font-display font-semibold tracking-tight">Billing</h1>
         <p className="text-muted-foreground mt-1">

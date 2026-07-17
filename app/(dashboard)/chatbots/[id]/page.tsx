@@ -85,7 +85,7 @@ export default async function ChatbotDetailPage({
   const webhookUrl = `${appUrl}/api/webhooks/manychat`;
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
       {/* Pinned identity header — visible on every tab. */}
       <div className="flex items-start justify-between mb-6">
         <div>
@@ -107,7 +107,7 @@ export default async function ChatbotDetailPage({
       {/* ── Overview ── */}
       {tab === "overview" && (
         <>
-          <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             <Card>
               <CardContent className="pt-6">
                 <p className="text-xs text-muted-foreground">Knowledge entries</p>

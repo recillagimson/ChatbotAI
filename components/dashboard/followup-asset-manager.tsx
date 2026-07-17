@@ -246,7 +246,7 @@ export function FollowupAssetManager({
       {assets.length > 0 && (
         <ul className="divide-y rounded-md border">
           {assets.map((a) => (
-            <li key={a.id} className="flex items-center justify-between gap-3 p-3">
+            <li key={a.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3">
               <div className="flex min-w-0 items-center gap-3">
                 <AssetThumb kind={a.kind} url={a.url} className="h-12 w-12" />
                 <div className="min-w-0">
@@ -288,7 +288,7 @@ export function FollowupAssetManager({
 
       <form onSubmit={addAsset} className="space-y-3 rounded-md border border-dashed p-4">
         <p className="text-sm font-medium">Add an asset</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label htmlFor="asset-kind">Type</Label>
             <select

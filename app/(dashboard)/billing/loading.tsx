@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function BillingLoading() {
   return (
-    <div className="p-6 sm:p-8 max-w-3xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-3xl mx-auto">
       <div className="mb-6">
         <Skeleton className="h-9 w-36 mb-2" />
         <Skeleton className="h-5 w-80" />
@@ -28,7 +28,7 @@ export default function BillingLoading() {
           <div className="my-6 h-px bg-border" />
 
           <Skeleton className="h-4 w-40 mb-4" />
-          <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+          <div className="grid gap-x-6 gap-y-3 grid-cols-1 sm:grid-cols-2">
             {[0, 1, 2, 3, 4, 5].map((i) => (
               <Skeleton key={i} className="h-4 w-56" />
             ))}

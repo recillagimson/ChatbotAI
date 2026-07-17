@@ -39,7 +39,7 @@ export default async function FeedbackPage() {
   );
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-display font-semibold tracking-tight">
           Feedback
