@@ -87,7 +87,12 @@ export function classifyMedia(contentType: string | null | undefined, url: strin
 
 /** CDN host suffixes we'll fetch media from. ".x" = host or any subdomain. */
 const DEFAULT_ALLOWED_SUFFIXES = [
-  "lookaside.fbsbx.com",
+  // Meta's attachment CDN. The whole domain (not just `lookaside.`) is Meta infra:
+  // Instagram voice notes come from lookaside.fbsbx.com, but Facebook Messenger
+  // voice notes / documents come from cdn.fbsbx.com — so allow every *.fbsbx.com
+  // subdomain, else FB audio URLs sit unread in the message text (they don't get
+  // fetched/transcribed) while IG audio works.
+  ".fbsbx.com",
   ".fbcdn.net",
   ".cdninstagram.com",
   ".cdn.manychat.com",
