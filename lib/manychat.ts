@@ -107,17 +107,17 @@ export function verifyManychatSecret(
 // a `buttons` array of {type:"url", caption, url}). Handles markdown [label](url)
 // and bare URLs; platform limits: max 3 buttons/message, caption max ~20 chars.
 //
-// PLATFORM-AWARE. Instagram DMs do NOT render these buttons (button templates are
-// a Messenger feature) — IG collapses them to text, and IG already auto-links raw
-// URLs anyway. So buttons are used ONLY on Messenger (Facebook); Instagram and
-// every other channel keep the raw (clickable) URL as text. Set
-// LINK_BUTTONS_ENABLED=false to disable buttons everywhere (global kill switch).
-const LINK_BUTTONS_DISABLED = process.env.LINK_BUTTONS_ENABLED === "false";
+// Link buttons are OFF BY DEFAULT for every client. ManyChat/Messenger URL buttons
+// truncate the query string (dropping "?ref=..." affiliate params — a lost conversion),
+// and a raw URL is clickable on every channel anyway. So the default is: deliver links
+// as plain text, each isolated onto its own bubble (see buildOutboundMessages), with the
+// FULL URL intact. Opt back into Messenger URL buttons with LINK_BUTTONS_ENABLED=true.
+const LINK_BUTTONS_ENABLED = process.env.LINK_BUTTONS_ENABLED === "true";
 const BUTTON_PLATFORMS = new Set<Platform>(["messenger"]); // channels that render URL buttons
 
-/** Whether to convert links to buttons on this channel (Messenger only, unless killed). */
+/** Whether to convert links to buttons on this channel (opt-in via env; Messenger only). */
 export function buttonsSupported(platform?: Platform): boolean {
-  if (LINK_BUTTONS_DISABLED) return false;
+  if (!LINK_BUTTONS_ENABLED) return false;
   return BUTTON_PLATFORMS.has(platform ?? DEFAULT_PLATFORM);
 }
 const MAX_BUTTONS = 3;
@@ -159,13 +159,54 @@ export function messageWithLinkButtons(text: string): ManyChatTextMessage {
 }
 
 /**
- * Build the ManyChat `content.messages` array from reply bubbles. On Messenger
- * (Facebook) links become URL buttons; on Instagram and other channels the raw
- * (clickable) URL stays in the text.
+ * Split one reply bubble so every link sits on its OWN bubble, separated from the
+ * surrounding sentence — the default outbound link style for all channels/clients.
+ * Markdown `[label](url)` keeps the label inline and isolates the url; trailing
+ * sentence punctuation is peeled off the link so it stays clickable; the FULL URL
+ * (query string included) is preserved verbatim. A bubble with no link returns
+ * `[itself]`. Pure + unit-tested.
+ */
+export function isolateLinkBubbles(text: string): string[] {
+  const t = (text ?? "")
+    // Markdown [label](url) -> "label url " — the TRAILING space matters: without it,
+    // back-to-back links "[a](u1)[b](u2)" would fuse "b" onto u1 and corrupt the URL.
+    .replace(MD_LINK_RE, (_m, label: string, url: string) => `${label} ${url} `)
+    .trim();
+  if (!t) return [];
+  const out: string[] = [];
+  // Push a text fragment, dropping residue that is ONLY punctuation/brackets — the
+  // leftover of isolating a wrapped URL, so "(https://x)" never emits a lone "(" bubble.
+  // Emojis and real words are kept (they aren't in the punctuation class).
+  const pushText = (s: string) => {
+    const v = s.trim();
+    if (v && !/^[\s()[\]{}<>.,!?;:'"|]+$/.test(v)) out.push(v);
+  };
+  const re = /https?:\/\/[^\s<>()]+/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t)) !== null) {
+    let url = m[0];
+    const trail = url.match(/[.,!?;:'")\]]+$/)?.[0] ?? "";
+    if (trail) url = url.slice(0, -trail.length);
+    // Strip a wrapping open-bracket the writer put right before the URL ("… (").
+    pushText(t.slice(last, m.index).replace(/[([{]\s*$/, ""));
+    out.push(url);
+    last = m.index + m[0].length;
+  }
+  // Strip a wrapping close-bracket left right after the URL (")").
+  pushText(t.slice(last).replace(/^\s*[)\]}]/, ""));
+  return out.length ? out : [t];
+}
+
+/**
+ * Build the ManyChat `content.messages` array from reply bubbles. Default (all
+ * clients, every channel): raw clickable links, each isolated onto its own bubble so
+ * the link is never truncated and reads separated from the message. Opt-in legacy:
+ * with LINK_BUTTONS_ENABLED=true, Messenger links render as URL buttons instead.
  */
 export function buildOutboundMessages(texts: string[], platform?: Platform): ManyChatTextMessage[] {
-  if (!buttonsSupported(platform)) return texts.map((t) => ({ type: "text", text: t }));
-  return texts.map(messageWithLinkButtons);
+  if (buttonsSupported(platform)) return texts.map(messageWithLinkButtons);
+  return texts.flatMap(isolateLinkBubbles).map((t) => ({ type: "text", text: t }));
 }
 
 /** Resolve a platform's ManyChat content.type, throwing for no-send-API channels. */

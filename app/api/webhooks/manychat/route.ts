@@ -10,6 +10,7 @@ import {
   pacingEnabled,
   resolveManychatApiKey,
   ManychatKeyError,
+  isolateLinkBubbles,
   type OutboundAsset,
 } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
@@ -153,7 +154,9 @@ function isTruthyFlag(v: unknown): boolean {
 function manychatReply(text: string, extra: Record<string, unknown> = {}) {
   // Split into bubbles so the response body matches what we push (multiple
   // short DMs instead of one wall of text); an empty `text` yields no message.
-  const bubbles = text ? splitIntoMessages(text) : [];
+  // isolateLinkBubbles mirrors the push path (buildOutboundMessages): every link
+  // sits on its own bubble with the full URL intact.
+  const bubbles = text ? splitIntoMessages(text).flatMap(isolateLinkBubbles) : [];
   return NextResponse.json({
     version: "v2",
     content: { messages: bubbles.map((t) => ({ type: "text", text: t })) },
