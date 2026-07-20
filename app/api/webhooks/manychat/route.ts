@@ -66,7 +66,7 @@ import {
   stripMediaUrls,
 } from "@/lib/inbound-media";
 import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
-import { splitBurst, combineBurstText, remainingDebounceMs, shouldStandDown } from "@/lib/debounce";
+import { splitBurst, combineBurstText, remainingDebounceMs, clampDebounceSeconds, shouldStandDown } from "@/lib/debounce";
 import type { Chatbot, Message } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -1128,7 +1128,16 @@ export async function POST(request: NextRequest) {
     let memorySummary: string | null = existing?.memory_summary ?? null;
     let confirmedAt: string | null = existing?.confirmed_at ?? null;
     if (mode === "burst") {
-      const waitMs = remainingDebounceMs(performance.now() - startedAt);
+      // Per-chatbot wait window (chatbots.reply_debounce_seconds, default 60s),
+      // clamped 0..120. A MISSING column (pre-migration) reads as undefined →
+      // fall back to REPLY_DEBOUNCE_MS via the default arg (fail-open, no wait
+      // regression). The claim overwrite already makes this window resettable.
+      const perBot = chatbot.reply_debounce_seconds;
+      const overrideMs =
+        typeof perBot === "number" && Number.isFinite(perBot)
+          ? clampDebounceSeconds(perBot) * 1000
+          : undefined;
+      const waitMs = remainingDebounceMs(performance.now() - startedAt, overrideMs);
       if (waitMs > 0) await sleep(waitMs);
       const { data: fresh } = await supabase
         .from("conversations")

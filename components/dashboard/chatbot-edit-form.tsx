@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionField } from "@/components/dashboard/section-field";
 import { Textarea } from "@/components/ui/textarea";
+import { clampDebounceSeconds, MIN_DEBOUNCE_SECONDS, MAX_DEBOUNCE_SECONDS } from "@/lib/debounce";
 import type { Chatbot } from "@/lib/types";
 
 export function ChatbotEditForm({
@@ -36,6 +37,12 @@ export function ChatbotEditForm({
   // Offers/Rebuttals state is only wired into the form when canEditSections (admin).
   const [offers, setOffers] = useState(chatbot.offers_section ?? "");
   const [rebuttals, setRebuttals] = useState(chatbot.rebuttals_section ?? "");
+  // Per-bot reply-wait window (seconds). String state so the field can be cleared
+  // while typing; parsed + clamped on save. `?? 60` guards a pre-migration row
+  // whose column hasn't loaded yet (matches the DB default).
+  const [replyWait, setReplyWait] = useState<string>(
+    String(chatbot.reply_debounce_seconds ?? 60)
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -64,11 +71,24 @@ export function ChatbotEditForm({
         }),
       })
       .eq("id", chatbot.id);
-    setSaving(false);
     if (error) {
+      setSaving(false);
       setError(error.message);
       return;
     }
+    // Reply-wait is a SEPARATE best-effort write: a deploy-before-migration
+    // window (the column may not exist yet) must not fail the whole save and
+    // block a rename/persona edit. Mirrors the webhook's fail-open read. Clearing
+    // the field keeps the current value (never silently 0).
+    await supabase
+      .from("chatbots")
+      .update({
+        reply_debounce_seconds: clampDebounceSeconds(
+          replyWait.trim() === "" ? chatbot.reply_debounce_seconds ?? 60 : Number(replyWait)
+        ),
+      })
+      .eq("id", chatbot.id);
+    setSaving(false);
     setSaved(true);
     startTransition(() => router.refresh());
   }
@@ -99,6 +119,30 @@ export function ChatbotEditForm({
             setSaved(false);
           }}
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="edit-reply-wait">Reply wait (seconds)</Label>
+        <Input
+          id="edit-reply-wait"
+          type="number"
+          inputMode="numeric"
+          min={MIN_DEBOUNCE_SECONDS}
+          max={MAX_DEBOUNCE_SECONDS}
+          className="w-28"
+          value={replyWait}
+          onChange={(e) => {
+            setReplyWait(e.target.value);
+            setSaved(false);
+          }}
+        />
+        <p className="text-xs text-muted-foreground">
+          How long to wait for the lead to finish before replying, so several quick
+          messages — or a photo sent with its caption — become ONE reply instead of a
+          separate reply to each. The timer resets every time they send another
+          message. {MIN_DEBOUNCE_SECONDS}–{MAX_DEBOUNCE_SECONDS}s; 0 replies
+          immediately. Higher means fewer split replies but a slower first reply.
+        </p>
       </div>
 
       {/* 1. Personality / Tone — directly editable. */}

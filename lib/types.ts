@@ -71,6 +71,7 @@ export interface Chatbot {
   welcome_flow_name: string | null;
   welcome_keywords: string[];
   welcome_use_keyword_triggers: boolean;  // ON = Welcome VM also fires on a keyword_triggers match
+  reply_debounce_seconds: number;          // per-bot quiet period (s) before replying; a rapid burst coalesces into ONE reply. Default 60; 0 = instant (still single-flight). App-clamped 0..120.
   created_at: string;
 }
 

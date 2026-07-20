@@ -871,6 +871,18 @@ create policy "admin followup asset update" on storage.objects for update to aut
 alter table public.conversations
   add column if not exists reply_claimed_for uuid;
 
+-- ---------------------------------------------------------------------------
+-- Per-chatbot reply-wait window (2026-07-20)
+-- reply_debounce_seconds overrides the REPLY_DEBOUNCE_MS env per chatbot: the
+-- quiet period (SECONDS) the webhook waits for the lead to finish before it
+-- answers, so a burst — and a photo sent with its caption — coalesces into ONE
+-- reply. Default 60. App clamps 0..120s (clampDebounceSeconds); 0 = answer
+-- immediately but keep single-flight (never double-reply). Read is fail-open
+-- (missing column → REPLY_DEBOUNCE_MS env). NOTE: 60s+ needs Vercel Pro (maxDuration 300).
+-- ---------------------------------------------------------------------------
+alter table public.chatbots
+  add column if not exists reply_debounce_seconds int not null default 60;
+
 -- ===========================================================================
 -- Keyword triggers (2026-07-03)
 -- ===========================================================================

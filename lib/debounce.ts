@@ -10,9 +10,27 @@
  * logic here is pure and covered by scripts/test-debounce.ts.
  */
 
-/** Quiet period before the bot answers, so rapid bursts get one reply.
- *  0 disables the wait but keeps single-flight consolidation active. */
+/** FALLBACK quiet period before the bot answers, so rapid bursts get one reply.
+ *  Used only when a chatbot has no per-bot window (missing column, pre-migration).
+ *  0 disables the wait but keeps single-flight consolidation active. Per-chatbot
+ *  overrides come from chatbots.reply_debounce_seconds (see clampDebounceSeconds). */
 export const REPLY_DEBOUNCE_MS = Number(process.env.REPLY_DEBOUNCE_MS ?? 5_000);
+
+/** Bounds for the per-chatbot reply-wait (seconds). The webhook sleeps this long
+ *  inside the fast-ack background function, so the ceiling stays well under the
+ *  Vercel maxDuration (300s Pro) with room left for generation + bubble pacing. */
+export const MIN_DEBOUNCE_SECONDS = 0;
+export const MAX_DEBOUNCE_SECONDS = 120;
+
+/** Clamp a per-chatbot reply-wait (seconds) into the safe range and floor to a
+ *  whole second. Non-finite (NaN / null / undefined) → MIN (0). NOTE: a MISSING
+ *  column should fall back to REPLY_DEBOUNCE_MS at the call site — this clamps a
+ *  value that is actually present, it does not decide the fallback. */
+export function clampDebounceSeconds(seconds: number | null | undefined): number {
+  const n = Number(seconds);
+  if (!Number.isFinite(n)) return MIN_DEBOUNCE_SECONDS;
+  return Math.min(MAX_DEBOUNCE_SECONDS, Math.max(MIN_DEBOUNCE_SECONDS, Math.floor(n)));
+}
 
 export interface BurstRow {
   id: string;
