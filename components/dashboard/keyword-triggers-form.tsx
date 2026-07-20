@@ -78,6 +78,7 @@ export function KeywordTriggersForm({
   const [, startTransition] = useTransition();
   const [groups, setGroups] = useState<EditableGroup[]>(toEditable(chatbot.keyword_triggers));
   const [gateEnabled, setGateEnabled] = useState(!!chatbot.keyword_gate_enabled);
+  const [answerQuestions, setAnswerQuestions] = useState(!!chatbot.keyword_gate_answer_questions);
   const [strictEnabled, setStrictEnabled] = useState(!!chatbot.keyword_strict_enabled);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,7 +172,12 @@ export function KeywordTriggersForm({
     const supabase = createClient();
     const { error } = await supabase
       .from("chatbots")
-      .update({ keyword_triggers: cleaned, keyword_gate_enabled: gateEnabled, keyword_strict_enabled: strictEnabled })
+      .update({
+        keyword_triggers: cleaned,
+        keyword_gate_enabled: gateEnabled,
+        keyword_gate_answer_questions: gateEnabled && answerQuestions,
+        keyword_strict_enabled: strictEnabled,
+      })
       .eq("id", chatbot.id);
     setSaving(false);
     if (error) {
@@ -218,6 +224,30 @@ export function KeywordTriggersForm({
             With this on and no keywords set, the bot won&apos;t reply to anyone. Add at least
             one enabled keyword group below.
           </p>
+        )}
+
+        {gateEnabled && (
+          <div className="mt-3 border-t pt-3">
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">Still answer genuine questions</span>
+              <Switch
+                checked={answerQuestions}
+                onCheckedChange={(v) => {
+                  markDirty();
+                  setAnswerQuestions(v);
+                }}
+                aria-label="Still answer genuine questions"
+              />
+            </label>
+            <p className="text-xs text-muted-foreground">
+              When on, if a new contact skips your keywords and instead opens with a real
+              question about your business, the bot answers it and starts the conversation
+              (using AI to tell a genuine inquiry from a greeting, a friend, or spam). Only
+              affects first contact — once someone is in a conversation, nothing changes.
+              This relaxes the &ldquo;private account&rdquo; silence above, so leave it off if you
+              want the bot to stay fully silent to everyone without a keyword.
+            </p>
+          </div>
         )}
       </div>
 

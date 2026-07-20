@@ -24,6 +24,7 @@ import {
   buildAssetCatalogBlock,
 } from "@/lib/followup-assets";
 import { firstMatchingGroup, keywordGateBlocks } from "@/lib/keyword-triggers";
+import { isSubstantiveInquiry, screenInquiryRelevance, MAX_QUESTION_SCREENS } from "@/lib/question-gate";
 import { hasActiveAccess } from "@/lib/access";
 import {
   detectExtractionAttempt,
@@ -686,8 +687,57 @@ export async function POST(request: NextRequest) {
   // to engage them regardless of the keyword gate — treat them as engaged so a
   // never-matched contact still gets a reply. Fail-open: a missing column reads as off.
   const forcedOn = !!existing?.bot_forced_on_at;
-  if (keywordGateBlocks(chatbot.keyword_gate_enabled ?? false, !!keywordGroup, alreadyEngaged || forcedOn)) {
-    return manychatReply("", { ai_skipped: true, reason: "keyword_gate_blocked" });
+  // Answer-opener-questions softening: a stranger who was screened as a genuine inquiry
+  // on an earlier turn is engaged from then on (a SEPARATE sticky flag from keyword_fired).
+  const questionEngaged = !!existing?.question_engaged_at;
+  if (keywordGateBlocks(chatbot.keyword_gate_enabled ?? false, !!keywordGroup, alreadyEngaged || forcedOn || questionEngaged)) {
+    // The gate WOULD silence this stranger. Opt-in softening: if they OPENED with a
+    // genuine business question, answer it and start the conversation instead of going
+    // silent. Two-stage + bounded, fail-CLOSED at every step (any miss/error → stay
+    // gated, i.e. the pre-feature silence — the safe direction for a privacy gate):
+    //   1. keyword_gate_answer_questions must be on for this bot;
+    //   2. question_screen_count < MAX_QUESTION_SCREENS caps the paid screens per contact;
+    //   3. Stage 1 isSubstantiveInquiry (free) rejects greetings/acks/control/probes/noise;
+    //   4. Stage 2 screenInquiryRelevance (cheap AI) confirms it's a real prospect inquiry.
+    // On a pass we stamp question_engaged_at (best-effort) and FALL THROUGH to the normal
+    // welcome/AI path — normally the AI answers the question, though if their opener ALSO
+    // matches a welcome_keyword or is a comment opt-in the Welcome VM greets them instead
+    // (still "starts the conversation", just via the VM). We deliberately do NOT write
+    // keyword_fired (keeps keyword/lead analytics clean) and
+    // the follow-up cron keys off keyword_fired, so these contacts are answered reactively
+    // but never auto-enrolled in the proactive drip.
+    const priorScreens =
+      typeof existing?.question_screen_count === "number" ? existing.question_screen_count : 0;
+    let answerAsInquiry = false;
+    if (
+      (chatbot.keyword_gate_answer_questions ?? false) &&
+      priorScreens < MAX_QUESTION_SCREENS &&
+      isSubstantiveInquiry(baseText)
+    ) {
+      // Count the screen attempt up-front (best-effort) so a flood of substantive-but-
+      // irrelevant messages can't run the classifier unboundedly.
+      await supabase
+        .from("conversations")
+        .update({ question_screen_count: priorScreens + 1 })
+        .eq("id", conversationId!)
+        .then(() => {}, () => {});
+      answerAsInquiry = await screenInquiryRelevance({
+        text: baseText,
+        botName: chatbot.name,
+        businessContext: chatbot.business_description || (chatbot.system_prompt ?? "").slice(0, 400),
+      });
+      if (answerAsInquiry) {
+        await supabase
+          .from("conversations")
+          .update({ question_engaged_at: new Date().toISOString() })
+          .eq("id", conversationId!)
+          .then(() => {}, () => {});
+      }
+    }
+    if (!answerAsInquiry) {
+      return manychatReply("", { ai_skipped: true, reason: "keyword_gate_blocked" });
+    }
+    // else: fall through to the welcome/AI path — the inquiry gets answered.
   }
 
   // 6-mute. Self-service pause/resume. A lead silences the AI by texting

@@ -953,6 +953,26 @@ alter table public.conversations
 -- alter table public.conversations drop column if exists bot_forced_on_at;
 
 -- ===========================================================================
+-- Answer opener questions (2026-07-20)
+-- ===========================================================================
+-- Softens the keyword gate: when keyword_gate_answer_questions is on, a keyword-gated
+-- bot answers a never-engaged stranger who OPENS with a genuine business question
+-- (two-stage screen in the webhook) instead of silencing them, and marks them engaged
+-- via question_engaged_at (a SEPARATE sticky flag from keyword_fired — keyword semantics
+-- and the follow-up cron are unaffected). question_screen_count caps the paid relevance
+-- screens per contact. OFF by default.
+alter table public.chatbots
+  add column if not exists keyword_gate_answer_questions boolean not null default false;
+alter table public.conversations
+  add column if not exists question_engaged_at timestamptz,
+  add column if not exists question_screen_count integer not null default 0;
+
+-- Teardown:
+-- alter table public.chatbots drop column if exists keyword_gate_answer_questions;
+-- alter table public.conversations drop column if exists question_engaged_at;
+-- alter table public.conversations drop column if exists question_screen_count;
+
+-- ===========================================================================
 -- Lead tagging via webhook (2026-07-07)
 -- ===========================================================================
 -- `is_leads: 1` on the ManyChat webhook silently tags a contact as an engaged

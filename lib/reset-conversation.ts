@@ -13,6 +13,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * a previously BOT_OFF-tagged thread silently swallow the very welcome/keyword/AI replies
  * the reset exists to re-test. (It mirrors a ManyChat tag, so it may re-sync to "off" on
  * the next tag-change webhook — an accepted, self-healing tradeoff.)
+ *
+ * The keyword-gate ENGAGEMENT flags are cleared for the same reason: the gate treats a
+ * contact as engaged when ANY of `keyword_fired` (matched a keyword), `bot_forced_on_at`
+ * (BOT_ON manual override), or `question_engaged_at` (answered as a genuine question) is
+ * set — so a true first-contact reset must wipe ALL THREE, else the contact silently
+ * bypasses the gate on their next message despite reading as "brand new". `bot_forced_on_at`
+ * mirrors the BOT_ON tag (same self-healing re-sync tradeoff as bot_off_at);
+ * `question_screen_count` resets to 0 so a reset contact can be screened afresh.
  */
 export const FRESH_CONVERSATION_RESET: Record<string, unknown> = {
   confirmed_at: null,
@@ -21,8 +29,11 @@ export const FRESH_CONVERSATION_RESET: Record<string, unknown> = {
   welcomed_at: null,
   user_muted_at: null,
   bot_off_at: null,
+  bot_forced_on_at: null,
   status: "active",
   keyword_fired: [],
+  question_engaged_at: null,
+  question_screen_count: 0,
   followup_step_index: 0,
   followup_count: 0,
   last_followup_at: null,

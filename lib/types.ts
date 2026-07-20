@@ -63,6 +63,7 @@ export interface Chatbot {
   keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)
   training_pairs: TrainingPair[];         // Bot Trainer scenario corrections (JSONB)
   keyword_gate_enabled: boolean;          // ON = reply ONLY to DMs matching a keyword group; else silent
+  keyword_gate_answer_questions: boolean; // ON (gate only) = also answer a never-engaged stranger who opens with a genuine business question
   keyword_strict_enabled: boolean;        // ON = keyword match requires the whole message to equal the keyword (else contains-match)
   followup_flag_enabled: boolean;         // ON = mirror stop-follow-up state to ManyChat tag `ss_no_followup`
   welcome_enabled: boolean;
@@ -182,6 +183,8 @@ export interface Conversation {
   user_muted_at: string | null;      // lead self-paused the AI via "stopmessage" (null = not muted); independent of status
   bot_off_at: string | null;         // ManyChat BOT_OFF tag sync (null = bot on); fully silences the bot for this subscriber
   bot_forced_on_at: string | null;   // ManyChat BOT_ON tag sync (null = no override); force-engages the contact so the keyword gate is bypassed
+  question_engaged_at: string | null; // stranger asked a genuine question and got engaged via the answer-questions gate softening (separate from keyword_fired)
+  question_screen_count: number;      // count of paid relevance screens run for this contact (caps AI cost on the answer-questions path)
   welcomed_at: string | null;
   unread_count: number;
   memory_summary: string | null;     // rolling summary of turns older than the verbatim window
