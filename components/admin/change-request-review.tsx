@@ -14,8 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { DiffView } from "@/components/dashboard/diff-view";
-import { CATEGORY_LABELS } from "@/lib/change-categories";
-import type { ChangeRequest } from "@/lib/types";
+import { CATEGORY_LABELS, SECTION_LABELS } from "@/lib/change-categories";
+import type { ChangeRequest, SectionColumn } from "@/lib/types";
 
 type Action = "approve" | "reject" | "regenerate" | "publish";
 
@@ -25,12 +25,14 @@ export function ChangeRequestReview({
   request,
   chatbot,
   currentSection,
+  currentSections,
   clientEmail,
   transcript,
 }: {
   request: ChangeRequest;
   chatbot: { id: string; name: string; system_prompt: string | null };
   currentSection: string;
+  currentSections: Record<SectionColumn, string>;
   clientEmail: string | null;
   transcript: {
     role: "user" | "assistant";
@@ -42,18 +44,35 @@ export function ChangeRequestReview({
   const router = useRouter();
   const [, startTransition] = useTransition();
 
-  // Section categories edit a section's text; "other" (KB) only edits the legacy
-  // system_prompt when an old request carried one.
-  const isSection = request.category !== "other";
-  const sectionLabel = isSection ? CATEGORY_LABELS[request.category] : "System prompt";
+  // Single-section categories edit one section's text; "overall" edits any affected
+  // section(s); "other" (KB) only edits the legacy system_prompt on old requests.
+  const isSingleSection =
+    request.category === "personality" ||
+    request.category === "offers" ||
+    request.category === "rebuttals";
+  const isOverall = request.category === "overall";
+  const sectionLabel = isSingleSection ? CATEGORY_LABELS[request.category] : "System prompt";
   const hasLegacyPrompt = !!request.proposed?.system_prompt;
-  const showPromptCard = isSection || hasLegacyPrompt;
+  const showPromptCard = isSingleSection || hasLegacyPrompt;
 
   const [systemPrompt, setSystemPrompt] = useState(
-    isSection
+    isSingleSection
       ? (request.proposed?.section_content ?? "")
-      : (request.proposed?.system_prompt ?? chatbot.system_prompt ?? "")
+      : isOverall
+        ? ""
+        : (request.proposed?.system_prompt ?? chatbot.system_prompt ?? "")
   );
+  // "overall" — one editable revised text per affected section (initialized from the
+  // AI proposal). Approve sends these as `sections`.
+  const [sections, setSections] = useState<{ section: SectionColumn; content: string }[]>(
+    (request.proposed?.sections ?? []).map((s) => ({
+      section: s.section,
+      content: s.section_content,
+    }))
+  );
+  function updateSection(index: number, content: string) {
+    setSections((prev) => prev.map((s, i) => (i === index ? { ...s, content } : s)));
+  }
   const [kbEntries, setKbEntries] = useState<EditableKbEntry[]>(
     (request.proposed?.kb_entries ?? []).map((e) => ({ ...e, include: true }))
   );
@@ -101,13 +120,19 @@ export function ChangeRequestReview({
       .filter((e) => e.include)
       .map(({ title, content }) => ({ title, content }));
     run("approve", {
-      // Section categories publish into the section column; legacy "other" rows
-      // still carry system_prompt.
-      ...(isSection
+      // Single-section categories publish into their section column; "overall"
+      // publishes each affected section; legacy "other" rows carry system_prompt.
+      ...(isSingleSection
         ? { section_content: systemPrompt.trim() || undefined }
-        : hasLegacyPrompt
-          ? { system_prompt: systemPrompt.trim() || undefined }
-          : {}),
+        : isOverall
+          ? {
+              sections: sections
+                .map((s) => ({ section: s.section, section_content: s.content.trim() }))
+                .filter((s) => s.section_content),
+            }
+          : hasLegacyPrompt
+            ? { system_prompt: systemPrompt.trim() || undefined }
+            : {}),
       kb_entries,
       admin_note: adminNote || undefined,
     });
@@ -263,15 +288,15 @@ export function ChangeRequestReview({
             <CardTitle>Proposed {sectionLabel}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {isSection && (
+            {isSingleSection && (
               <DiffView
                 label={sectionLabel}
                 before={currentSection}
                 after={systemPrompt}
               />
             )}
-            <Label htmlFor="proposed-system-prompt" className={isSection ? "text-xs font-medium uppercase tracking-wide text-muted-foreground" : "sr-only"}>
-              {isSection ? "Revised (after) — editable" : "Proposed system prompt"}
+            <Label htmlFor="proposed-system-prompt" className={isSingleSection ? "text-xs font-medium uppercase tracking-wide text-muted-foreground" : "sr-only"}>
+              {isSingleSection ? "Revised (after) — editable" : "Proposed system prompt"}
             </Label>
             <Textarea
               id="proposed-system-prompt"
@@ -280,7 +305,7 @@ export function ChangeRequestReview({
               onChange={(e) => setSystemPrompt(e.target.value)}
               disabled={readOnly}
             />
-            {!isSection && (
+            {!isSingleSection && (
               <details className="text-sm">
                 <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                   Current live prompt
@@ -289,6 +314,45 @@ export function ChangeRequestReview({
                   {chatbot.system_prompt || "(none — generic mode)"}
                 </pre>
               </details>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 2b. "Overall" — one editable before/after per affected section. */}
+      {isOverall && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Proposed section changes</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {sections.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No section changes proposed — this request only adds knowledge (below).
+              </p>
+            ) : (
+              sections.map((s, i) => (
+                <div key={s.section} className="space-y-3 border-b pb-6 last:border-b-0 last:pb-0">
+                  <DiffView
+                    label={SECTION_LABELS[s.section]}
+                    before={currentSections[s.section] ?? ""}
+                    after={s.content}
+                  />
+                  <Label
+                    htmlFor={`section-${s.section}`}
+                    className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                  >
+                    {SECTION_LABELS[s.section]} — revised (after), editable
+                  </Label>
+                  <Textarea
+                    id={`section-${s.section}`}
+                    rows={12}
+                    value={s.content}
+                    onChange={(e) => updateSection(i, e.target.value)}
+                    disabled={readOnly}
+                  />
+                </div>
+              ))
             )}
           </CardContent>
         </Card>
@@ -507,6 +571,14 @@ export function ChangeRequestReview({
                 </pre>
               </div>
             )}
+            {request.final?.sections?.map((s) => (
+              <div key={s.section}>
+                <p className="text-sm font-medium">{SECTION_LABELS[s.section]} that went live</p>
+                <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs">
+                  {s.section_content}
+                </pre>
+              </div>
+            ))}
             {request.final?.system_prompt && (
               <div>
                 <p className="text-sm font-medium">System prompt that went live</p>

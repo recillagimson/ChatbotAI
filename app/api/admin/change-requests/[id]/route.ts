@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/admin";
 import { draftChangeRequest } from "@/lib/openai-changes";
 import { sectionColumnFor } from "@/lib/change-categories";
+import type { SectionEdit } from "@/lib/types";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 import { indexEntry } from "@/lib/retrieval";
 import type { Chatbot, ChangeRequest, ChangeFinal } from "@/lib/types";
@@ -16,7 +17,16 @@ const KbEntry = z.object({ title: z.string().min(1).max(200), content: z.string(
 const Body = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("approve"),
-    section_content: z.string().max(20_000).optional(), // revised section text (section categories)
+    section_content: z.string().max(20_000).optional(), // revised section text (single-section categories)
+    sections: z                                          // "overall": each affected section in full
+      .array(
+        z.object({
+          section: z.enum(["persona_section", "offers_section", "rebuttals_section"]),
+          section_content: z.string().max(20_000),
+        })
+      )
+      .max(3)
+      .optional(),
     system_prompt: z.string().max(20_000).optional(),   // LEGACY: old requests still publish into system_prompt
     kb_entries: z.array(KbEntry).max(50).optional(),
     admin_note: z.string().max(4000).optional(),
@@ -52,13 +62,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   if (body.action === "approve") {
-    const sectionCol = sectionColumnFor(cr.category); // null for "other"
+    const sectionCol = sectionColumnFor(cr.category); // null for "other"/"overall"
     const sc = body.section_content?.trim();
     const sp = body.system_prompt?.trim();
+    // "overall": each affected section, trimmed + deduped (first edit per section wins).
+    const seenSection = new Set<string>();
+    const sections: SectionEdit[] = (body.sections ?? [])
+      .map((s) => ({ section: s.section, section_content: s.section_content.trim() }))
+      .filter((s) => {
+        if (!s.section_content || seenSection.has(s.section)) return false;
+        seenSection.add(s.section);
+        return true;
+      });
     const final: ChangeFinal = {
-      // Section categories store the revised section + its target column. Legacy
-      // requests (no category section / old shape) keep system_prompt.
+      // Single-section categories store the revised section + its target column;
+      // "overall" stores every affected section; legacy rows keep system_prompt.
       ...(sectionCol && sc ? { section: sectionCol, section_content: sc } : {}),
+      ...(sections.length ? { sections } : {}),
       ...(sp ? { system_prompt: sp } : {}),
       ...(body.kb_entries && body.kb_entries.length
         ? { kb_entries: body.kb_entries.map((e) => ({ title: e.title.trim(), content: e.content.trim() })) }
@@ -88,6 +108,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         .filter((e) => e.title && e.content);
       const regenCol = sectionColumnFor(cr.category);
       const currentSection = regenCol ? ((chatbot as Chatbot)[regenCol] ?? "") : "";
+      // "overall" isn't scoped to one section — pass the live text of all three.
+      const sections =
+        cr.category === "overall"
+          ? {
+              persona_section: (chatbot as Chatbot).persona_section ?? "",
+              offers_section: (chatbot as Chatbot).offers_section ?? "",
+              rebuttals_section: (chatbot as Chatbot).rebuttals_section ?? "",
+            }
+          : undefined;
       const { proposal, model } = await draftChangeRequest({
         chatbot: chatbot as Chatbot,
         kbEntries,
@@ -95,6 +124,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         adminGuidance: body.adminGuidance,
         category: cr.category,
         currentSection,
+        sections,
       });
       const { error } = await supabase
         .from("change_requests")
@@ -133,10 +163,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   // Apply the prompt (live) — by id; admin RLS overlay authorizes it.
-  // Section categories write the revised text to the right section column; legacy
-  // requests (old shape, no section) still publish into system_prompt.
+  // "overall" writes each affected section; single-section categories write the one
+  // target column; legacy requests (old shape, no section) publish into system_prompt.
   const publishCol = sectionColumnFor(cr.category);
-  if (publishCol && final.section_content && final.section_content.trim()) {
+  if (final.sections && final.sections.length) {
+    // One column per section. Build a single update object so all sections publish
+    // atomically (last write per column wins — cleanSections already deduped).
+    const patch: Record<string, string> = {};
+    for (const s of final.sections) {
+      const content = s.section_content.trim();
+      if (content) patch[s.section] = content;
+    }
+    if (Object.keys(patch).length) {
+      const { error } = await supabase.from("chatbots").update(patch).eq("id", cr.chatbot_id);
+      if (error) return NextResponse.json({ error: "Could not update the chatbot sections." }, { status: 500 });
+    }
+  } else if (publishCol && final.section_content && final.section_content.trim()) {
     const { error } = await supabase
       .from("chatbots").update({ [publishCol]: final.section_content.trim() }).eq("id", cr.chatbot_id);
     if (error) return NextResponse.json({ error: "Could not update the chatbot section." }, { status: 500 });

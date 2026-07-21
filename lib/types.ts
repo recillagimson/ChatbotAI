@@ -216,12 +216,23 @@ export interface KbChunk {
   created_at: string;
 }
 
-// Which prompt section a request targets. "other" = knowledge-base / misc (no section).
-export type ChangeCategory = "personality" | "offers" | "rebuttals" | "other";
+// Which prompt section a request targets. "other" = knowledge-base / misc (no
+// section). "overall" = AI-routed across ANY affected section(s) + KB (multi).
+export type ChangeCategory = "personality" | "offers" | "rebuttals" | "other" | "overall";
+
+/** A prompt-section column that a proposal can revise. */
+export type SectionColumn = "persona_section" | "offers_section" | "rebuttals_section";
+
+/** One section's full revised text — the unit of an "overall" multi-section edit. */
+export interface SectionEdit {
+  section: SectionColumn;
+  section_content: string; // FULL revised text for that section (a replacement, not a diff)
+}
 
 export interface ChangeProposal {
-  section?: "persona_section" | "offers_section" | "rebuttals_section"; // column the section_content targets
+  section?: SectionColumn;                          // column the section_content targets (single-section categories)
   section_content?: string;                        // FULL revised text for the targeted section
+  sections?: SectionEdit[];                         // "overall" only: every section the request affects, each in full
   system_prompt?: string;                          // LEGACY — still honored for old rows; omitted/empty = no change
   kb_entries?: { title: string; content: string }[]; // NEW kb entries to add (may be omitted/empty)
   summary: string;                                 // plain-English "what changed and why" for the team
@@ -229,8 +240,9 @@ export interface ChangeProposal {
 
 // The team-finalized payload chosen at Approve (no summary needed).
 export interface ChangeFinal {
-  section?: "persona_section" | "offers_section" | "rebuttals_section";
+  section?: SectionColumn;
   section_content?: string;
+  sections?: SectionEdit[];                         // "overall" only: sections published together
   system_prompt?: string;                          // LEGACY fallback for old requests
   kb_entries?: { title: string; content: string }[];
 }

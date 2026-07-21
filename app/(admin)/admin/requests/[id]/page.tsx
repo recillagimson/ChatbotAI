@@ -97,6 +97,12 @@ export default async function AdminRequestReviewPage({
   // Current text of the section this request targets (the "before" for review).
   const sectionCol = sectionColumnFor(cr.category);
   const currentSection = sectionCol && chatbot ? (chatbot[sectionCol] ?? "") : "";
+  // All three sections — the "before" for an "overall" request's multi-section diff.
+  const currentSections = {
+    persona_section: chatbot?.persona_section ?? "",
+    offers_section: chatbot?.offers_section ?? "",
+    rebuttals_section: chatbot?.rebuttals_section ?? "",
+  };
 
   const { data: profileData } = await supabase
     .from("profiles")
@@ -153,6 +159,7 @@ export default async function AdminRequestReviewPage({
             system_prompt: chatbot.system_prompt,
           }}
           currentSection={currentSection}
+          currentSections={currentSections}
           clientEmail={clientEmail}
           transcript={transcriptView}
         />

@@ -14,8 +14,8 @@ import {
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { RequestComposer } from "@/components/dashboard/request-composer";
 import { DiffView } from "@/components/dashboard/diff-view";
-import { CATEGORY_LABELS } from "@/lib/change-categories";
-import type { ChangeCategory, ChangeProposal } from "@/lib/types";
+import { CATEGORY_LABELS, SECTION_LABELS } from "@/lib/change-categories";
+import type { ChangeCategory, ChangeProposal, SectionColumn } from "@/lib/types";
 import { Sparkles, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,13 +28,16 @@ type ChatMessage = {
   files?: { name: string }[];
 };
 
-const CATEGORY_ORDER: ChangeCategory[] = ["personality", "offers", "rebuttals", "other"];
+const CATEGORY_ORDER: ChangeCategory[] = ["personality", "offers", "rebuttals", "other", "overall"];
 const CATEGORY_BLURB: Record<ChangeCategory, string> = {
   personality: "The bot's voice and tone. Applies instantly — no team review.",
   offers: "Services, packages, inclusions/exclusions, prices, links. Team-reviewed.",
   rebuttals: "How the bot handles objections and FAQs. Team-reviewed.",
   other: "Add facts to the knowledge base. Team-reviewed.",
+  overall: "Not sure which part? Describe it and we'll update any part it affects — voice, offers, rebuttals & knowledge. Team-reviewed.",
 };
+
+type CurrentSections = Record<SectionColumn, string>;
 
 export function RequestChat({
   changeRequestId,
@@ -46,6 +49,7 @@ export function RequestChat({
   initialStatus,
   initialCategory,
   currentSection,
+  currentSections,
   hasProjects,
 }: {
   changeRequestId: string | null;
@@ -57,6 +61,7 @@ export function RequestChat({
   initialStatus: CrStatus | null;
   initialCategory: ChangeCategory;
   currentSection: string;
+  currentSections: CurrentSections;
   hasProjects: boolean;
 }) {
   const router = useRouter();
@@ -350,6 +355,20 @@ export function RequestChat({
                       before={currentSection}
                       after={proposal.section_content}
                     />
+                  )}
+
+                  {/* "Overall" → one diff per affected section. */}
+                  {proposal.sections && proposal.sections.length > 0 && (
+                    <div className="space-y-4">
+                      {proposal.sections.map((s) => (
+                        <DiffView
+                          key={s.section}
+                          label={SECTION_LABELS[s.section]}
+                          before={currentSections[s.section] ?? ""}
+                          after={s.section_content}
+                        />
+                      ))}
+                    </div>
                   )}
 
                   {/* Legacy proposals (old shape) still show the system prompt. */}

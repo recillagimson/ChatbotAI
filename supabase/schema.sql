@@ -709,11 +709,17 @@ update public.chatbots
  where persona_section is null
    and coalesce(nullif(trim(system_prompt), ''), nullif(trim(business_description), '')) is not null;
 
--- Request Change category: which section a request targets (or 'other' = KB/misc).
--- Personality auto-applies (client, no admin); offers/rebuttals/other need approval.
+-- Request Change category: which section a request targets (or 'other' = KB/misc,
+-- or 'overall' = any affected section + KB, AI-routed). Personality auto-applies
+-- (client, no admin); offers/rebuttals/other/overall need approval.
 alter table public.change_requests
   add column if not exists category text not null default 'other'
-    check (category in ('personality','offers','rebuttals','other'));
+    check (category in ('personality','offers','rebuttals','other','overall'));
+-- Widen the CHECK on existing DBs (the inline check above only applies on column
+-- creation; re-running this file must also add 'overall' to a pre-existing column).
+alter table public.change_requests drop constraint if exists change_requests_category_check;
+alter table public.change_requests add constraint change_requests_category_check
+  check (category in ('personality','offers','rebuttals','other','overall'));
 create index if not exists change_requests_category_idx
   on public.change_requests (category, status, created_at desc);
 

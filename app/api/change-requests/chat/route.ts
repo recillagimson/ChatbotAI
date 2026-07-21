@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { chatTurn, type ChatTurnMessage } from "@/lib/openai-changes";
+import { chatTurn, type ChatTurnMessage, type SectionsContext } from "@/lib/openai-changes";
 import { downloadAsBase64, downloadAsBuffer, CLAUDE_IMAGE_TYPES } from "@/lib/storage";
 import { extractTextFromFile, MAX_DOC_CHARS } from "@/lib/document-parser";
 import { sectionColumnFor } from "@/lib/change-categories";
@@ -16,7 +16,7 @@ const Body = z.object({
   change_request_id: z.string().uuid().optional(),
   // Which section this request targets. Set on a NEW thread; ignored for an
   // existing thread (the category is fixed at creation). Defaults to "other".
-  category: z.enum(["personality", "offers", "rebuttals", "other"]).optional(),
+  category: z.enum(["personality", "offers", "rebuttals", "other", "overall"]).optional(),
   message: z.string().min(1).max(4000),
   images: z.array(z.object({ path: z.string(), name: z.string() })).max(5).optional(),
   files: z
@@ -99,6 +99,17 @@ export async function POST(request: NextRequest) {
   const sectionCol = sectionColumnFor(effectiveCategory);
   const currentSection = sectionCol ? ((chatbot as Chatbot)[sectionCol] ?? "") : "";
 
+  // "overall" isn't scoped to one section — it may revise any of the three, so the
+  // assistant needs the live text of all of them.
+  const sectionsCtx: SectionsContext | undefined =
+    effectiveCategory === "overall"
+      ? {
+          persona_section: (chatbot as Chatbot).persona_section ?? "",
+          offers_section: (chatbot as Chatbot).offers_section ?? "",
+          rebuttals_section: (chatbot as Chatbot).rebuttals_section ?? "",
+        }
+      : undefined;
+
   // Build the model transcript. The assistant reads the bot's FULL current
   // knowledge (title + content), so it proposes changes grounded in what exists.
   const kbRows = (await supabase.from("knowledge_base").select("title, content").eq("chatbot_id", chatbot_id)).data;
@@ -154,6 +165,7 @@ export async function POST(request: NextRequest) {
       messages: modelMessages,
       category: effectiveCategory,
       currentSection,
+      sections: sectionsCtx,
     });
     assistantText = out.assistantText;
     proposal = out.proposal;

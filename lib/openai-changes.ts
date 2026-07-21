@@ -10,9 +10,31 @@
 //                          multimodal images, scoped + credential-refusing prompt)
 //
 // The DM-reply path (generateReply) stays on Anthropic — see lib/anthropic.ts.
-import type { Chatbot, ChangeProposal, ChangeCategory } from "./types";
+import type { Chatbot, ChangeProposal, ChangeCategory, SectionColumn, SectionEdit } from "./types";
 import { buildFullContextBlock, type KbEntryLite } from "./retrieval";
-import { SECTION_BY_CATEGORY, CATEGORY_LABELS } from "./change-categories";
+import { SECTION_BY_CATEGORY, CATEGORY_LABELS, ALL_SECTION_COLUMNS } from "./change-categories";
+
+/** Current text of all three editable sections — the context an "overall" request revises. */
+export interface SectionsContext {
+  persona_section: string;
+  offers_section: string;
+  rebuttals_section: string;
+}
+
+/** Human labels for the three sections inside the "overall" prompt/scope. */
+const OVERALL_SECTION_HEADINGS: Record<SectionColumn, string> = {
+  persona_section: "PERSONALITY / TONE — the bot's voice and tone (how it sounds)",
+  offers_section: "OFFERS, SERVICES & LINKS — services, packages, inclusions/exclusions, prices, links",
+  rebuttals_section: "REBUTTALS & FAQ HANDLING — how it answers objections and common questions",
+};
+
+/** Render the "current sections" block shared by the overall chat + draft prompts. */
+function renderOverallSections(sections?: SectionsContext): string {
+  const s = sections ?? { persona_section: "", offers_section: "", rebuttals_section: "" };
+  return ALL_SECTION_COLUMNS.map(
+    (col) => `--- ${OVERALL_SECTION_HEADINGS[col]} ---\n${(s[col] ?? "").trim() || "(empty — not written yet)"}`
+  ).join("\n\n");
+}
 
 /**
  * Most efficient OpenAI model that reliably handles this task — multi-turn chat,
@@ -43,13 +65,74 @@ const REQUEST_TIMEOUT_MS = 50_000;
  */
 const MAX_PROPOSAL_TOKENS = 8000;
 
+const KB_ENTRIES_SCHEMA = {
+  type: "array",
+  description: "NEW knowledge-base entries to add. Omit/empty if none.",
+  items: {
+    type: "object",
+    properties: { title: { type: "string" }, content: { type: "string" } },
+    required: ["title", "content"],
+  },
+} as const;
+
+const SUMMARY_SCHEMA = {
+  type: "string",
+  description:
+    "A concise plain-English explanation of what you changed and why, for the human reviewer.",
+} as const;
+
 /**
- * The propose_changes tool, shaped for the request's category. For a prompt
- * section (personality/offers/rebuttals) the model returns the FULL revised
- * `section_content`; for "other" it returns `kb_entries`. The category is fixed
- * per request and supplied here so the model can't target the wrong field.
+ * The propose_changes tool, shaped for the request's category:
+ *  - a prompt section (personality/offers/rebuttals): return the FULL revised
+ *    `section_content` for that one section;
+ *  - "other": return `kb_entries` only;
+ *  - "overall": return a `sections` array (each affected section in full) and/or
+ *    `kb_entries` — the model picks which parts the request touches.
+ * The category is fixed per request and supplied here so the model can't target
+ * the wrong field.
  */
 function buildProposeTool(category: ChangeCategory) {
+  if (category === "overall") {
+    return {
+      type: "function" as const,
+      function: {
+        name: "propose_changes",
+        description:
+          "Return revised content for ANY of the bot's sections your change affects (personality/voice, offers, rebuttals/FAQ) and/or NEW knowledge-base entries, for the SpeedSettr team to review. Include ONLY the parts you actually changed.",
+        parameters: {
+          type: "object",
+          properties: {
+            sections: {
+              type: "array",
+              description:
+                "Each section your change affects, with its COMPLETE revised text. Omit any section you did not change.",
+              items: {
+                type: "object",
+                properties: {
+                  section: {
+                    type: "string",
+                    enum: ALL_SECTION_COLUMNS,
+                    description:
+                      "Which part this revises: persona_section (voice/tone), offers_section (services/prices/links), or rebuttals_section (objections/FAQs).",
+                  },
+                  section_content: {
+                    type: "string",
+                    description:
+                      "The COMPLETE revised text for that section (a full replacement, not a diff).",
+                  },
+                },
+                required: ["section", "section_content"],
+              },
+            },
+            kb_entries: KB_ENTRIES_SCHEMA,
+            summary: SUMMARY_SCHEMA,
+          },
+          required: ["summary"],
+        },
+      },
+    };
+  }
+
   const sectionMode = category !== "other";
   const label = sectionMode ? CATEGORY_LABELS[category] : "";
   return {
@@ -70,25 +153,41 @@ function buildProposeTool(category: ChangeCategory) {
                 },
               }
             : {}),
-          kb_entries: {
-            type: "array",
-            description: "NEW knowledge-base entries to add. Omit/empty if none.",
-            items: {
-              type: "object",
-              properties: { title: { type: "string" }, content: { type: "string" } },
-              required: ["title", "content"],
-            },
-          },
-          summary: {
-            type: "string",
-            description:
-              "A concise plain-English explanation of what you changed and why, for the human reviewer.",
-          },
+          kb_entries: KB_ENTRIES_SCHEMA,
+          summary: SUMMARY_SCHEMA,
         },
         required: sectionMode ? ["section_content", "summary"] : ["summary"],
       },
     },
   };
+}
+
+/**
+ * Clean a raw `sections` array (from an "overall" propose_changes call) into
+ * validated SectionEdit[] (or undefined). Drops entries with an unknown column or
+ * empty content, tolerates a legacy `system_prompt` field for the text, and keeps
+ * the FIRST edit per section so a model that emits a duplicate can't stomp itself.
+ */
+function cleanSections(raw: unknown): SectionEdit[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const valid = new Set<string>(ALL_SECTION_COLUMNS);
+  const seen = new Set<string>();
+  const out: SectionEdit[] = [];
+  for (const e of raw) {
+    if (!e || typeof e !== "object") continue;
+    const o = e as Record<string, unknown>;
+    const section = typeof o.section === "string" ? o.section : "";
+    const content =
+      typeof o.section_content === "string"
+        ? o.section_content.trim()
+        : typeof o.system_prompt === "string"
+          ? o.system_prompt.trim()
+          : "";
+    if (!valid.has(section) || !content || seen.has(section)) continue;
+    seen.add(section);
+    out.push({ section: section as SectionColumn, section_content: content });
+  }
+  return out.length ? out : undefined;
 }
 
 /** Clean a raw kb_entries array into validated {title, content} pairs (or undefined). */
@@ -122,6 +221,16 @@ export function parseProposalInput(input: unknown, category: ChangeCategory): Ch
   if (!summary) throw new Error("propose_changes returned no summary");
 
   const kb_entries = cleanKbEntries(obj.kb_entries);
+
+  if (category === "overall") {
+    // Multi-section: any affected section(s) + optional new knowledge. Require at
+    // least one actionable change so an empty proposal is treated as "no proposal".
+    const sections = cleanSections(obj.sections);
+    if (!sections && !kb_entries) {
+      throw new Error("propose_changes (overall) returned no sections and no kb_entries");
+    }
+    return { summary, ...(sections ? { sections } : {}), ...(kb_entries ? { kb_entries } : {}) };
+  }
 
   if (category === "other") {
     return { summary, ...(kb_entries ? { kb_entries } : {}) };
@@ -242,7 +351,7 @@ export interface ChatTurnMessage {
 
 /** Per-section guidance for the change assistant (what each section covers). */
 const SECTION_GUIDE: Record<
-  Exclude<ChangeCategory, "other">,
+  Exclude<ChangeCategory, "other" | "overall">,
   { label: string; covers: string }
 > = {
   personality: {
@@ -261,36 +370,56 @@ const SECTION_GUIDE: Record<
 };
 
 /**
- * PURE: the scoped, security-hardened system prompt for the change assistant,
- * focused on ONE category. `currentSection` is the live text of the targeted
- * section (or "" for "other"/empty sections).
+ * PURE: the scoped, security-hardened system prompt for the change assistant.
+ * For a single-section category `currentSection` is the live text of the targeted
+ * section (or "" for "other"/empty). For "overall" the model may edit ANY affected
+ * section, so `sections` (the live text of all three) is used instead.
  */
 export function buildChatSystemPrompt(
   chatbot: Pick<Chatbot, "name">,
   kbEntries: KbEntryLite[],
   category: ChangeCategory,
-  currentSection: string
+  currentSection: string,
+  sections?: SectionsContext
 ): string {
   const kbTopics = kbEntries.map((e) => e.title).filter(Boolean);
   const kbBlock = kbEntries.length ? buildFullContextBlock(kbEntries) : "(none yet)";
 
-  const guide = category === "other" ? null : SECTION_GUIDE[category];
+  const guide = category === "personality" || category === "offers" || category === "rebuttals"
+    ? SECTION_GUIDE[category]
+    : null;
 
-  const scopeBlock = guide
-    ? `YOU ARE EDITING ONE SECTION: ${guide.label}.
+  let scopeBlock: string;
+  let proposeInstr: string;
+
+  if (category === "overall") {
+    scopeBlock = `YOU MAY EDIT ANY OF THE BOT'S PARTS THAT THE CLIENT'S REQUEST AFFECTS — and only those. Leave every part the request does NOT touch exactly as it is.
+
+The parts you can change:
+1. PERSONALITY / TONE — the bot's voice and tone (how it sounds).
+2. OFFERS, SERVICES & LINKS — services, packages, inclusions/exclusions, prices, links.
+3. REBUTTALS & FAQ HANDLING — how it answers objections and common questions.
+You can also add new facts the bot can cite (knowledge-base entries).
+
+CURRENT PARTS (your starting point — revise only what the request affects, never rewrite an untouched one):
+
+${renderOverallSections(sections)}`;
+    proposeInstr = `- Only when you have enough to act, call the propose_changes tool. In "sections", include ONLY the parts your change actually affects, each with its COMPLETE revised text (a full replacement, not a diff); leave the rest out. Add any new facts as kb_entries. Always include a short plain-English summary. When you revise the personality, write ONLY the voice/persona — do NOT add generic safety rules; the platform adds those automatically.`;
+  } else if (guide) {
+    scopeBlock = `YOU ARE EDITING ONE SECTION: ${guide.label}.
 This section covers ${guide.covers}. Only propose changes to THIS section — never touch the bot's other sections.
 
 CURRENT ${guide.label} SECTION (your starting point — revise this, never rewrite from scratch):
-${currentSection.trim() || "(empty — this section has not been written yet)"}`
-    : `YOU ARE ADDING KNOWLEDGE. The client wants to add or correct facts the bot can cite (knowledge-base entries) — not change its persona or sections. Propose only new knowledge-base entries.`;
-
-  const proposeInstr = guide
-    ? `- Only when you have enough to act, call the propose_changes tool with section_content = the COMPLETE revised text of the ${guide.label} section (a full replacement, not a diff), plus a short summary.${
-        category === "personality"
-          ? " Write ONLY the voice/persona — do NOT add generic safety rules; the platform adds those automatically."
-          : " Keep the content focused on this section."
-      }`
-    : `- Only when you have enough to act, call the propose_changes tool with kb_entries (the NEW knowledge facts to add) plus a short summary. Do not propose a section change for this category.`;
+${currentSection.trim() || "(empty — this section has not been written yet)"}`;
+    proposeInstr = `- Only when you have enough to act, call the propose_changes tool with section_content = the COMPLETE revised text of the ${guide.label} section (a full replacement, not a diff), plus a short summary.${
+      category === "personality"
+        ? " Write ONLY the voice/persona — do NOT add generic safety rules; the platform adds those automatically."
+        : " Keep the content focused on this section."
+    }`;
+  } else {
+    scopeBlock = `YOU ARE ADDING KNOWLEDGE. The client wants to add or correct facts the bot can cite (knowledge-base entries) — not change its persona or sections. Propose only new knowledge-base entries.`;
+    proposeInstr = `- Only when you have enough to act, call the propose_changes tool with kb_entries (the NEW knowledge facts to add) plus a short summary. Do not propose a section change for this category.`;
+  }
 
   return `You are the SpeedSettr change assistant. You help ONE client refine ONE of their Instagram/Messenger DM chatbots — "the project". Through a short, friendly conversation you figure out the change they want to this section, then propose it for the SpeedSettr team to review.
 
@@ -346,8 +475,15 @@ export async function chatTurn(opts: {
   messages: ChatTurnMessage[];
   category: ChangeCategory;
   currentSection: string;
+  sections?: SectionsContext; // "overall" only: live text of all three sections
 }): Promise<{ assistantText: string; proposal?: ChangeProposal; tokensUsed: number; model: string }> {
-  const system = buildChatSystemPrompt(opts.chatbot, opts.kbEntries, opts.category, opts.currentSection);
+  const system = buildChatSystemPrompt(
+    opts.chatbot,
+    opts.kbEntries,
+    opts.category,
+    opts.currentSection,
+    opts.sections
+  );
 
   const data = await postChat({
     model: CHANGE_AI_MODEL,
@@ -401,13 +537,34 @@ export function buildDraftPrompts(opts: {
   adminGuidance?: string;
   category: ChangeCategory;
   currentSection: string;
+  sections?: SectionsContext; // "overall" only: live text of all three sections
 }): { system: string; userContent: string } {
-  const { kbEntries, requestText, adminGuidance, category, currentSection } = opts;
+  const { kbEntries, requestText, adminGuidance, category, currentSection, sections } = opts;
   const kbBlock = kbEntries.length ? buildFullContextBlock(kbEntries) : "(none)";
-  const guide = category === "other" ? null : SECTION_GUIDE[category];
+  const guide = category === "personality" || category === "offers" || category === "rebuttals"
+    ? SECTION_GUIDE[category]
+    : null;
   const guidanceTail = adminGuidance
     ? `\n\nADDITIONAL GUIDANCE FROM THE SPEEDSETTR TEAM (takes priority):\n${adminGuidance}`
     : "";
+
+  if (category === "overall") {
+    const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change that may affect ANY part of their bot. Decide which of the bot's parts the request actually affects — personality/voice, offers, rebuttals/FAQ — and/or new knowledge, and produce the FULL revised text for ONLY those parts. Leave every part the request does not touch exactly as it is. When you revise the personality, write ONLY the voice/persona — do not add generic safety rules; the platform adds those automatically.
+
+Respond by calling the propose_changes tool with "sections" (each changed part in full) and/or kb_entries (new facts), plus a concise summary for the reviewer.`;
+
+    const userContent = `CURRENT PARTS (your starting point — revise only what the request affects, never rewrite an untouched one):
+
+${renderOverallSections(sections)}
+
+CURRENT KNOWLEDGE BASE (for context; do not duplicate):
+${kbBlock}
+
+CLIENT'S CHANGE REQUEST:
+${requestText}${guidanceTail}`;
+
+    return { system, userContent };
+  }
 
   if (guide) {
     const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change to the ${guide.label} section of their bot (this section covers ${guide.covers}). Produce the FULL revised ${guide.label} section that fulfills the request.
@@ -453,6 +610,7 @@ export async function draftChangeRequest(opts: {
   adminGuidance?: string;
   category: ChangeCategory;
   currentSection: string;
+  sections?: SectionsContext; // "overall" only
 }): Promise<{ proposal: ChangeProposal; tokensUsed: number; model: string }> {
   const { system, userContent } = buildDraftPrompts(opts);
 

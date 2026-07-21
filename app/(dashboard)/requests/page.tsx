@@ -3,7 +3,7 @@ import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { signAttachment } from "@/lib/storage";
 import { RequestChat } from "@/components/dashboard/request-chat";
 import { sectionColumnFor } from "@/lib/change-categories";
-import type { ChangeCategory, ChangeProposal, Chatbot, TranscriptMessage } from "@/lib/types";
+import type { ChangeCategory, ChangeProposal, Chatbot, SectionColumn, TranscriptMessage } from "@/lib/types";
 import { Plus, FolderClosed, History as HistoryIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -114,26 +114,39 @@ export default async function RequestsPage({
   // Category: a loaded thread uses its stored category; a new request takes it
   // from the ?category= deep-link (the "Request a change" CTAs), else defaults.
   const isValidCategory = (v?: string): v is ChangeCategory =>
-    v === "personality" || v === "offers" || v === "rebuttals" || v === "other";
+    v === "personality" || v === "offers" || v === "rebuttals" || v === "other" || v === "overall";
   const activeCategory: ChangeCategory = thread
     ? thread.category
     : isValidCategory(sp.category)
       ? sp.category
       : "personality";
 
-  // Current text of the targeted section for the active project (the "before"
-  // side of the proposal review). Empty for "other" / no project / empty section.
+  // Current text of the active project's sections — the "before" side of the
+  // proposal review. `currentSection` is the single targeted section (single-section
+  // categories); `currentSections` is all three, for the "overall" multi-diff.
+  // Empty for no project / empty sections.
   let currentSection = "";
+  let currentSections: Record<SectionColumn, string> = {
+    persona_section: "",
+    offers_section: "",
+    rebuttals_section: "",
+  };
   if (activeProjectId) {
-    const col = sectionColumnFor(activeCategory);
-    if (col) {
-      const { data: secBot } = await supabase
-        .from("chatbots")
-        .select("persona_section, offers_section, rebuttals_section")
-        .eq("id", activeProjectId)
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      currentSection = (secBot as Pick<Chatbot, typeof col> | null)?.[col] ?? "";
+    const { data: secBot } = await supabase
+      .from("chatbots")
+      .select("persona_section, offers_section, rebuttals_section")
+      .eq("id", activeProjectId)
+      .eq("user_id", user!.id)
+      .maybeSingle();
+    if (secBot) {
+      const bot = secBot as Pick<Chatbot, SectionColumn>;
+      currentSections = {
+        persona_section: bot.persona_section ?? "",
+        offers_section: bot.offers_section ?? "",
+        rebuttals_section: bot.rebuttals_section ?? "",
+      };
+      const col = sectionColumnFor(activeCategory);
+      currentSection = col ? currentSections[col] : "";
     }
   }
 
@@ -274,6 +287,7 @@ export default async function RequestsPage({
         initialStatus={thread ? thread.status : null}
         initialCategory={activeCategory}
         currentSection={currentSection}
+        currentSections={currentSections}
         hasProjects={projects.length > 0}
       />
     </div>
