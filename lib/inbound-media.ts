@@ -11,6 +11,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cleanContactField } from "./contact";
 import { transcribeAudio } from "./transcribe";
+import { describeImage, imageTextPart } from "./vision";
 import { extractTextFromFile, MAX_DOC_CHARS } from "./document-parser";
 import { UPLOAD_BUCKET } from "./storage";
 
@@ -200,6 +201,11 @@ export function composeUserMessage(opts: { text?: string | null; textParts?: str
 
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_BYTES = 25 * 1024 * 1024; // Whisper's hard limit; comfortable for images too.
+// Cap the number of images we run the (extra, ~seconds each) vision-describe call
+// on per webhook body, so a carousel / multi-URL body can't multiply describe
+// latency without bound (each describe still has its own 15s timeout). Images past
+// the cap are skipped for description but still sent as vision on the current turn.
+const MAX_DESCRIBE_IMAGES = 4;
 // A non-browser UA — Meta/Supabase REST can 401 browser-like agents (see memory).
 const FETCH_UA = "SpeedSettr-Media/1.0";
 const UNSUPPORTED_NOTE =
@@ -288,8 +294,18 @@ async function storeMedia(
  */
 export async function processInboundMedia(
   items: MediaItem[],
-  ctx: { supabase: SupabaseClient; userId: string }
+  ctx: { supabase: SupabaseClient; userId: string },
+  // describeImages: run the vision-describe call that turns each image into
+  // persistent text. Default ON (push path — describe time is absorbed by the
+  // reply-wait window). Pass FALSE on the synchronous RESPONSE path (TikTok /
+  // no-API-key channels), which returns the reply in the HTTP body under
+  // ManyChat's ~10s External Request timeout and has no debounce to absorb it —
+  // there the current turn still carries the raw image as vision, we just don't
+  // persist a text description.
+  opts: { describeImages?: boolean } = {}
 ): Promise<ProcessedMedia> {
+  const describeImages = opts.describeImages !== false;
+  let describeCalls = 0;
   const out: ProcessedMedia = { images: [], textParts: [], stored: [], unsupported: false };
 
   for (const item of items) {
@@ -312,7 +328,21 @@ export async function processInboundMedia(
     try {
       if (kind === "image") {
         const mediaType = fetched.contentType || "image/jpeg";
-        out.images.push({ base64: fetched.buffer.toString("base64"), mediaType });
+        const base64 = fetched.buffer.toString("base64");
+        out.images.push({ base64, mediaType });
+        // Also describe the image to TEXT so its content persists like a voice-note
+        // transcript — into the message row, burst consolidation, history, and the
+        // memory summary. Without this, earlier images in a burst (and any image
+        // sent on an older turn) are invisible when the bot composes its reply, so
+        // it re-asks for what the customer already showed. Best-effort: on any
+        // failure the current turn still carries the raw image as vision. Gated by
+        // describeImages (off on the time-critical response path) and capped per
+        // body so a many-image carousel can't multiply describe latency.
+        if (describeImages && describeCalls < MAX_DESCRIBE_IMAGES) {
+          describeCalls++;
+          const imgPart = imageTextPart(await describeImage({ base64, mediaType }));
+          if (imgPart) out.textParts.push(imgPart);
+        }
         const stored = await storeMedia(ctx.supabase, { userId: ctx.userId, buffer: fetched.buffer, contentType: mediaType, ext });
         if (stored) out.stored.push(stored);
       } else if (kind === "audio" || kind === "video") {

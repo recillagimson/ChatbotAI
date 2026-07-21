@@ -1077,7 +1077,12 @@ export async function POST(request: NextRequest) {
   // Shared by both delivery paths below; the RESPONSE path always runs "single"
   // mode, which never returns null and behaves exactly as before.
   const generateAndPersistReply = async (
-    mode: "burst" | "single" = "single"
+    mode: "burst" | "single" = "single",
+    // synchronous: this runs on the RESPONSE path (reply returned in the HTTP body
+    // under ManyChat's ~10s timeout, no debounce to absorb latency). When true we
+    // skip the extra per-image vision-describe call — the current turn still gets
+    // the raw image as vision; we just don't persist a text description.
+    synchronous = false
   ): Promise<{ text: string; assets: OutboundAsset[]; tagWork?: Promise<void> } | null> => {
     // 6e. Process any inbound media (network): transcribe audio/video, read
     // documents, encode images for vision. Runs here (background for push
@@ -1085,10 +1090,11 @@ export async function POST(request: NextRequest) {
     let images: { base64: string; mediaType: string }[] = [];
     const textParts: string[] = [];
     if (hasMedia) {
-      const media = await processInboundMedia(mediaItems, {
-        supabase,
-        userId: chatbot.user_id,
-      });
+      const media = await processInboundMedia(
+        mediaItems,
+        { supabase, userId: chatbot.user_id },
+        { describeImages: !synchronous }
+      );
       images = media.images;
       textParts.push(...media.textParts);
       // Backfill the inbound row: readable content + durable media pointer.
@@ -1600,7 +1606,7 @@ export async function POST(request: NextRequest) {
     // misconfig where a push-capable platform reaches this path with no API key —
     // but a null (stood-down) result just falls back to the default replyText
     // below, so this path never wrongly silences a lead.
-    const result = await generateAndPersistReply("single");
+    const result = await generateAndPersistReply("single", true);
     if (result) replyText = result.text;
   } catch (err) {
     console.error("[manychat-webhook] sync processing failed", err);

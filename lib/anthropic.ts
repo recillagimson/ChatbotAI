@@ -62,6 +62,7 @@ const GUARDRAILS = `RULES
 - Do not promise refunds, discounts, or anything financial without being told to.
 - If the user seems angry or asks for a human, reply briefly and say a teammate will follow up.
 - Read the conversation so far before replying. Never restart the intro or re-ask questions the customer already answered; continue where you left off.
+- If the customer sent a photo, screenshot, voice note, or document, its contents are included in their message (as an image and/or a text description or transcript labelled like "[Image]:" or "[Voice message]:"), including ones they sent a moment earlier. Read all of it and use what they already shared — never ask for information that's already shown in it (for example a score, price, name, amount, or date visible in a screenshot).
 - Match the language of the customer's message.`;
 
 // Anti-prompt-extraction rules (Layer 1 of the prompt shield). Appended as the
