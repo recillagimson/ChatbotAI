@@ -2,32 +2,27 @@
 
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { buildConversationsHref, type ConvFilterState } from "@/lib/conversation-filters";
 
 /**
  * Chatbot filter for the Conversations inbox. URL-driven (like the platform tabs
- * on the same page): navigates to ?chatbot=<id> while preserving the active
- * platform, so the two filters compose. "All chatbots" clears the filter.
+ * on the same page): navigates to ?chatbot=<id> while preserving every other
+ * active filter (platform, tag, date range) and resetting to page 1 — all via the
+ * shared buildConversationsHref helper. "All chatbots" clears the filter.
  */
 export function ConversationFilter({
   chatbots,
-  chatbotId,
-  platform,
-  tag = null,
+  current,
 }: {
   chatbots: { id: string; name: string }[];
-  chatbotId: string | null;
-  platform: string | null;
-  tag?: string | null;
+  current: ConvFilterState;
 }) {
   const router = useRouter();
 
   function handleChange(value: string) {
-    const params = new URLSearchParams();
-    if (platform) params.set("platform", platform);
-    if (value) params.set("chatbot", value);
-    if (tag) params.set("tag", tag);
-    const qs = params.toString();
-    router.push(qs ? `/conversations?${qs}` : "/conversations", { scroll: false });
+    router.push(buildConversationsHref(current, { chatbot: value || null }), {
+      scroll: false,
+    });
   }
 
   return (
@@ -37,7 +32,7 @@ export function ConversationFilter({
       </label>
       <select
         id="conversations-bot"
-        value={chatbotId ?? ""}
+        value={current.chatbot ?? ""}
         onChange={(e) => handleChange(e.target.value)}
         className={cn(
           "flex h-10 min-w-[160px] appearance-none rounded-md border border-input bg-background px-3 py-2 pr-8 text-sm",
