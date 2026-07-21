@@ -18,6 +18,7 @@ import { resolveChatbotTab } from "@/lib/chatbot-tabs";
 import { stepAssetKeys } from "@/lib/followup-assets";
 import { requireSuperadmin } from "@/lib/admin";
 import { FOLLOWUP_ENABLED } from "@/lib/followup";
+import { platformLabel } from "@/lib/platforms";
 import type { Chatbot, FollowupAsset } from "@/lib/types";
 import Link from "next/link";
 
@@ -46,11 +47,19 @@ export default async function ChatbotDetailPage({
   // Never serialize the encrypted key to the browser; the client forms don't use it.
   const safeChatbot = { ...chatbot, manychat_api_key_enc: null } as Chatbot;
 
-  // Overview-only stats — skip these two count queries on every other tab.
+  // Overview-only stats — skip these count queries on every other tab.
+  // There's no stored per-channel "connected" flag in this data model (the
+  // ManyChat key is one shared credential; the channel is decided per inbound
+  // message). The honest signal for "is this bot live on a channel" is whether
+  // DMs have actually flowed on it — so we count conversations per platform.
+  // Facebook is exactly platform="messenger"; Instagram also absorbs legacy
+  // rows whose platform is null (DEFAULT_PLATFORM is instagram).
   let kbCount = 0;
   let convCount = 0;
+  let igCount = 0;
+  let fbCount = 0;
   if (tab === "overview") {
-    const [{ count: kb }, { count: conv }] = await Promise.all([
+    const [{ count: kb }, { count: conv }, { count: ig }, { count: fb }] = await Promise.all([
       supabase
         .from("knowledge_base")
         .select("*", { count: "exact", head: true })
@@ -59,10 +68,36 @@ export default async function ChatbotDetailPage({
         .from("conversations")
         .select("*", { count: "exact", head: true })
         .eq("chatbot_id", id),
+      supabase
+        .from("conversations")
+        .select("*", { count: "exact", head: true })
+        .eq("chatbot_id", id)
+        .or("platform.is.null,platform.eq.instagram"),
+      supabase
+        .from("conversations")
+        .select("*", { count: "exact", head: true })
+        .eq("chatbot_id", id)
+        .eq("platform", "messenger"),
     ]);
     kbCount = kb ?? 0;
     convCount = conv ?? 0;
+    igCount = ig ?? 0;
+    fbCount = fb ?? 0;
   }
+
+  // Channels shown in the Setup status card. "Active" = we've handled DMs on
+  // that channel; otherwise "No messages yet" (neutral — a channel can be wired
+  // in ManyChat before any message arrives). Labels come from PLATFORM_META so
+  // "messenger" always renders as "Facebook".
+  const channels = [
+    {
+      key: "instagram",
+      label: platformLabel("instagram"),
+      count: igCount,
+      note: chatbot.instagram_username ? `@${chatbot.instagram_username}` : null,
+    },
+    { key: "messenger", label: platformLabel("messenger"), count: fbCount, note: null },
+  ];
 
   // The asset library is shared by the Follow-ups, Media, and Keywords tabs;
   // fetch it only when one of those is active.
@@ -135,12 +170,26 @@ export default async function ChatbotDetailPage({
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <BotActiveToggle chatbotId={chatbot.id} initialActive={chatbot.is_active} />
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Instagram</span>
-                <span className="font-medium">
-                  {chatbot.instagram_username ? `@${chatbot.instagram_username}` : "Not connected"}
-                </span>
-              </div>
+              {channels.map((ch) => (
+                <div key={ch.key} className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    {ch.label}
+                    {ch.note && (
+                      <span className="ml-1 text-xs text-muted-foreground/80">{ch.note}</span>
+                    )}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {ch.count > 0 && (
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {ch.count} {ch.count === 1 ? "chat" : "chats"}
+                      </span>
+                    )}
+                    <Badge variant={ch.count > 0 ? "success" : "secondary"}>
+                      {ch.count > 0 ? "Active" : "No messages yet"}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">ManyChat API key</span>
                 <Badge variant={apiKeySet ? "success" : "warning"}>
