@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +11,28 @@ import { Switch } from "@/components/ui/switch";
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { MessageBubble } from "@/components/dashboard/message-bubble";
 import type { Chatbot, TrainingPair } from "@/lib/types";
+import { isUsableTrainingPair } from "@/lib/training";
 
-type ChatMsg = { id: string; role: "user" | "assistant"; content: string; created_at: string };
+/** Per-reply diagnostics from the preview route — surfaces WHY a reply looked off
+ *  (empty KB, which prompt path, how many corrections applied). */
+type Diag = {
+  promptMode: string;
+  kbMode: string;
+  kbChunks: number;
+  kbTopSimilarity: number | null;
+  kbChars: number;
+  kbEmpty: boolean;
+  trainingTotal: number;
+  trainingActive: number;
+  trainingSkipped: number;
+};
+type ChatMsg = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+  diag?: Diag;
+};
 
 function newId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -41,6 +62,7 @@ function toEditable(pairs: unknown): TrainingPair[] {
  * trainingPairsOverride so corrections take effect immediately before saving.
  */
 export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -48,6 +70,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
 
   const [pairs, setPairs] = useState<TrainingPair[]>(toEditable(chatbot.training_pairs));
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [draftScenario, setDraftScenario] = useState<Record<string, string>>({});
   const [draftExact, setDraftExact] = useState<Record<string, boolean>>({});
   const [openDraft, setOpenDraft] = useState<string | null>(null);
 
@@ -79,7 +102,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
       if (!res.ok || typeof j?.text !== "string") {
         setChatError(j?.error ?? "The bot couldn't reply — try again.");
       } else {
-        setMessages((prev) => [...prev, { id: newId(), role: "assistant", content: j.text, created_at: new Date().toISOString() }]);
+        setMessages((prev) => [...prev, { id: newId(), role: "assistant", content: j.text, created_at: new Date().toISOString(), diag: j.diag }]);
       }
     } catch {
       setChatError("Network error — try again.");
@@ -95,12 +118,16 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
 
   function saveCorrection(assistantId: string, botReply: string) {
     const reply = (drafts[assistantId] ?? "").trim();
-    if (!reply) return;
+    // Scenario defaults to the preceding user message but is editable — and
+    // REQUIRED, so a correction on a first message (no preceding user text) can't
+    // be minted with a blank scenario that would be silently dropped on save.
+    const scenario = (draftScenario[assistantId] ?? precedingUser(assistantId)).trim();
+    if (!reply || !scenario) return;
     setPairs((prev) => [
       ...prev,
       {
         id: newId(),
-        scenario: precedingUser(assistantId),
+        scenario,
         reply,
         bad_reply: botReply,
         exact: !!draftExact[assistantId],
@@ -109,6 +136,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
       },
     ]);
     setDrafts((d) => ({ ...d, [assistantId]: "" }));
+    setDraftScenario((d) => ({ ...d, [assistantId]: "" }));
     setDraftExact((d) => ({ ...d, [assistantId]: false }));
     setOpenDraft(null);
     markDirty();
@@ -142,15 +170,34 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
         enabled: p.enabled,
       }));
     const supabase = createClient();
-    const { error } = await supabase.from("chatbots").update({ training_pairs: cleaned }).eq("id", chatbot.id);
+    // .select() so a 0-row write (RLS/permission, wrong bot) is DETECTED instead of
+    // silently showing "Saved ✓". router.refresh() reconciles the server data.
+    const { data, error } = await supabase
+      .from("chatbots")
+      .update({ training_pairs: cleaned })
+      .eq("id", chatbot.id)
+      .select("id");
     setSaving(false);
     if (error) {
       setSaveError(error.message);
       return;
     }
+    if (!data || data.length === 0) {
+      setSaveError(
+        "Couldn't save — the change didn't reach the database (you may not have permission on this bot). Nothing was saved."
+      );
+      return;
+    }
     setSaved(true);
     setDirty(false);
+    router.refresh();
   }
+
+  // Enabled pairs missing a scenario or reply — silently dropped on save/at reply
+  // time, so surface them instead (the "my edit did nothing" trap).
+  const incompleteEnabled = pairs.filter(
+    (p) => p.enabled && !(p.scenario.trim() && p.reply.trim())
+  ).length;
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -171,13 +218,23 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
           {messages.map((m) => (
             <div key={m.id} className="space-y-1">
               <MessageBubble message={m} />
+              {m.role === "assistant" && m.diag && <DiagLine diag={m.diag} />}
               {m.role === "assistant" && (
                 <div className="flex justify-end">
                   <div className="w-[75%]">
                     {openDraft === m.id ? (
                       <div className="space-y-2 rounded-md border bg-background p-2">
+                        <Label htmlFor={`corr-scen-${m.id}`} className="text-xs">
+                          When the contact says (scenario)
+                        </Label>
+                        <Input
+                          id={`corr-scen-${m.id}`}
+                          value={draftScenario[m.id] ?? precedingUser(m.id)}
+                          onChange={(e) => setDraftScenario((d) => ({ ...d, [m.id]: e.target.value }))}
+                          placeholder="what is your price"
+                        />
                         <Label htmlFor={`corr-${m.id}`} className="text-xs">
-                          Reply instead {precedingUser(m.id) ? `(for "${precedingUser(m.id)}")` : ""}
+                          Reply instead
                         </Label>
                         <Textarea
                           id={`corr-${m.id}`}
@@ -189,11 +246,21 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
                         <div className="flex items-center justify-between">
                           <label className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Switch checked={!!draftExact[m.id]} onCheckedChange={(v) => setDraftExact((d) => ({ ...d, [m.id]: v }))} />
-                            Say exactly
+                            Say exactly (word for word)
                           </label>
                           <div className="flex gap-2">
                             <Button type="button" variant="ghost" size="sm" onClick={() => setOpenDraft(null)}>Cancel</Button>
-                            <Button type="button" size="sm" onClick={() => saveCorrection(m.id, m.content)}>Add</Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={
+                                !(drafts[m.id] ?? "").trim() ||
+                                !(draftScenario[m.id] ?? precedingUser(m.id)).trim()
+                              }
+                              onClick={() => saveCorrection(m.id, m.content)}
+                            >
+                              Add
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -230,6 +297,9 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
           <h3 className="text-sm font-medium">Saved scenarios ({pairs.length})</h3>
           {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
         </div>
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          When a contact&rsquo;s message matches a Scenario, the bot answers with that Reply — it takes precedence over the knowledge base for that scenario. Click <strong>Save training</strong> to apply it to the live bot.
+        </p>
         {pairs.length === 0 && (
           <p className="rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
             No trained scenarios yet. Correct a bot reply on the left, or add one below.
@@ -255,18 +325,70 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
               </div>
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Switch checked={!!p.exact} onCheckedChange={(v) => patchPair(p.id, { exact: v })} />
-                Say exactly (verbatim)
+                Say exactly (word for word)
               </label>
+              <p className="text-[11px] text-muted-foreground">
+                {p.exact
+                  ? "Sends this reply word for word."
+                  : "Keeps your wording and facts, said in the bot's own voice."}
+              </p>
+              {p.enabled && !(p.scenario.trim() && p.reply.trim()) && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-500">
+                  Needs both a Scenario and a Reply to take effect.
+                </p>
+              )}
             </div>
           ))}
         </div>
         <Button type="button" variant="outline" size="sm" onClick={addPair}>+ Add scenario</Button>
+        {incompleteEnabled > 0 && (
+          <p className="rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-500">
+            {incompleteEnabled} enabled scenario{incompleteEnabled === 1 ? "" : "s"} {incompleteEnabled === 1 ? "is" : "are"} missing a Scenario or Reply — they won&rsquo;t be saved or used until both are filled.
+          </p>
+        )}
         {saveError && <p className="rounded bg-destructive/10 px-2 py-1 text-xs text-destructive">{saveError}</p>}
         <div className="flex items-center gap-2">
           <Button type="button" onClick={() => void saveTraining()} disabled={saving}>
             {saving ? "Saving…" : "Save training"}
           </Button>
           {saved && <span className="text-xs text-green-600">Saved ✓</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Compact per-reply diagnostics shown under a bot message in the sandbox, so the
+ *  owner can SEE why a reply looked off — an empty KB is the usual "ignores my
+ *  knowledge base" culprit. */
+function DiagLine({ diag }: { diag: Diag }) {
+  const kbEmpty = diag.kbEmpty;
+  const sim =
+    diag.kbTopSimilarity != null ? ` · top match ${Math.round(diag.kbTopSimilarity * 100)}%` : "";
+  return (
+    <div className="flex justify-start pl-1">
+      <div className="max-w-[80%] space-y-0.5 text-[11px] leading-tight text-muted-foreground">
+        <div>
+          KB: {diag.kbMode}
+          {diag.kbMode === "retrieval"
+            ? ` · ${diag.kbChunks} chunk${diag.kbChunks === 1 ? "" : "s"} matched`
+            : ""}
+          {` · ${diag.kbChars} chars sent`}
+          {sim}
+        </div>
+        {kbEmpty && (
+          <div className="text-amber-600 dark:text-amber-500">
+            ⚠ The bot got NO knowledge base for this message
+            {diag.kbMode === "retrieval"
+              ? " (nothing matched) — it can only use the persona/prompt and any trained scenarios."
+              : "."}
+          </div>
+        )}
+        <div>
+          Prompt: {diag.promptMode} · Corrections: {diag.trainingActive} active
+          {diag.trainingSkipped > 0
+            ? ` · ${diag.trainingSkipped} skipped (missing scenario or reply)`
+            : ""}
         </div>
       </div>
     </div>

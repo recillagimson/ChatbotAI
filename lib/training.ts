@@ -7,28 +7,38 @@ import type { TrainingPair } from "./types";
  * precedence over it, because a trained pair is an owner correction. Kept stable-per-bot
  * so the ephemeral prompt cache still hits.
  */
+/**
+ * Is this training pair usable — enabled AND with a non-empty scenario AND a
+ * non-empty reply? training_pairs is schemaless JSONB, so every string field is
+ * checked defensively (typeof) — a malformed row is simply unusable, never throws.
+ * Single source of truth: renderTrainedResponses, the trainer's "will be skipped"
+ * warning, and the preview diagnostics all use THIS so their counts agree.
+ */
+export function isUsableTrainingPair(p: TrainingPair | null | undefined): boolean {
+  return !!(
+    p &&
+    p.enabled &&
+    typeof p.scenario === "string" &&
+    p.scenario.trim() &&
+    typeof p.reply === "string" &&
+    p.reply.trim()
+  );
+}
+
 export function renderTrainedResponses(
   pairs: TrainingPair[] | null | undefined
 ): string {
-  // training_pairs is schemaless JSONB — treat every string field defensively
-  // (typeof checks) so a malformed row can never throw at reply time.
-  const enabled = Array.isArray(pairs)
-    ? pairs.filter(
-        (p) =>
-          p &&
-          p.enabled &&
-          typeof p.scenario === "string" &&
-          p.scenario.trim() &&
-          typeof p.reply === "string" &&
-          p.reply.trim()
-      )
-    : [];
+  const enabled = Array.isArray(pairs) ? pairs.filter(isUsableTrainingPair) : [];
   if (enabled.length === 0) return "";
   const lines = enabled.map((p) => {
     const head = `- Scenario: ${p.scenario.trim()}`;
+    // "exact" = word-for-word. Otherwise a STRONG (not loose) instruction: use the
+    // owner's answer content and keep its facts/offers/links, but allow the bot's
+    // own voice. This is why an edited reply actually shows up instead of being
+    // paraphrased away.
     const say = p.exact
-      ? `\n  Say this VERBATIM (do not reword, keep it exactly as written): ${p.reply.trim()}`
-      : `\n  Answer along these lines, in your own natural voice: ${p.reply.trim()}`;
+      ? `\n  Reply with this word for word — do not reword, shorten, add to it, or change any part: ${p.reply.trim()}`
+      : `\n  Answer with this — keep its facts, offers, links, and main points, and say it in your own natural voice (you may adjust wording and tone, but do not drop, weaken, or contradict any of it): ${p.reply.trim()}`;
     const badReply = typeof p.bad_reply === "string" ? p.bad_reply.trim() : "";
     const avoid = badReply
       ? `\n  (You previously answered this, which the owner rejected — do not repeat it: ${badReply})`
@@ -36,8 +46,10 @@ export function renderTrainedResponses(
     return head + say + avoid;
   });
   return (
-    `TRAINED RESPONSES (owner-corrected answers — when the contact's message fits a scenario below, answer as shown. ` +
-    `These OVERRIDE the knowledge base above if they conflict.)\n` +
+    `TRAINED RESPONSES (owner-approved corrections. When the contact's message clearly matches one of the scenarios below, ` +
+    `use that scenario's answer for this turn — it takes precedence over the knowledge base and your usual phrasing for that ` +
+    `scenario. Only apply a scenario when the contact is genuinely asking about it; otherwise answer normally from the ` +
+    `persona and knowledge base.)\n` +
     lines.join("\n")
   );
 }

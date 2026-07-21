@@ -7,6 +7,16 @@ const SEP = "\n\n---\n\n";
 const NO_KB =
   "(No knowledge base entries yet — answer only based on the business description and politely defer if asked something you cannot confirm.)";
 
+/** True when a KB block carries NO real knowledge — either blank (retrieval matched
+ *  nothing above the floor) or the NO_KB sentinel (the bot has no entries at all).
+ *  Lets callers (e.g. the trainer diagnostics) honestly tell an owner "the model
+ *  got no knowledge base for this message" instead of inferring it from char count
+ *  (the sentinel is ~135 non-empty chars and would otherwise look like real KB). */
+export function isEmptyKbBlock(block: string): boolean {
+  const t = block.trim();
+  return t === "" || t === NO_KB;
+}
+
 function entryText(e: KbEntryLite): string {
   return `### ${e.title}\n${e.content}`;
 }

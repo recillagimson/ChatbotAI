@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { buildKbBlock } from "@/lib/retrieval";
+import { buildKbBlock, isEmptyKbBlock } from "@/lib/retrieval";
 import { generateReply } from "@/lib/anthropic";
-import { renderTrainedResponses } from "@/lib/training";
+import { renderTrainedResponses, isUsableTrainingPair } from "@/lib/training";
 import type { Chatbot, Message, TrainingPair } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -61,6 +61,25 @@ export async function POST(
     ? (body.trainingPairsOverride as TrainingPair[])
     : (chatbot.training_pairs ?? []);
 
+  // Which prompt path this bot actually uses (mirror of buildSystemPrompt's gate),
+  // so the trainer can show the owner whether their persona/system_prompt is even read.
+  const hasSections = !!(
+    chatbot.persona_section?.trim() ||
+    chatbot.offers_section?.trim() ||
+    chatbot.rebuttals_section?.trim()
+  );
+  const promptMode = hasSections
+    ? "section"
+    : chatbot.system_prompt?.trim()
+      ? "legacy"
+      : "generic";
+
+  // Correction counts using the SAME predicate the renderer uses, so "active" here
+  // equals what actually reaches the model, and "skipped" flags enabled-but-blank pairs.
+  const enabledPairs = pairs.filter((p) => p && p.enabled);
+  const trainingActive = enabledPairs.filter((p) => isUsableTrainingPair(p)).length;
+  const trainingSkipped = enabledPairs.length - trainingActive;
+
   try {
     const kb = await buildKbBlock({ supabase, chatbot, history, userMessage });
     const { text } = await generateReply({
@@ -74,7 +93,26 @@ export async function POST(
       scheduledStart: null,
       trainedResponses: renderTrainedResponses(pairs),
     });
-    return NextResponse.json({ text });
+    // Diagnostics so the owner can SEE why a reply looked "off" — an empty KB
+    // (kbChars 0 in retrieval mode = the model got no knowledge base for this
+    // message), which prompt path is active, and how many corrections applied.
+    const kbEmpty = isEmptyKbBlock(kb.block);
+    return NextResponse.json({
+      text,
+      diag: {
+        promptMode,
+        kbMode: kb.mode,
+        kbChunks: kb.chunks,
+        kbTopSimilarity: kb.topSimilarity,
+        // 0 when the model got no real KB (blank retrieval OR the NO_KB sentinel),
+        // so the char count never implies content that isn't actually there.
+        kbChars: kbEmpty ? 0 : kb.block.trim().length,
+        kbEmpty,
+        trainingTotal: pairs.length,
+        trainingActive,
+        trainingSkipped,
+      },
+    });
   } catch (err) {
     console.error("[trainer-preview] generate failed", err);
     return NextResponse.json(
