@@ -1131,3 +1131,11 @@ create trigger messages_mark_link_sent
 -- drop function if exists public.mark_link_sent();
 -- alter table public.conversations drop column if exists link_sent_at;
 -- alter table public.chatbots drop column if exists auto_followup_link_steps;
+
+-- Known facts (2026-07-22-known-facts.sql) — durable compact list of what the LEAD
+-- has already stated/shown (answers to qualifying questions); injected into the
+-- system prompt with a hard "never re-ask these" rule so the bot stops re-asking.
+alter table public.conversations
+  add column if not exists known_facts text;
+-- Teardown:
+-- alter table public.conversations drop column if exists known_facts;

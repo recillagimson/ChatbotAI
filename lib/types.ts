@@ -192,6 +192,7 @@ export interface Conversation {
   unread_count: number;
   memory_summary: string | null;     // rolling summary of turns older than the verbatim window
   memory_summary_at: string | null;  // created_at watermark of the newest message folded into the summary
+  known_facts: string | null;        // durable compact list of what the LEAD already told/showed; injected with a "never re-ask" rule
   created_at: string;
 }
 

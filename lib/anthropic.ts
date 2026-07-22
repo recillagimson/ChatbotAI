@@ -3,6 +3,7 @@ import type { Chatbot, Message } from "./types";
 import { sanitizeReply } from "./sanitize";
 import { openaiChat, type OpenAIChatMessage } from "./openai";
 import { HISTORY_TURNS } from "./memory";
+import { renderKnownFactsBlock } from "./lead-facts";
 import { HUMANIZER_STYLE } from "./humanizer";
 
 let _anthropic: Anthropic | null = null;
@@ -97,7 +98,8 @@ export function buildSystemPrompt(
   mediaCatalog?: string | null,
   turnInstruction?: string | null,
   scheduledStart?: { note: string | null; on: string | null } | null,
-  trainedResponses?: string | null
+  trainedResponses?: string | null,
+  knownFacts?: string | null
 ): string {
   const persona = chatbot.persona_section?.trim() || "";
   const offers = chatbot.offers_section?.trim() || "";
@@ -110,6 +112,13 @@ export function buildSystemPrompt(
   const memoryBlock = memory
     ? `CONVERSATION MEMORY (summary of earlier messages in this chat; treat as known context, don't re-ask). If anything here conflicts with the OFFERS or KNOWLEDGE BASE below (a price, link, or term), the knowledge base is current and WINS — use it, not the remembered value.\n${memory}`
     : "";
+
+  // Known facts — a durable, structured list of what THIS lead has already told or
+  // shown us (score, goals, etc.), with a hard "never re-ask these" rule. Placed high
+  // (right after continuity) so it outranks any qualify-the-lead script. Empty until
+  // the background extractor (lib/lead-facts.ts) has something concrete. This is the
+  // load-bearing fix for the bot re-asking answered questions.
+  const knownFactsBlock = renderKnownFactsBlock(knownFacts);
 
   // Continuity — when there are prior messages, force the bot to CONTINUE the
   // conversation instead of restarting the intro/greeting or re-asking answered
@@ -159,6 +168,7 @@ export function buildSystemPrompt(
         `You are the customer-service AI for "${chatbot.name}". You reply to Instagram and Messenger DMs on the business's behalf.`
     );
     if (continuityBlock) parts.push(continuityBlock);
+    if (knownFactsBlock) parts.push(knownFactsBlock);
     if (instructionBlock) parts.push(instructionBlock);
     if (offers) parts.push(`OFFERS, SERVICES & LINKS\n${offers}`);
     if (rebuttals) parts.push(`REBUTTALS & FAQ HANDLING\n${rebuttals}`);
@@ -183,7 +193,7 @@ export function buildSystemPrompt(
   // bubble-split note.
   if (chatbot.system_prompt && chatbot.system_prompt.trim()) {
     return `${chatbot.system_prompt.trim()}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${knownFactsBlock ? `\n${knownFactsBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
 ${kbBlock}${trainedBlock ? `\n\n${trainedBlock}` : ""}
 
@@ -205,7 +215,7 @@ ${chatbot.business_description || "(none provided)"}
 
 TONE
 ${TONE_GUIDES[chatbot.tone]}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${knownFactsBlock ? `\n${knownFactsBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth — never invent facts beyond this)
 ${kbBlock}${trainedBlock ? `\n\n${trainedBlock}` : ""}
 
@@ -240,6 +250,9 @@ export async function generateReply(opts: {
   scheduledStart?: { note: string | null; on: string | null } | null;
   // Rendered TRAINED RESPONSES block (renderTrainedResponses output); empty/absent = none.
   trainedResponses?: string | null;
+  // Durable list of what the lead already told/showed (conversations.known_facts);
+  // injected with a hard "never re-ask these" rule so the bot stops re-asking.
+  knownFacts?: string | null;
 }) {
   // Continuing conversation if there's any prior history — drives the
   // continuity directive so the bot doesn't restart the intro or re-ask.
@@ -252,7 +265,8 @@ export async function generateReply(opts: {
     opts.mediaCatalog,
     opts.turnInstruction,
     opts.scheduledStart,
-    opts.trainedResponses ?? null
+    opts.trainedResponses ?? null,
+    opts.knownFacts ?? null
   );
   const images = opts.images ?? [];
 
@@ -388,6 +402,7 @@ export async function generateFollowupText(opts: {
   kbBlock: string;
   history: Pick<Message, "role" | "content">[];
   memorySummary?: string | null;
+  knownFacts?: string | null; // durable "already told you" facts (never re-ask)
   instruction?: string | null; // the step's `text` (may be blank)
   hoursSilent: number;
 }): Promise<{ text: string; tokensUsed: number } | null> {
@@ -399,6 +414,7 @@ export async function generateFollowupText(opts: {
       history: opts.history,
       userMessage,
       memorySummary: opts.memorySummary ?? null,
+      knownFacts: opts.knownFacts ?? null,
     });
     const clean = text.trim();
     return clean ? { text: clean, tokensUsed } : null;

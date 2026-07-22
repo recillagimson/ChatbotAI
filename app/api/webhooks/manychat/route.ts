@@ -66,6 +66,7 @@ import {
   stripMediaUrls,
 } from "@/lib/inbound-media";
 import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
+import { refreshKnownFacts } from "@/lib/lead-facts";
 import { splitBurst, combineBurstText, remainingDebounceMs, clampDebounceSeconds, shouldStandDown } from "@/lib/debounce";
 import type { Chatbot, Message } from "@/lib/types";
 
@@ -1269,6 +1270,10 @@ export async function POST(request: NextRequest) {
             : null,
         // Owner-trained scenario corrections (Bot Trainer). chatbot is select("*").
         trainedResponses: renderTrainedResponses(chatbot.training_pairs),
+        // Durable "already told you" facts so the bot never re-asks the lead's
+        // score/goals/etc. Run-start snapshot (existing is select("*")); the
+        // background refresh below keeps it current for the next turn.
+        knownFacts: existing?.known_facts ?? null,
       });
       if (text) {
         replyText = text;
@@ -1583,8 +1588,10 @@ export async function POST(request: NextRequest) {
         // Auto-tag ran concurrently with the push (kicked off in step 9a); await it
         // here so the tag/confirm write completes within the after() window. Never throws.
         if (result.tagWork) await result.tagWork;
-        // Refresh the rolling memory summary for the next reply (best-effort).
+        // Refresh the rolling memory summary + the durable known-facts list for the
+        // next reply (both best-effort, so the bot doesn't re-ask what's now recorded).
         await refreshConversationMemory({ supabase, conversationId: conversationId! });
+        await refreshKnownFacts({ supabase, conversationId: conversationId! });
       } catch (err) {
         // after() runs detached — swallow so nothing crashes the background task.
         console.error("[manychat-webhook] background processing failed", err);
@@ -1613,8 +1620,12 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[manychat-webhook] sync processing failed", err);
   }
-  // Refresh the rolling memory summary in the background (don't block the reply).
-  after(() => refreshConversationMemory({ supabase, conversationId: conversationId! }));
+  // Refresh the rolling memory summary + known-facts list in the background (don't
+  // block the reply).
+  after(async () => {
+    await refreshConversationMemory({ supabase, conversationId: conversationId! });
+    await refreshKnownFacts({ supabase, conversationId: conversationId! });
+  });
   return manychatReply(replyText, { ai_delivery: "response", platform });
 }
 

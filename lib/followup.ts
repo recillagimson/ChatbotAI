@@ -310,8 +310,9 @@ export function evaluateFollowup(
  * all static content (text / assets / flows), and force AI generation so the cron's
  * generateFollowupText composes a fresh nudge from the conversation each time —
  * rather than re-sending the same final message on a loop. Pure text: on the rare
- * AI-generation failure the step has no static fallback, so that cycle simply sends
- * nothing and the next cron run retries (never a stuck loop).
+ * AI-generation failure the step has no static fallback, so the cron skips the send
+ * WITHOUT advancing state (its ai_no_content guard) and the next cron run retries
+ * generation at the normal cadence — never a stuck loop.
  */
 function aiTailStep(last: FollowupStep): FollowupStep {
   return {

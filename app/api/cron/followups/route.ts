@@ -61,6 +61,7 @@ type CandidateRow = Pick<
   | "keyword_fired"
   | "tag"
   | "memory_summary"
+  | "known_facts"
   | "link_sent_at"
 > & { chatbots: FollowupChatbotRow };
 
@@ -80,7 +81,7 @@ async function run() {
   const { data, error } = await supabase
     .from("conversations")
     .select(
-      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, bot_off_at, rn_opt_in_at, keyword_fired, tag, memory_summary, link_sent_at, " +
+      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, bot_off_at, rn_opt_in_at, keyword_fired, tag, memory_summary, known_facts, link_sent_at, " +
         "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_template, auto_followup_steps, auto_followup_link_steps, auto_followup_loop_last, auto_followup_loop_mode, keyword_gate_enabled, manychat_api_key_enc)"
     )
     .eq("status", "active")
@@ -238,6 +239,7 @@ async function run() {
           kbBlock: kb.block,
           history,
           memorySummary: row.memory_summary ?? null,
+          knownFacts: row.known_facts ?? null,
           instruction: decision.step.text ?? null,
           hoursSilent: decision.step.delay_hours,
         });
@@ -258,6 +260,28 @@ async function run() {
         }
       }
     }
+
+    // AI step that produced nothing deliverable (generation failed) AND has no
+    // static fallback (no caption, assets, or flow): skip WITHOUT claiming. Otherwise
+    // sendFollowup's atomic claim advances last_followup_at/step_index/followup_count
+    // BEFORE its own nothing-deliverable guard, silently burning a full step delay
+    // before the next retry (and inflating the count) — and the cron would mislabel
+    // it as "claim_lost". Skipping here leaves the row due so the NEXT cron run
+    // re-attempts generation at the normal cadence. (A permanently-broken
+    // all-assets-deleted static step still advance-skips inside sendFollowup — that
+    // path is intentional; this guard only catches the transient AI-failure tail.)
+    if (
+      decision.step.ai_generate &&
+      !(overrideText ?? "").trim() &&
+      !(decision.step.text ?? "").trim() &&
+      assets.length === 0 &&
+      !selectFlow(decision.step, toPlatform(row.platform))
+    ) {
+      skipped++;
+      bump(reasons, "ai_no_content");
+      continue;
+    }
+
     try {
       const content = await sendFollowup(
         supabase,

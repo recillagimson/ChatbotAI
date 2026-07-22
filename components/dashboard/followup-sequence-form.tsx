@@ -173,7 +173,7 @@ export function FollowupSequenceForm({
                 ? "After the last step it loops back to the first and keeps rotating — an unconfirmed lead gets a different message each time until they convert or the window closes."
                 : loopMode === "repeat_last"
                   ? "After the last step the AI takes over and writes a fresh, context-aware follow-up from the conversation each time (on the last step's delay) until the lead is confirmed or the 24h window closes — no more repeating the same message."
-                  : "After the last step the drip ends until the lead messages again."}
+                  : "After the last step the drip ends and the lead gets no further follow-ups."}
               {" "}A reply never restarts the sequence — the lead always picks up at the next step.
             </p>
           </div>
