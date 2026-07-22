@@ -1139,3 +1139,14 @@ alter table public.conversations
   add column if not exists known_facts text;
 -- Teardown:
 -- alter table public.conversations drop column if exists known_facts;
+
+-- Conversation quality tag (2026-07-22-quality-tag.sql) — a SEPARATE, owner-set
+-- quality rating, ORTHOGONAL to the funnel `tag`. Manual only. Null = unrated.
+alter table public.conversations
+  add column if not exists quality_tag text;
+alter table public.conversations drop constraint if exists conversations_quality_tag_check;
+alter table public.conversations add constraint conversations_quality_tag_check
+  check (quality_tag is null or quality_tag in ('good', 'bad'));
+-- Teardown:
+-- alter table public.conversations drop constraint if exists conversations_quality_tag_check;
+-- alter table public.conversations drop column if exists quality_tag;

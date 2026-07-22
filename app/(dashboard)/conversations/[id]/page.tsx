@@ -14,6 +14,7 @@ import { MessageBubble } from "@/components/dashboard/message-bubble";
 import { contactDisplayName, contactHandle } from "@/lib/contact";
 import { signAttachment } from "@/lib/storage";
 import { TAG_LABEL, TAG_VARIANT, tagOf } from "@/lib/conversation-tags";
+import { QUALITY_LABEL, QUALITY_VARIANT, qualityOf } from "@/lib/conversation-quality";
 
 export default async function ConversationDetailPage({
   params,
@@ -96,6 +97,11 @@ export default async function ConversationDetailPage({
           <Badge variant={TAG_VARIANT[tagOf(conversation.tag)]}>
             {TAG_LABEL[tagOf(conversation.tag)]}
           </Badge>
+          {qualityOf(conversation.quality_tag) && (
+            <Badge variant={QUALITY_VARIANT[qualityOf(conversation.quality_tag)!]}>
+              {QUALITY_LABEL[qualityOf(conversation.quality_tag)!]}
+            </Badge>
+          )}
           {tagOf(conversation.tag) === "starting_later" &&
             (conversation.start_note || conversation.start_on) && (
               <span className="text-xs text-muted-foreground">
@@ -139,6 +145,7 @@ export default async function ConversationDetailPage({
           conversationId={conversation.id}
           currentStatus={conversation.status}
           currentTag={tagOf(conversation.tag)}
+          currentQuality={qualityOf(conversation.quality_tag)}
           currentStartOn={conversation.start_on ?? null}
           userMutedAt={conversation.user_muted_at ?? null}
           isAdmin={isAdmin}

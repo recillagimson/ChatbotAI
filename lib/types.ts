@@ -1,5 +1,6 @@
 import type { Platform } from "./platforms";
 import type { ConversationTag } from "./conversation-tags";
+import type { QualityTag } from "./conversation-quality";
 
 export type SubscriptionStatus =
   | "active"
@@ -174,6 +175,7 @@ export interface Conversation {
   confirmed_at: string | null;       // lead marked won (stops the drip); null = still open
   confirmed_by: "manual" | "ai" | null;
   tag: ConversationTag;              // inbox bucket: lead | wants_call | starting_later | needs_human | subscribed | disqualified | bot (default 'lead')
+  quality_tag: QualityTag | null;    // owner-set quality rating (good | bad), orthogonal to `tag`; null = unrated
   start_on: string | null;           // starting_later: the date (YYYY-MM-DD) the lead wants to begin; pauses the drip
   start_note: string | null;         // starting_later: the human phrase ("Wednesday", "in a week")
   rn_opt_in_at: string | null;       // Recurring Notifications opt-in (Phase 6, multi-day reach)

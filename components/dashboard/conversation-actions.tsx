@@ -10,11 +10,17 @@ import {
   TAG_LABEL,
   type ConversationTag,
 } from "@/lib/conversation-tags";
+import {
+  CONVERSATION_QUALITY,
+  QUALITY_LABEL,
+  type QualityTag,
+} from "@/lib/conversation-quality";
 
 export function ConversationActions({
   conversationId,
   currentStatus,
   currentTag,
+  currentQuality = null,
   currentStartOn = null,
   userMutedAt = null,
   isAdmin = false,
@@ -22,6 +28,7 @@ export function ConversationActions({
   conversationId: string;
   currentStatus: string;
   currentTag: ConversationTag;
+  currentQuality?: QualityTag | null;
   currentStartOn?: string | null;
   userMutedAt?: string | null;
   isAdmin?: boolean;
@@ -32,6 +39,8 @@ export function ConversationActions({
   // round-trip. Revert if the update fails.
   const [paused, setPaused] = useState(currentStatus === "ai_paused");
   const [tag, setTag] = useState<ConversationTag>(currentTag);
+  // Owner-set quality rating (good/bad), orthogonal to the funnel tag. "" = unrated.
+  const [quality, setQuality] = useState<QualityTag | "">(currentQuality ?? "");
   // Start date for a "starting_later" thread (YYYY-MM-DD, from the date input).
   const [startOn, setStartOn] = useState(currentStartOn ?? "");
   // The lead self-muted the AI ("stopmessage"). Owner escape hatch to re-enable
@@ -224,6 +233,26 @@ export function ConversationActions({
     });
   }
 
+  // Change the quality rating (good/bad/unrated). Orthogonal to the funnel tag and
+  // to follow-up gating — a plain owner label, so no confirmed_at / flag sync.
+  function changeQuality(next: QualityTag | "") {
+    if (next === quality) return;
+    const prev = quality;
+    setQuality(next);
+    startTransition(async () => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("conversations")
+        .update({ quality_tag: next || null })
+        .eq("id", conversationId);
+      if (error) {
+        setQuality(prev); // revert on failure
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   // Set/edit the start date on a "starting_later" thread. start_note is a friendly
   // rendering used by the badge and the AI's SCHEDULED START memory.
   function setStart(value: string) {
@@ -278,6 +307,22 @@ export function ConversationActions({
           {CONVERSATION_TAGS.map((t) => (
             <option key={t} value={t}>
               {TAG_LABEL[t]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center gap-1.5 text-sm">
+        <span className="text-muted-foreground">Quality</span>
+        <select
+          value={quality}
+          disabled={isPending}
+          onChange={(e) => changeQuality(e.target.value as QualityTag | "")}
+          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+        >
+          <option value="">Unrated</option>
+          {CONVERSATION_QUALITY.map((q) => (
+            <option key={q} value={q}>
+              {QUALITY_LABEL[q]}
             </option>
           ))}
         </select>

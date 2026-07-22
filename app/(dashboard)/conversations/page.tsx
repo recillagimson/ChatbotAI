@@ -14,6 +14,13 @@ import { MessageSquare } from "lucide-react";
 import { PLATFORMS, PLATFORM_META, isPlatform } from "@/lib/platforms";
 import { CONVERSATION_TAGS, TAG_LABEL, TAG_VARIANT, isTag, tagOf } from "@/lib/conversation-tags";
 import {
+  CONVERSATION_QUALITY,
+  QUALITY_LABEL,
+  QUALITY_VARIANT,
+  isQualityTag,
+  qualityOf,
+} from "@/lib/conversation-quality";
+import {
   buildConversationsHref,
   resolveConversationDateBounds,
   isDatePreset,
@@ -34,6 +41,7 @@ export default async function ConversationsPage({
     platform?: string;
     chatbot?: string;
     tag?: string;
+    quality?: string;
     range?: string;
     from?: string;
     to?: string;
@@ -43,6 +51,7 @@ export default async function ConversationsPage({
   const sp = await searchParams;
   const platform = isPlatform(sp.platform) ? sp.platform : null;
   const tag = isTag(sp.tag) ? sp.tag : null;
+  const quality = isQualityTag(sp.quality) ? sp.quality : null;
   const range = isDatePreset(sp.range) ? sp.range : null;
   const from = isYmd(sp.from) ? sp.from : null;
   const to = isYmd(sp.to) ? sp.to : null;
@@ -78,6 +87,7 @@ export default async function ConversationsPage({
   if (platform) countQuery = countQuery.eq("platform", platform);
   if (chatbotId) countQuery = countQuery.eq("chatbot_id", chatbotId);
   if (tag) countQuery = countQuery.eq("tag", tag);
+  if (quality) countQuery = countQuery.eq("quality_tag", quality);
   if (bounds?.gte) countQuery = countQuery.gte("last_message_at", bounds.gte);
   if (bounds?.lt) countQuery = countQuery.lt("last_message_at", bounds.lt);
   const { count } = await countQuery;
@@ -97,6 +107,7 @@ export default async function ConversationsPage({
   if (platform) dataQuery = dataQuery.eq("platform", platform);
   if (chatbotId) dataQuery = dataQuery.eq("chatbot_id", chatbotId);
   if (tag) dataQuery = dataQuery.eq("tag", tag);
+  if (quality) dataQuery = dataQuery.eq("quality_tag", quality);
   if (bounds?.gte) dataQuery = dataQuery.gte("last_message_at", bounds.gte);
   if (bounds?.lt) dataQuery = dataQuery.lt("last_message_at", bounds.lt);
   const conversations =
@@ -113,6 +124,7 @@ export default async function ConversationsPage({
     platform,
     chatbot: chatbotId,
     tag,
+    quality,
     range,
     from,
     to,
@@ -122,6 +134,11 @@ export default async function ConversationsPage({
   const tagTabs: { value: string | null; label: string }[] = [
     { value: null, label: "All" },
     ...CONVERSATION_TAGS.map((t) => ({ value: t, label: TAG_LABEL[t] })),
+  ];
+
+  const qualityTabs: { value: string | null; label: string }[] = [
+    { value: null, label: "All quality" },
+    ...CONVERSATION_QUALITY.map((q) => ({ value: q, label: QUALITY_LABEL[q] })),
   ];
 
   // Which platforms does this user actually have threads on? (for tab visibility —
@@ -190,6 +207,23 @@ export default async function ConversationsPage({
         })}
       </nav>
 
+      {/* Quality filter: Good / Bad Conversation (owner-set rating) */}
+      <nav aria-label="Filter by quality" className="mb-4 flex flex-wrap gap-2">
+        {qualityTabs.map((t) => {
+          const active = quality === t.value || (!quality && t.value === null);
+          return (
+            <Link
+              key={t.value ?? "all"}
+              href={buildConversationsHref(current, { quality: t.value })}
+              aria-current={active ? "page" : undefined}
+              className={cn(PILL_BASE, active ? PILL_ACTIVE : PILL_INACTIVE)}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
+
       {/* Date filter: quick presets + custom range */}
       <div className="mb-6">
         <ConversationDateFilter current={current} />
@@ -201,8 +235,10 @@ export default async function ConversationsPage({
             <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="font-medium mb-1">No conversations yet</p>
             <p className="text-sm text-muted-foreground">
-              {chatbotId || platform || tag || dateActive
+              {chatbotId || platform || tag || quality || dateActive
                 ? `No conversations${tag ? ` tagged "${TAG_LABEL[tag]}"` : ""}${
+                    quality ? ` rated "${QUALITY_LABEL[quality]}"` : ""
+                  }${
                     chatbotId
                       ? ` for ${chatbots?.find((c) => c.id === chatbotId)?.name ?? "this chatbot"}`
                       : ""
@@ -241,6 +277,11 @@ export default async function ConversationsPage({
                           <Badge variant="warning">AI paused</Badge>
                         )}
                         <Badge variant={TAG_VARIANT[tagOf(c.tag)]}>{TAG_LABEL[tagOf(c.tag)]}</Badge>
+                        {qualityOf(c.quality_tag) && (
+                          <Badge variant={QUALITY_VARIANT[qualityOf(c.quality_tag)!]}>
+                            {QUALITY_LABEL[qualityOf(c.quality_tag)!]}
+                          </Badge>
+                        )}
                         {tagOf(c.tag) === "starting_later" && (c.start_note || c.start_on) && (
                           <span className="text-xs text-muted-foreground">· {c.start_note || c.start_on}</span>
                         )}

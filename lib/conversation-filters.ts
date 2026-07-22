@@ -12,6 +12,7 @@ export type ConvFilterState = {
   platform: string | null;
   chatbot: string | null;
   tag: string | null;
+  quality: string | null; // quality rating ("good" | "bad"); null = any
   range: string | null; // date preset key ("1d" | "7d" | "30d"); null = all time
   from: string | null; // custom range start, yyyy-mm-dd
   to: string | null; // custom range end, yyyy-mm-dd (inclusive of that whole day)
@@ -93,6 +94,7 @@ export function buildConversationsHref(
   if (m.platform) params.set("platform", m.platform);
   if (m.chatbot) params.set("chatbot", m.chatbot);
   if (m.tag) params.set("tag", m.tag);
+  if (m.quality) params.set("quality", m.quality);
   if (m.range) params.set("range", m.range);
   if (m.from) params.set("from", m.from);
   if (m.to) params.set("to", m.to);
