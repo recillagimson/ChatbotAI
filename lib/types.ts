@@ -57,6 +57,7 @@ export interface Chatbot {
   auto_followup_max: number;
   auto_followup_template: string | null;
   auto_followup_steps: FollowupStep[];   // ordered rich-media drip steps (JSONB)
+  auto_followup_link_steps: FollowupStep[]; // alternate drip used once the bot has sent a link; empty = fall back to auto_followup_steps
   auto_followup_loop_last: boolean;       // legacy; superseded by auto_followup_loop_mode
   auto_followup_loop_mode: FollowupLoopMode; // after the last step: stop | repeat last | cycle through all
   ai_media_enabled: boolean;              // allow the live AI to emit [[SEND_ASSET]] directives
@@ -167,6 +168,7 @@ export interface Conversation {
   status: "active" | "ai_paused" | "closed";
   last_message_at: string;
   last_followup_at: string | null;
+  link_sent_at: string | null;       // set once when an outbound bot message first carries a URL; switches the drip to the link sequence
   followup_count: number;
   followup_step_index: number;       // next drip step to send (0-based)
   confirmed_at: string | null;       // lead marked won (stops the drip); null = still open

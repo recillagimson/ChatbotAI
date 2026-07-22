@@ -1090,3 +1090,44 @@ end $$;
 -- alter table public.chatbots     drop column if exists welcome_keywords;
 -- alter table public.chatbots     drop column if exists welcome_use_keyword_triggers;
 -- alter table public.conversations drop column if exists welcomed_at;
+
+-- ===========================================================================
+-- Link-aware follow-up (2026-07-22-link-followup.sql)
+-- A separate drip sequence used once the bot has sent the lead a link, plus a
+-- durable "link sent" marker + trigger that switches a conversation onto it.
+-- Empty auto_followup_link_steps => the usual auto_followup_steps run (fallback).
+-- ===========================================================================
+alter table public.chatbots
+  add column if not exists auto_followup_link_steps jsonb not null default '[]'::jsonb;
+alter table public.conversations
+  add column if not exists link_sent_at timestamptz;
+
+create or replace function public.mark_link_sent()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.role = 'assistant'
+     and new.content is not null
+     and new.content ~* 'https?://[^[:space:]]' then
+    update public.conversations
+       set link_sent_at = now()
+     where id = new.conversation_id
+       and link_sent_at is null;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists messages_mark_link_sent on public.messages;
+create trigger messages_mark_link_sent
+  after insert on public.messages
+  for each row execute function public.mark_link_sent();
+
+-- Teardown:
+-- drop trigger if exists messages_mark_link_sent on public.messages;
+-- drop function if exists public.mark_link_sent();
+-- alter table public.conversations drop column if exists link_sent_at;
+-- alter table public.chatbots drop column if exists auto_followup_link_steps;

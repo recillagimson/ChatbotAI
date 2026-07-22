@@ -72,8 +72,17 @@ export function buildSummaryPrompt(
     `the summary so a teammate could read it and instantly know where things stand. ` +
     `Capture: the lead's name, what they want / their goal, their situation and any ` +
     `details they shared, what's been offered or promised, decisions made, and any ` +
-    `open questions or next steps. Be factual and concise — at most ${SUMMARY_MAX_WORDS} ` +
-    `words, plain prose (no headers). Never invent anything not present in the text.`;
+    `open questions or next steps. PRESERVE the concrete specifics the lead gave — ` +
+    `credit scores and other numbers, the exact goals or products they named (e.g. ` +
+    `an "Amex card" or a "home loan"), negative items (collections, student loans), ` +
+    `amounts, and dates — verbatim; they carry over even after they scroll out of ` +
+    `view, so a later summary must never drop them. Content the lead sent as a photo, ` +
+    `voice note, or document arrives labelled "[Image]:", "[Voice message]:", or ` +
+    `"[Attached document]:" — treat whatever it says as something the lead shared. ` +
+    `Record only what HAS been shared; never state that something has NOT been ` +
+    `provided yet — omit unknowns rather than asserting their absence. Be factual and ` +
+    `concise — at most ${SUMMARY_MAX_WORDS} words, plain prose (no headers). Never ` +
+    `invent anything not present in the text.`;
   const prior = prevSummary?.trim() ? prevSummary.trim() : "(none yet)";
   const transcript = newMsgs.map((m) => `${speaker(m.role)}: ${m.content}`).join("\n");
   const user =

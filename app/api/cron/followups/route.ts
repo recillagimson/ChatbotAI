@@ -37,6 +37,7 @@ type FollowupChatbotRow = Pick<
   | "auto_followup_days"
   | "auto_followup_template"
   | "auto_followup_steps"
+  | "auto_followup_link_steps"
   | "auto_followup_loop_last"
   | "auto_followup_loop_mode"
   | "keyword_gate_enabled"
@@ -60,6 +61,7 @@ type CandidateRow = Pick<
   | "keyword_fired"
   | "tag"
   | "memory_summary"
+  | "link_sent_at"
 > & { chatbots: FollowupChatbotRow };
 
 function bump(map: Record<string, number>, key: string) {
@@ -78,8 +80,8 @@ async function run() {
   const { data, error } = await supabase
     .from("conversations")
     .select(
-      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, bot_off_at, rn_opt_in_at, keyword_fired, tag, memory_summary, " +
-        "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_template, auto_followup_steps, auto_followup_loop_last, auto_followup_loop_mode, keyword_gate_enabled, manychat_api_key_enc)"
+      "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, bot_off_at, rn_opt_in_at, keyword_fired, tag, memory_summary, link_sent_at, " +
+        "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_template, auto_followup_steps, auto_followup_link_steps, auto_followup_loop_last, auto_followup_loop_mode, keyword_gate_enabled, manychat_api_key_enc)"
     )
     .eq("status", "active")
     .is("confirmed_at", null)

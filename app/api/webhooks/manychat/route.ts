@@ -456,17 +456,20 @@ export async function POST(request: NextRequest) {
     conversationId = created.id;
     conversationStatus = created.status;
   } else {
-    // A reply re-arms the drip. In CYCLE mode we keep the rotation position so the
-    // lead gets the NEXT follow-up on the next silence (continue forward, don't
-    // restart at step 1); every other mode resets to step 1. Either way, clearing
-    // last_followup_at re-arms the timing (the next step's delay is measured from
-    // this reply) and the fresh last_message_at reopens the 24h send window.
-    const cycling = chatbot.auto_followup_loop_mode === "cycle";
-    // A muted lead's inbound must NOT re-arm the drip: freeze the counters and
-    // last_followup_at so the sequence resumes cleanly from where it was once they
-    // un-mute, instead of replaying from step 1. (The cron already skips muted
-    // leads via the user_muted_at filter, so this reset is inert while muted — but
-    // freezing it keeps the position correct for resume.)
+    // A reply RE-ARMS the drip timing but KEEPS the sequence position, so the lead
+    // advances to the NEXT step the next time they go quiet — never a repeat of
+    // step 1. (Resetting followup_step_index here was a bug: a lead who replied
+    // briefly then went quiet kept getting the same first follow-up over and over,
+    // and the later steps the owner configured never fired.) Loop mode governs only
+    // what happens AFTER the last step (stop / repeat_last / cycle), matching its UI
+    // label — it is NOT a "restart on reply" switch. Clearing last_followup_at
+    // re-arms the timing (the next step's delay is measured from this reply) and the
+    // fresh last_message_at reopens the 24h send window.
+    //
+    // A muted lead's inbound must NOT re-arm the drip: freeze last_followup_at so the
+    // sequence resumes cleanly from where it was once they un-mute. (The cron already
+    // skips muted leads via the user_muted_at filter, so this is inert while muted —
+    // but freezing it keeps the timing correct for resume.)
     const muted = !!existing.user_muted_at;
     await supabase
       .from("conversations")
@@ -476,7 +479,6 @@ export async function POST(request: NextRequest) {
         // Heal old rows too: replace a stored placeholder/empty with a real value.
         contact_name: cleanContactField(existing.contact_name) ?? displayName,
         contact_username: cleanContactField(existing.contact_username) ?? username,
-        ...(cycling || muted ? {} : { followup_count: 0, followup_step_index: 0 }),
         ...(muted ? {} : { last_followup_at: null }),
       })
       .eq("id", existing.id);

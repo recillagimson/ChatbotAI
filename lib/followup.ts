@@ -105,6 +105,7 @@ export type FollowupChatbot = Pick<
   | "auto_followup_days"
   | "auto_followup_template"
   | "auto_followup_steps"
+  | "auto_followup_link_steps"
   | "auto_followup_loop_last"
   | "auto_followup_loop_mode"
 >;
@@ -112,16 +113,22 @@ export type FollowupChatbot = Pick<
 export type FollowupConversation = Pick<
   Conversation,
   "status" | "last_message_at" | "last_followup_at" | "followup_count" | "followup_step_index" | "confirmed_at"
-> & { platform?: Platform; rn_opt_in_at?: string | null; tag?: Conversation["tag"] | null; bot_off_at?: string | null };
+> & {
+  platform?: Platform;
+  rn_opt_in_at?: string | null;
+  tag?: Conversation["tag"] | null;
+  bot_off_at?: string | null;
+  link_sent_at?: string | null;
+};
 
 /**
- * Resolve a chatbot's drip steps. Uses `auto_followup_steps` when present; else
- * falls back to a single legacy step synthesized from `auto_followup_template`
- * (so un-migrated bots keep a single follow-up). Empty → no follow-up.
+ * Normalize a raw JSONB steps array into valid, clamped FollowupSteps. Drops
+ * null/empty steps (no text, no asset, no flow, not AI). Shared by resolveSteps
+ * (main sequence) and resolveLinkSteps (link sequence).
  */
-export function resolveSteps(chatbot: FollowupChatbot): FollowupStep[] {
-  const raw = Array.isArray(chatbot.auto_followup_steps) ? chatbot.auto_followup_steps : [];
-  const valid = raw
+function normalizeSteps(raw: unknown): FollowupStep[] {
+  const arr = Array.isArray(raw) ? (raw as FollowupStep[]) : [];
+  return arr
     .map((s) => ({ step: s, keys: s ? stepAssetKeys(s) : [] }))
     .filter(({ step, keys }) => step && ((step.text ?? "").trim() || keys.length || step.flow_ns || step.flow_ns_fb || step.ai_generate))
     .map(({ step, keys }) => ({
@@ -135,6 +142,15 @@ export function resolveSteps(chatbot: FollowupChatbot): FollowupStep[] {
       flow_name_fb: step.flow_name_fb ?? null,
       ai_generate: !!step.ai_generate,
     }));
+}
+
+/**
+ * Resolve a chatbot's MAIN drip steps. Uses `auto_followup_steps` when present;
+ * else falls back to a single legacy step synthesized from `auto_followup_template`
+ * (so un-migrated bots keep a single follow-up). Empty → no follow-up.
+ */
+export function resolveSteps(chatbot: FollowupChatbot): FollowupStep[] {
+  const valid = normalizeSteps(chatbot.auto_followup_steps);
   if (valid.length) return valid;
 
   const tmpl = chatbot.auto_followup_template?.trim();
@@ -149,6 +165,17 @@ export function resolveSteps(chatbot: FollowupChatbot): FollowupStep[] {
     ];
   }
   return [];
+}
+
+/**
+ * Resolve a chatbot's LINK drip steps (`auto_followup_link_steps`) — the sequence
+ * used once the bot has sent the lead a link. No legacy-template fallback: an
+ * empty result means "no link sequence configured", so the engine falls back to
+ * the usual steps. Empty when the field is missing (pre-migration) or has no
+ * valid steps.
+ */
+export function resolveLinkSteps(chatbot: FollowupChatbot): FollowupStep[] {
+  return normalizeSteps(chatbot.auto_followup_link_steps);
 }
 
 export interface FollowupDecision {
@@ -189,7 +216,12 @@ export function evaluateFollowup(
 ): FollowupDecision {
   if (!chatbot.auto_followup_enabled) return { due: false, reason: "disabled" };
 
-  const steps = resolveSteps(chatbot);
+  // Sequence selection: once the bot has sent this lead a link (link_sent_at), use
+  // the LINK sequence — but only if one is actually configured. Otherwise (no link
+  // sent, or no link steps set) run the usual sequence. So "if none is set, proceed
+  // with the usual follow-up" falls out naturally.
+  const linkSteps = conversation.link_sent_at ? resolveLinkSteps(chatbot) : [];
+  const steps = linkSteps.length ? linkSteps : resolveSteps(chatbot);
   if (steps.length === 0) return { due: false, reason: "no_steps" };
 
   if (conversation.status !== "active") return { due: false, reason: "not_active" };
