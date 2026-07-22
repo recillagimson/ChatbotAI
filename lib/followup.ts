@@ -266,21 +266,27 @@ export function evaluateFollowup(
 
   // Which step are we on? Past the end, behavior depends on the loop mode:
   //   stop        -> no more follow-ups (until the lead replies/re-arms)
-  //   repeat_last -> resend the final step forever
+  //   repeat_last -> hand the tail to the AI: it composes a fresh, context-aware
+  //                  nudge from the conversation each time (on the last step's
+  //                  cadence), instead of re-sending the same final step forever
   //   cycle       -> wrap around and rotate through all steps in order, forever
   // followup_step_index increments unbounded, so idx % steps.length walks
   // 0,1,2,0,1,2… The legacy boolean is the fallback when the column is absent
   // (pre-migration reads).
   const idx = conversation.followup_step_index ?? 0;
-  let sendIdx = idx;
+  let step: FollowupStep;
   if (idx >= steps.length) {
     const mode =
       chatbot.auto_followup_loop_mode ??
       (chatbot.auto_followup_loop_last ? "repeat_last" : "stop");
     if (mode === "stop") return { due: false, reason: "sequence_done" };
-    sendIdx = mode === "cycle" ? idx % steps.length : steps.length - 1;
+    step =
+      mode === "cycle"
+        ? steps[idx % steps.length]
+        : aiTailStep(steps[steps.length - 1]); // repeat_last → AI keeps following up
+  } else {
+    step = steps[idx];
   }
-  const step = steps[sendIdx];
 
   // A step that fires a flow (Instagram or Facebook slot) carries no message tag,
   // so it can only deliver inside the standard 24h window. `outOfWindow` is only
@@ -296,6 +302,29 @@ export function evaluateFollowup(
   if (nowMs - refMs < step.delay_hours * HOUR_MS) return { due: false, reason: "not_due_yet" };
 
   return { due: true, reason: "due", step, nextStepIndex: idx + 1, outOfWindow };
+}
+
+/**
+ * The "let the AI keep following up" tail step used by repeat_last mode once the
+ * drip passes the last configured step: keep that last step's delay cadence, drop
+ * all static content (text / assets / flows), and force AI generation so the cron's
+ * generateFollowupText composes a fresh nudge from the conversation each time —
+ * rather than re-sending the same final message on a loop. Pure text: on the rare
+ * AI-generation failure the step has no static fallback, so that cycle simply sends
+ * nothing and the next cron run retries (never a stuck loop).
+ */
+function aiTailStep(last: FollowupStep): FollowupStep {
+  return {
+    delay_hours: last.delay_hours,
+    asset_keys: [],
+    asset_key: null,
+    text: null,
+    flow_ns: null,
+    flow_name: null,
+    flow_ns_fb: null,
+    flow_name_fb: null,
+    ai_generate: true,
+  };
 }
 
 /**
