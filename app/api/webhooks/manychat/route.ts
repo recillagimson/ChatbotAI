@@ -909,8 +909,22 @@ export async function POST(request: NextRequest) {
   // must fall through to the AI path (claim + supersede) so the burst's real
   // question still gets answered — a canned ack row would otherwise become a
   // burst boundary and strand it.
+  // A bot counts as a "persona bot" if it has a custom voice in EITHER form: the
+  // legacy `system_prompt` column OR the newer editable sections (persona / offers
+  // / rebuttals). Section-mode bots — which is most current clients — have an EMPTY
+  // system_prompt, so checking only that let the generic English ack leak into
+  // bilingual / non-English personas (e.g. a Spanish chat getting "Got it! Let me
+  // know if there's anything else." on a bare "ok"). Mirror buildSystemPrompt's own
+  // persona detection so ANY customized bot skips the canned ack and instead answers
+  // in-voice and in-language through the AI (its language rule then applies).
+  const hasPersona = !!(
+    chatbot.system_prompt?.trim() ||
+    chatbot.persona_section?.trim() ||
+    chatbot.offers_section?.trim() ||
+    chatbot.rebuttals_section?.trim()
+  );
   const trivial =
-    chatbot.system_prompt || hasMedia || existing?.reply_claimed_for
+    hasPersona || hasMedia || existing?.reply_claimed_for
       ? null
       : getTrivialReply(baseText);
   if (trivial) {
