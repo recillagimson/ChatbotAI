@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Pause, Play, CheckCircle2, RotateCcw, Send, RefreshCw, Voicemail } from "lucide-react";
+import { Pause, Play, CheckCircle2, RotateCcw, Send, RefreshCw, Voicemail, Radio } from "lucide-react";
 import {
   CONVERSATION_TAGS,
   TAG_LABEL,
@@ -53,6 +53,8 @@ export function ConversationActions({
   const [resetResult, setResetResult] = useState<string | null>(null);
   // ADMIN-ONLY "send welcome" button result. Null = idle/hidden.
   const [welcomeResult, setWelcomeResult] = useState<string | null>(null);
+  // ADMIN-ONLY "test delivery" probe result (ManyChat's actual verdict). Null = idle.
+  const [deliveryResult, setDeliveryResult] = useState<string | null>(null);
 
   // subscribed ⇔ confirmed_at set: the tag and the conversion state move together.
   const confirmed = tag === "subscribed";
@@ -179,6 +181,43 @@ export function ConversationActions({
         }
       } catch {
         setResetResult("Couldn't reset — network error.");
+      }
+    });
+  }
+
+  // ADMIN-ONLY: push a real test DM to this contact via ManyChat and surface
+  // ManyChat's actual verdict (accepted vs. refused-with-reason), so delivery can
+  // be checked per contact instead of guessing from the ManyChat test panel.
+  function testDelivery() {
+    if (
+      !window.confirm(
+        "Send a real test DM to this contact via ManyChat? Use this to check whether " +
+          "replies are actually being delivered — it will show ManyChat's exact response."
+      )
+    ) {
+      return;
+    }
+    setDeliveryResult(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch(
+          `/api/conversations/${conversationId}/test-delivery`,
+          { method: "POST" }
+        );
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          note?: string;
+          error?: string;
+        };
+        if (res.status === 403) {
+          setDeliveryResult("Not allowed.");
+        } else if (data.ok) {
+          setDeliveryResult(data.note ?? "ManyChat accepted the send.");
+        } else {
+          setDeliveryResult(`Not delivered — ManyChat said: ${data.error ?? "unknown error"}`);
+        }
+      } catch {
+        setDeliveryResult("Couldn't run the test — network error.");
       }
     });
   }
@@ -394,6 +433,17 @@ export function ConversationActions({
           </Button>
           {testResult && (
             <span className="text-xs text-muted-foreground">{testResult}</span>
+          )}
+          <Button
+            onClick={testDelivery}
+            disabled={isPending}
+            variant="secondary"
+            size="sm"
+          >
+            <Radio className="h-4 w-4 mr-2" /> Test delivery
+          </Button>
+          {deliveryResult && (
+            <span className="text-xs text-muted-foreground">{deliveryResult}</span>
           )}
           <Button
             onClick={resetConversation}
