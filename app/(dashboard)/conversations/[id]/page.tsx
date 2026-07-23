@@ -15,6 +15,7 @@ import { contactDisplayName, contactHandle } from "@/lib/contact";
 import { signAttachment } from "@/lib/storage";
 import { TAG_LABEL, TAG_VARIANT, tagOf } from "@/lib/conversation-tags";
 import { QUALITY_LABEL, QUALITY_VARIANT, qualityOf } from "@/lib/conversation-quality";
+import { botReplySilenced } from "@/lib/conversation-silence";
 
 export default async function ConversationDetailPage({
   params,
@@ -168,7 +169,7 @@ export default async function ConversationDetailPage({
       <div className="shrink-0">
         <ConversationReplyBox
           conversationId={conversation.id}
-          paused={conversation.status === "ai_paused"}
+          botSilent={botReplySilenced(conversation)}
         />
       </div>
     </div>

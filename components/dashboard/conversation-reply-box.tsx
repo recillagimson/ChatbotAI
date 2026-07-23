@@ -4,40 +4,45 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send } from "lucide-react";
+import { Send, Sparkles } from "lucide-react";
 
 const MAX_LEN = 1000;
 
 /**
- * Manual reply composer for a conversation. Only active while the AI is paused
- * (human takeover) — otherwise it shows a hint pointing to the pause button.
- * Posts to /api/conversations/[id]/reply, which pushes the message to Instagram
- * via ManyChat and records it as a `human_agent` message.
+ * Manual reply composer for a conversation. Shown whenever the AI is silent on
+ * the thread (paused, subscribed, bot-off, disqualified, or the lead muted) — i.e.
+ * exactly when the bot won't answer on its own, so a manual/AI-assisted reply
+ * can't collide with an automated one.
+ *
+ * "Draft AI reply" asks the server (POST /suggest-reply) for an on-brand draft
+ * (the same engine the live bot uses) and drops it into the box to edit. "Send"
+ * posts to /reply, which pushes the message to the contact via ManyChat and
+ * records it as a `human_agent` message. Drafting delivers nothing — only Send does.
  */
 export function ConversationReplyBox({
   conversationId,
-  paused,
+  botSilent,
 }: {
   conversationId: string;
-  paused: boolean;
+  botSilent: boolean;
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [drafting, setDrafting] = useState(false);
 
-  if (!paused) {
+  if (!botSilent) {
     return (
       <p className="mt-4 text-sm text-muted-foreground">
-        Pause the AI above to take over and reply to this person on Instagram
-        yourself.
+        Pause the AI above to take over and reply to this person yourself.
       </p>
     );
   }
 
   function send() {
     const message = text.trim();
-    if (!message || isPending) return;
+    if (!message || isPending || drafting) return;
     setError(null);
     startTransition(async () => {
       try {
@@ -61,6 +66,35 @@ export function ConversationReplyBox({
     });
   }
 
+  // Ask the server for an on-brand AI draft and drop it into the box (editable).
+  // Sends nothing — the owner reviews and clicks Send. Re-clickable to re-draft.
+  function draftAiReply() {
+    if (drafting || isPending) return;
+    setError(null);
+    setDrafting(true);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/conversations/${conversationId}/suggest-reply`,
+          { method: "POST" }
+        );
+        const data = (await res.json().catch(() => null)) as {
+          draft?: string;
+          error?: string;
+        } | null;
+        if (!res.ok || !data?.draft) {
+          setError(data?.error ?? "Couldn't draft a reply. Please try again.");
+          return;
+        }
+        setText(data.draft.slice(0, MAX_LEN));
+      } catch {
+        setError("Couldn't draft a reply. Please check your connection and try again.");
+      } finally {
+        setDrafting(false);
+      }
+    })();
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     // Enter sends; Shift+Enter inserts a newline.
     if (e.key === "Enter" && !e.shiftKey) {
@@ -68,6 +102,8 @@ export function ConversationReplyBox({
       send();
     }
   }
+
+  const busy = isPending || drafting;
 
   return (
     <div className="mt-4 space-y-2">
@@ -77,18 +113,30 @@ export function ConversationReplyBox({
         onKeyDown={onKeyDown}
         rows={3}
         maxLength={MAX_LEN}
-        placeholder="Reply as a human... (sent to Instagram via ManyChat)"
-        disabled={isPending}
+        placeholder="Reply as a human, or click Draft AI reply to start from a suggestion..."
+        disabled={busy}
       />
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">
-          You&apos;re replying manually. The AI stays paused until you resume it.
+          You&apos;re replying manually — the lead gets no automated reply on this
+          thread.
         </span>
-        <Button onClick={send} disabled={isPending || !text.trim()} size="sm">
-          <Send className="h-4 w-4 mr-2" />
-          {isPending ? "Sending..." : "Send"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={draftAiReply}
+            disabled={busy}
+            variant="secondary"
+            size="sm"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {drafting ? "Drafting..." : "Draft AI reply"}
+          </Button>
+          <Button onClick={send} disabled={busy || !text.trim()} size="sm">
+            <Send className="h-4 w-4 mr-2" />
+            {isPending ? "Sending..." : "Send"}
+          </Button>
+        </div>
       </div>
     </div>
   );
