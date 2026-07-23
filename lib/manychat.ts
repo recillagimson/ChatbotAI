@@ -251,6 +251,25 @@ export function classifySendError(
 }
 
 /**
+ * ManyChat's Send Content API returns HTTP 200 even for business-logic REFUSALS
+ * (a closed 24h messaging window, "can't message this user", an account-level
+ * messaging restriction) — the real outcome is the body's `status` field, exactly
+ * like every other ManyChat endpoint (see validateManychatApiKey/listManychatFlows).
+ * Treating a bare HTTP 200 as delivered persists a phantom "sent" bubble that never
+ * reached the contact. Returns the refusal message when the body says error, else
+ * null (delivered / unknown-but-ok). Pure + unit-tested.
+ */
+export function manychatSendRejection(json: unknown): string | null {
+  const o = (json ?? null) as { status?: unknown; message?: unknown } | null;
+  if (o && typeof o.status === "string" && o.status.toLowerCase() !== "success") {
+    return typeof o.message === "string" && o.message.trim()
+      ? o.message.trim()
+      : "ManyChat rejected the send (status != success)";
+  }
+  return null;
+}
+
+/**
  * Low-level: POST a prebuilt `messages[]` to ManyChat's Send Content API with
  * retries. Shared by the text (sendManychatMessage) and media (sendManychatMedia)
  * senders so both get identical transient-failure handling.
@@ -314,7 +333,23 @@ async function postSendContent(opts: {
         signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
       });
 
-      if (res.ok) return res.json();
+      if (res.ok) {
+        // HTTP 200 is necessary but NOT sufficient — ManyChat signals a refused send
+        // (closed window, blocked user, account restriction) with status:"error" in
+        // the 200 body. Surface it as a failure so the caller doesn't record a phantom
+        // "sent" bubble, and so the reply can be retried/reconciled instead of lost.
+        const json = await res.json().catch(() => null);
+        const rejection = manychatSendRejection(json);
+        if (rejection) {
+          lastError = new Error(
+            `ManyChat send refused (HTTP 200): ${rejection} (attempt ${attempt + 1}/${ATTEMPTS})`
+          );
+          // ManyChat evaluated the send and said no — this is a decision, not a transport
+          // blip, so re-POSTing won't help and risks a duplicate. Treat as permanent.
+          throw lastError;
+        }
+        return json ?? {};
+      }
 
       const errText = await res.text().catch(() => "");
       lastError = new Error(
