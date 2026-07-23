@@ -2,6 +2,7 @@ import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { signAttachment } from "@/lib/storage";
 import { FeedbackPageForm } from "@/components/dashboard/feedback-page-form";
 import { FeedbackHistory } from "@/components/dashboard/feedback-history";
+import { SupportContactsCard } from "@/components/dashboard/support-contacts-card";
 import type { Attachment, Feedback } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,10 @@ export default async function FeedbackPage() {
 
       <div className="mb-10">
         <FeedbackPageForm chatbots={chatbots ?? []} />
+      </div>
+
+      <div className="mb-10">
+        <SupportContactsCard />
       </div>
 
       <section>

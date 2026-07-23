@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -15,9 +16,11 @@ import {
   LogOut,
   ShieldCheck,
   Sparkles,
+  LifeBuoy,
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { createClient } from "@/lib/supabase/client";
+import { SUPPORT_CONTACTS, SUPPORT_HOURS } from "@/lib/support-contacts";
 
 const nav = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -109,8 +112,9 @@ export function SidebarNav({
           );
         })}
       </nav>
-      {!impersonating && (
-        <div className="shrink-0 p-3 border-t border-white/10">
+      <div className="shrink-0 p-3 border-t border-white/10 space-y-1">
+        <HelpContact onNavigate={onNavigate} />
+        {!impersonating && (
           <button
             type="button"
             onClick={signOut}
@@ -119,8 +123,48 @@ export function SidebarNav({
             <LogOut className="h-4 w-4" />
             Sign out
           </button>
+        )}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Sidebar "Help" control — a toggle that reveals the SpeedSettr support contacts
+ * ([lib/support-contacts.ts]) as tap-to-call links. Lives in the footer of both the
+ * desktop rail and the mobile drawer. `onNavigate` closes the mobile drawer when a
+ * number is tapped.
+ */
+function HelpContact({ onNavigate }: { onNavigate?: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      {open && (
+        <div className="mb-1 rounded-md bg-white/5 p-2 space-y-1">
+          <p className="px-1 pb-1 text-xs text-white/50">Call or text the team</p>
+          {SUPPORT_CONTACTS.map((c) => (
+            <a
+              key={c.tel}
+              href={`tel:${c.tel}`}
+              onClick={onNavigate}
+              className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <span className="font-medium">@{c.name}</span>
+              <span className="tabular-nums text-white/60">{c.phone}</span>
+            </a>
+          ))}
+          <p className="px-1 pt-1 text-xs text-white/50">Available {SUPPORT_HOURS}</p>
         </div>
       )}
-    </>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+      >
+        <LifeBuoy className="h-4 w-4" />
+        Help
+      </button>
+    </div>
   );
 }

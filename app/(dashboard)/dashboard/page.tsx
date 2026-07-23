@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bot, MessageSquare, Zap, AlertCircle } from "lucide-react";
 import { hasActiveAccess } from "@/lib/access";
+import { SupportContactsCard } from "@/components/dashboard/support-contacts-card";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -148,6 +149,8 @@ export default async function DashboardPage() {
           />
         </CardContent>
       </Card>
+
+      <SupportContactsCard className="mt-6" />
     </div>
   );
 }
