@@ -115,9 +115,12 @@ create table if not exists public.messages (
   tokens_used int,
   media_url text,                -- inbound attachment: storage path (request-uploads) or URL; null = text only
   media_type text,               -- inbound attachment MIME type (image/jpeg, audio/m4a, ...); null = text only
+  delivery_status text,          -- null=delivered/untracked, 'failed', 'delivered', 'abandoned' (see 2026-07-23-push-reconcile)
+  delivery_attempts integer not null default 0, -- reconcile-cron retry count
   created_at timestamptz not null default now()
 );
 create index if not exists messages_conv_idx on public.messages(conversation_id, created_at);
+create index if not exists messages_delivery_failed_idx on public.messages(created_at) where delivery_status = 'failed';
 
 -- ---------------------------------------------------------------------
 -- usage_log: track AI calls for billing/limits
@@ -762,7 +765,8 @@ alter table public.chatbots
   add column if not exists auto_followup_steps jsonb not null default '[]'::jsonb,  -- ordered drip steps: [{delay_hours, asset_keys?: string[] (legacy asset_key? still read), text?, flow_ns?/flow_name? (Instagram/default voice flow), flow_ns_fb?/flow_name_fb? (Facebook voice flow), ai_generate?: boolean (AI writes the message; text becomes optional guidance)}]
   add column if not exists auto_followup_loop_last boolean not null default false,  -- legacy; superseded by auto_followup_loop_mode (see 2026-07-07-followup-loop-mode.sql)
   add column if not exists auto_followup_loop_mode text not null default 'stop',    -- after last step: stop | repeat last | cycle through all
-  add column if not exists ai_media_enabled boolean not null default false;         -- allow [[SEND_ASSET]] directives from the live AI
+  add column if not exists ai_media_enabled boolean not null default false,         -- allow [[SEND_ASSET]] directives from the live AI
+  add column if not exists link_buttons_enabled boolean not null default false;     -- Messenger-only: render links as tappable URL buttons (see 2026-07-23-link-buttons-per-chatbot.sql)
 
 -- Named drop/re-add so a re-run picks up constraint changes (an inline check on
 -- `add column if not exists` is silently skipped once the column exists).

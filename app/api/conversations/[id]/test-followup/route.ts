@@ -17,6 +17,7 @@ export const runtime = "nodejs";
 type TestChatbot = FollowupChatbot & {
   id: string;
   manychat_api_key_enc: string | null;
+  link_buttons_enabled: boolean | null;
 };
 
 type TestRow = Pick<
@@ -57,7 +58,7 @@ export async function POST(
       "id, manychat_subscriber_id, contact_name, platform, status, " +
         "followup_count, followup_step_index, last_followup_at, " +
         "chatbots!inner(id, auto_followup_enabled, auto_followup_days, auto_followup_template, " +
-        "auto_followup_steps, auto_followup_loop_last, auto_followup_loop_mode, manychat_api_key_enc)"
+        "auto_followup_steps, auto_followup_loop_last, auto_followup_loop_mode, manychat_api_key_enc, link_buttons_enabled)"
     )
     .eq("id", id)
     .single();
@@ -108,8 +109,9 @@ export async function POST(
       assets,
       new Date(),
       apiKey,
-      index + 1
-      // no messageTag: in-window test
+      index + 1,
+      // no messageTag: in-window test. Mirror the real cron's per-chatbot buttons.
+      { linkButtons: cb.link_buttons_enabled === true }
     );
     if (content === null) {
       return NextResponse.json({

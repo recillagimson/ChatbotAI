@@ -384,7 +384,7 @@ export async function sendFollowup(
   now: Date,
   apiKey: string,
   nextStepIndex: number,
-  opts?: { messageTag?: string; overrideText?: string | null }
+  opts?: { messageTag?: string; overrideText?: string | null; linkButtons?: boolean }
 ): Promise<string | null> {
   const prevIndex = conversation.followup_step_index ?? 0;
   const prevFollowupAt = conversation.last_followup_at ?? null;
@@ -453,6 +453,7 @@ export async function sendFollowup(
         apiKey,
         platform,
         messageTag: opts?.messageTag,
+        linkButtons: opts?.linkButtons,
       });
     }
   } catch (err) {

@@ -42,6 +42,8 @@ import {
 } from "@/lib/user-controls";
 import { sanitizeReply } from "@/lib/sanitize";
 import { classifyConversation } from "@/lib/conversation-classify";
+import { insertMessageReturningId, markDeliveryFailed } from "@/lib/delivery";
+import { retrySupabase } from "@/lib/retry";
 import { shouldSendWelcome, coerceKeywords } from "@/lib/welcome";
 import { matchesResetKeyword } from "@/lib/reset-keyword";
 import { resetConversation } from "@/lib/reset-conversation";
@@ -208,21 +210,24 @@ async function persistAndPush(
   // Push only on channels with a ManyChat send API; on non-pushable channels
   // (TikTok) the caller delivers the same `text` via the webhook response body.
   const push = apiKey && canPushPlatform(platform);
-  await Promise.all([
-    supabase.from("messages").insert({
-      conversation_id: conversationId,
-      role: "assistant",
-      content: text,
-      ai_generated: false,
-      tokens_used: 0,
-    }),
-    push
-      ? sendManychatMessage({ subscriberId, text, apiKey, platform }).catch(async (err) => {
-          console.error("[manychat-webhook] push send failed", err);
-          await logPushFailure(supabase, userId, chatbotId);
-        })
-      : Promise.resolve(),
-  ]);
+  // Insert first so we hold this row's id: if the push then throws, we mark THAT
+  // row failed for the reconcile cron to retry (no racy "recent message" guessing).
+  const messageId = await insertMessageReturningId(supabase, {
+    conversation_id: conversationId,
+    role: "assistant",
+    content: text,
+    ai_generated: false,
+    tokens_used: 0,
+  });
+  if (push) {
+    try {
+      await sendManychatMessage({ subscriberId, text, apiKey, platform });
+    } catch (err) {
+      console.error("[manychat-webhook] push send failed", err);
+      await logPushFailure(supabase, userId, chatbotId);
+      await markDeliveryFailed(supabase, messageId);
+    }
+  }
 }
 
 /**
@@ -243,7 +248,8 @@ async function sendKeywordCannedReply(
   userId: string,
   chatbotId: string,
   apiKey: string | null,
-  platform: Platform
+  platform: Platform,
+  linkButtons: boolean
 ): Promise<void> {
   const push = !!apiKey && canPushPlatform(platform);
 
@@ -263,11 +269,11 @@ async function sendKeywordCannedReply(
   }
 
   // Persist the text row first, then the media row, so inbox order matches delivery.
+  let textMessageId: string | null = null;
   if (text) {
-    await supabase
-      .from("messages")
-      .insert({ conversation_id: conversationId, role: "assistant", content: text, ai_generated: false, tokens_used: 0 })
-      .then(() => {}, () => {});
+    textMessageId = await insertMessageReturningId(supabase, {
+      conversation_id: conversationId, role: "assistant", content: text, ai_generated: false, tokens_used: 0,
+    });
   }
   if (assetRow) {
     await supabase
@@ -280,13 +286,16 @@ async function sendKeywordCannedReply(
   if (push && apiKey) {
     try {
       if (asset) {
-        await sendManychatMedia({ subscriberId, assets: [asset], text, apiKey, platform });
+        await sendManychatMedia({ subscriberId, assets: [asset], text, apiKey, platform, linkButtons });
       } else if (text) {
-        await sendManychatMessage({ subscriberId, text, apiKey, platform });
+        await sendManychatMessage({ subscriberId, text, apiKey, platform, linkButtons });
       }
     } catch (err) {
       console.error("[manychat-webhook] keyword push send failed", err);
       await logPushFailure(supabase, userId, chatbotId);
+      // Reconcile TEXT-only keyword sends; a media send uses assume-delivered
+      // semantics (never re-POST a video), so it's left for the owner to resend.
+      if (!asset) await markDeliveryFailed(supabase, textMessageId);
     }
   }
 }
@@ -431,21 +440,29 @@ export async function POST(request: NextRequest) {
     // and gets back its real id/status. `status` is deliberately omitted:
     // the schema default covers fresh inserts, and a conflict-update must not
     // un-pause an ai_paused conversation (human takeover).
-    const { data: created, error: convError } = await supabase
-      .from("conversations")
-      .upsert(
-        {
-          chatbot_id: chatbot.id,
-          user_id: chatbot.user_id,
-          manychat_subscriber_id: body.subscriber_id,
-          platform,
-          contact_name: displayName,
-          contact_username: username,
-        },
-        { onConflict: "chatbot_id,manychat_subscriber_id" }
-      )
-      .select("id, status")
-      .single();
+    // Retry a few times: a transient DB/network blip here would otherwise drop the
+    // inbound entirely (no conversation → no message persisted). Upsert is idempotent,
+    // so a retry is safe.
+    const { data: created, error: convError } = await retrySupabase(
+      (signal) =>
+        supabase
+          .from("conversations")
+          .upsert(
+            {
+              chatbot_id: chatbot.id,
+              user_id: chatbot.user_id,
+              manychat_subscriber_id: body.subscriber_id,
+              platform,
+              contact_name: displayName,
+              contact_username: username,
+            },
+            { onConflict: "chatbot_id,manychat_subscriber_id" }
+          )
+          .select("id, status")
+          .abortSignal(signal)
+          .single(),
+      { label: "conversation upsert" }
+    );
     if (convError || !created) {
       // Any DB failure here must still produce a 200 + reply, never a 500.
       console.error("[manychat-webhook] conversation upsert failed", convError);
@@ -615,15 +632,23 @@ export async function POST(request: NextRequest) {
   // backfill the readable content + durable media pointer after processing
   // (which runs in the background to keep the fast-ack quick).
   const provisionalContent = baseText || "📎 Attachment…";
-  const { data: inboundMsg } = await supabase
-    .from("messages")
-    .insert({
-      conversation_id: conversationId!,
-      role: "user",
-      content: provisionalContent,
-    })
-    .select("id")
-    .single();
+  // Retry the inbound record a few times: this row IS the "message received on
+  // SpeedSettr", so a transient DB blip here must not silently lose it. Retrying a
+  // failed insert is safe (a query error means nothing was written).
+  const { data: inboundMsg } = await retrySupabase(
+    (signal) =>
+      supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversationId!,
+          role: "user",
+          content: provisionalContent,
+        })
+        .select("id")
+        .abortSignal(signal)
+        .single(),
+    { label: "inbound message insert" }
+  );
   const inboundId = inboundMsg?.id as string | undefined;
 
   // 6. If human took over, do not generate AI reply
@@ -1026,7 +1051,7 @@ export async function POST(request: NextRequest) {
           await sendKeywordCannedReply(
             supabase, conversationId!, body.subscriber_id, text,
             keywordGroup.first_reply_asset_key ?? null,
-            chatbot.user_id, chatbot.id, apiKey, platform
+            chatbot.user_id, chatbot.id, apiKey, platform, chatbot.link_buttons_enabled === true
           );
           await markFired();
           // Sanitize the response-body copy (raw stays in the DB row): on response
@@ -1048,7 +1073,7 @@ export async function POST(request: NextRequest) {
       if (canCanned && text) {
         await sendKeywordCannedReply(
           supabase, conversationId!, body.subscriber_id, text, null,
-          chatbot.user_id, chatbot.id, apiKey, platform
+          chatbot.user_id, chatbot.id, apiKey, platform, chatbot.link_buttons_enabled === true
         );
         return manychatReply(sanitizeReply(text), { ai_skipped: true, reason: "keyword_repeat" });
       }
@@ -1548,6 +1573,8 @@ export async function POST(request: NextRequest) {
         if (!result) return; // stood down — a newer run owns the consolidated reply
         const { text: replyText, assets } = result;
         const bubbles = splitIntoMessages(replyText);
+        // Per-chatbot: render Messenger links as tappable URL buttons (default off).
+        const linkButtons = chatbot.link_buttons_enabled === true;
         try {
           let aborted = false;
           if (pacingEnabled() && bubbles.length > 0) {
@@ -1583,17 +1610,18 @@ export async function POST(request: NextRequest) {
               startedAt,
               apiKey,
               platform,
+              linkButtons,
               shouldAbort,
             });
             aborted = paced.aborted;
           } else if (bubbles.length > 0) {
-            await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles, apiKey, platform });
+            await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles, apiKey, platform, linkButtons });
           }
           // Then push any AI-triggered media assets (channel-aware; unsupported media
           // on this channel is dropped inside sendManychatMedia). Skipped when the
           // paced trickle was aborted mid-way (lead muted / owner took over / superseded).
           if (!aborted && assets.length > 0) {
-            await sendManychatMedia({ subscriberId: body.subscriber_id, assets, apiKey, platform });
+            await sendManychatMedia({ subscriberId: body.subscriber_id, assets, apiKey, platform, linkButtons });
           }
         } catch (err) {
           console.error("[manychat-webhook] push send failed", err);

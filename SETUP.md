@@ -79,12 +79,12 @@ You'll fill it in as you go through the sections below.
 ## 3. Anthropic Claude (the AI)
 
 1. Go to <https://console.anthropic.com> → sign up / log in.
-2. **Billing → Add credits**: minimum $5 is fine to start. The Claude Sonnet 4.6 model costs roughly $0.003 per typical DM reply, so $5 ≈ ~1,600 replies.
+2. **Billing → Add credits**: minimum $5 is fine to start. The Claude Opus 4.8 model costs roughly $0.005 per typical DM reply, so $5 ≈ ~1,000 replies.
 3. **API Keys → Create Key**. Name it `chatpilot-prod`. Copy it (you only see it once).
 4. Paste into `.env.local`:
    ```
    ANTHROPIC_API_KEY=sk-ant-...
-   ANTHROPIC_MODEL=claude-sonnet-4-6
+   ANTHROPIC_MODEL=claude-opus-4-8
    ```
 
 ---

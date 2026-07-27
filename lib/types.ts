@@ -62,6 +62,7 @@ export interface Chatbot {
   auto_followup_loop_last: boolean;       // legacy; superseded by auto_followup_loop_mode
   auto_followup_loop_mode: FollowupLoopMode; // after the last step: stop | repeat last | cycle through all
   ai_media_enabled: boolean;              // allow the live AI to emit [[SEND_ASSET]] directives
+  link_buttons_enabled: boolean;          // Messenger-only: send links as tappable URL buttons instead of plain text
   keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)
   training_pairs: TrainingPair[];         // Bot Trainer scenario corrections (JSONB)
   keyword_gate_enabled: boolean;          // ON = reply ONLY to DMs matching a keyword group; else silent

@@ -27,7 +27,7 @@ function getAnthropic(): Anthropic {
   return _anthropic;
 }
 
-export const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+export const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 
 // DM-reply provider. Defaults to OpenAI (ChatGPT) — the app already requires
 // OPENAI_API_KEY for the change-request AI + embeddings, so this needs no new
@@ -333,11 +333,13 @@ export async function generateReply(opts: {
   // Mark the system prompt as ephemeral-cacheable. The persona + knowledge
   // base are identical across every reply for a given chatbot, so the next
   // call within ~5 min hits the cache at ~10% of the input-token cost.
-  // Caching only kicks in above 1024 input tokens (Sonnet); small KBs pay
+  // Caching only kicks in above 4096 input tokens (Opus 4.8); small KBs pay
   // normal rate and that's fine — no regression.
   const response = await getAnthropic().messages.create({
     model: AI_MODEL,
-    max_tokens: 400,
+    // 500 (was 400): Opus 4.8's tokenizer counts ~1–1.35x more tokens for the
+    // same text as Sonnet 4.6, so the old cap could truncate multi-bubble replies.
+    max_tokens: 500,
     system: [
       {
         type: "text",

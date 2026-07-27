@@ -44,22 +44,84 @@ export function parseScreen(raw: string | null | undefined): ScreenResult {
   return { outcome: "none" };
 }
 
+/**
+ * Benign short replies that must NEVER disqualify — a deterministic floor under
+ * the model. These are engaged/neutral one-liners a real lead sends mid-funnel:
+ * answering the assistant's "any questions?" with "none"/"no"/"nothing", plain
+ * affirmations, acknowledgements, and thanks. A terse "none" was being read by the
+ * model as `not_interested` → a TERMINAL disqualify that silenced a good lead, so
+ * this list short-circuits to `none` before the model is ever asked.
+ *
+ * IMPORTANT: every entry must be unmistakably non-hostile AND not a service
+ * rejection — so short-circuiting it can never hide real abuse or a real "stop
+ * messaging me". Rejection/abuse phrases ("stop", "unsubscribe", "not interested",
+ * "leave me alone", "no thanks", profanity) are deliberately NOT here — they still
+ * reach the model. Matched after normalization, so punctuation/emoji/case don't
+ * matter ("None!", "i'm good 👍" → benign).
+ */
+const BENIGN_SHORT_REPLIES = new Set<string>([
+  // no-more-questions / satisfied / done answering the assistant's question
+  "none", "nope", "no", "nah", "naw", "nada", "nothing", "nothing else",
+  "no more", "no more questions", "no questions", "thats it", "thats all",
+  "im good", "all good", "we good", "were good", "good", "im fine", "fine",
+  "all set", "im all set",
+  // affirmations / acknowledgements
+  "yes", "yeah", "yep", "yup", "ya", "yah", "yes please", "sure",
+  "ok", "okay", "k", "kk", "okie", "alright", "aight", "cool",
+  "got it", "gotcha", "makes sense", "sounds good", "sounds great",
+  "perfect", "great", "awesome", "nice", "bet", "word",
+  // thanks
+  "thanks", "thank you", "thankyou", "ty", "thx", "thank u", "tysm",
+  "appreciate it", "appreciated", "much appreciated", "ok thanks", "okay thanks",
+]);
+
+/** Normalize a reply for benign matching: lowercase, drop apostrophes, strip
+ *  punctuation/emoji to spaces, collapse whitespace. "i'm good 👍" -> "im good". */
+export function normalizeShortReply(s: string | null | undefined): string {
+  return (s ?? "")
+    .toLowerCase()
+    .replace(/['’]/g, "") // i'm -> im (straight + curly apostrophe)
+    .replace(/[^a-z0-9\s]/g, " ") // punctuation/emoji -> space
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// A benign WORD carrying a hostile emoji ("no 🖕", "ok 🤡") is NOT benign — since
+// normalizeShortReply strips emoji, catch these before the fast-path so they still
+// reach the model (which judges the hostility). Friendly emoji (🙏👍😊) are fine.
+const HOSTILE_EMOJI = /[\u{1F595}\u{1F921}\u{1F4A9}\u{1F926}\u{1F612}]/u; // 🖕 🤡 💩 🤦 😒
+
+/**
+ * True when the message is an unmistakably benign short reply (see
+ * BENIGN_SHORT_REPLIES) that must never trigger a disqualify. Pure + unit-tested.
+ */
+export function isBenignShortReply(message: string | null | undefined): boolean {
+  if (message && HOSTILE_EMOJI.test(message)) return false; // hostile emoji → let the model judge
+  const n = normalizeShortReply(message);
+  return n.length > 0 && BENIGN_SHORT_REPLIES.has(n);
+}
+
 export async function screenDisqualify(opts: {
   message: string;
   lastBotMessage: string;
 }): Promise<ScreenResult> {
   const text = (opts.message ?? "").trim();
   if (!text) return { outcome: "none" };
+  // Deterministic floor: an obviously benign one-liner (answering "any questions?"
+  // with "none", a plain "yes"/"ok"/"thanks") is engagement — never disqualify it,
+  // and skip the model call entirely. Guards against a terminal false-positive.
+  if (isBenignShortReply(text)) return { outcome: "none" };
   try {
     const { text: out } = await openaiChat({
       model: SCREEN_MODEL,
       system:
         "You screen a DM lead's LATEST message and decide whether the automated " +
-        "assistant should STOP replying to this person entirely. Answer with ONE word:\n" +
+        "assistant should STOP replying to this person entirely. Read the lead's reply IN CONTEXT of what the assistant just asked. Answer with ONE word:\n" +
         "- abusive        = the person is HOSTILE TOWARD the assistant/company or is mocking/trolling the bot with NO genuine interest: direct insults ('you're useless', 'dumb bot', 'stupid AI', 'f*** you'), telling the assistant off, slurs, or harassment. Requires hostility aimed AT the assistant — not merely strong language.\n" +
-        "- not_interested = clearly and explicitly rejects the service or says to stop messaging them. NOT mild hesitation, price pushback, 'maybe later', or venting from someone who still wants help.\n" +
+        "- not_interested = the person EXPLICITLY rejects the SERVICE or tells you to stop messaging them ('not interested', 'stop messaging me', 'unsubscribe', 'remove me', 'leave me alone', 'don't want it'). This is a rejection of the OFFER — NOT a lead who simply has no more questions, gives a short/one-word answer, or shows mild hesitation or price pushback.\n" +
         "- bot            = the sender is itself an automated bot or spam: nonsensical, repetitive, link-spam, canned automation, or non-sequitur replies that don't track the conversation.\n" +
         "- none           = anything else. A real person with ANY genuine interest, questions, negotiation, venting, or frustration — EVEN with heavy profanity — who still wants help is 'none'.\n" +
+        "CRITICAL: A lead ANSWERING the assistant's question is engagement, not rejection. When the assistant asked something like 'any other questions?' or 'what questions do you have?', a reply of 'none' / 'no' / 'nope' / 'nothing' / 'no more questions' / 'I'm good' / 'all set' means they are SATISFIED and ready — that is 'none', the OPPOSITE of not_interested. A short 'no' answering a yes/no question is likewise just an answer → none.\n" +
         "Swearing is NOT abusive by itself. Profanity used to vent or describe their OWN situation ('this s*** is stressing me out', 'a lot of old s*** to deal with', 'my situation is f***ed') is a normal frustrated lead → none. Only count cursing as abusive when it is aimed AT the assistant as an insult.\n" +
         "Be very conservative — answer 'abusive' or 'not_interested' ONLY when it is UNMISTAKABLE; when in doubt, none. Reply with ONLY the one word.",
       messages: [

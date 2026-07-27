@@ -42,6 +42,7 @@ type FollowupChatbotRow = Pick<
   | "auto_followup_loop_mode"
   | "keyword_gate_enabled"
   | "manychat_api_key_enc"
+  | "link_buttons_enabled"
 >;
 
 type CandidateRow = Pick<
@@ -82,7 +83,7 @@ async function run() {
     .from("conversations")
     .select(
       "id, manychat_subscriber_id, contact_name, status, platform, last_message_at, last_followup_at, followup_count, followup_step_index, confirmed_at, bot_off_at, rn_opt_in_at, keyword_fired, tag, memory_summary, known_facts, link_sent_at, " +
-        "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_template, auto_followup_steps, auto_followup_link_steps, auto_followup_loop_last, auto_followup_loop_mode, keyword_gate_enabled, manychat_api_key_enc)"
+        "chatbots!inner(id, user_id, auto_followup_enabled, auto_followup_days, auto_followup_template, auto_followup_steps, auto_followup_link_steps, auto_followup_loop_last, auto_followup_loop_mode, keyword_gate_enabled, manychat_api_key_enc, link_buttons_enabled)"
     )
     .eq("status", "active")
     .is("confirmed_at", null)
@@ -300,6 +301,8 @@ async function run() {
               ? "HUMAN_AGENT"
               : undefined,
           overrideText,
+          // Per-chatbot: render Messenger links (e.g. a sign-up link) as URL buttons.
+          linkButtons: cb.link_buttons_enabled === true,
         }
       );
       if (content === null) {

@@ -36,6 +36,7 @@ export function FollowupSequenceForm({
       (chatbot.auto_followup_loop_last ? "repeat_last" : "stop")
   );
   const [aiMedia, setAiMedia] = useState(chatbot.ai_media_enabled);
+  const [linkButtons, setLinkButtons] = useState(chatbot.link_buttons_enabled);
   const [noFollowupFlag, setNoFollowupFlag] = useState(chatbot.followup_flag_enabled);
   const [steps, setSteps] = useState<EditableStep[]>(toEditable(chatbot.auto_followup_steps));
   // Optional link sequence — NOT seeded with a blank step: empty means "use the
@@ -94,6 +95,7 @@ export function FollowupSequenceForm({
         auto_followup_loop_mode: loopMode,
         auto_followup_loop_last: loopMode === "repeat_last", // keep the legacy flag consistent
         ai_media_enabled: aiMedia,
+        link_buttons_enabled: linkButtons,
         followup_flag_enabled: noFollowupFlag,
       })
       .eq("id", chatbot.id);
@@ -214,6 +216,23 @@ export function FollowupSequenceForm({
           </p>
         </div>
         <Switch id="ai-media" checked={aiMedia} onCheckedChange={(v) => { setAiMedia(v); markDirty(); }} />
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t pt-5">
+        <div>
+          <Label htmlFor="link-buttons">Send links as buttons on Facebook</Label>
+          <p className="text-sm text-muted-foreground">
+            On Facebook/Messenger, a link is sent as a tappable button instead of plain text.
+            Only affects Messenger &mdash; Instagram always sends the plain link. If your link
+            has a tracking part (<code>?ref=&hellip;</code>), send yourself a test on Messenger
+            after turning this on to confirm the whole link still opens.
+          </p>
+        </div>
+        <Switch
+          id="link-buttons"
+          checked={linkButtons}
+          onCheckedChange={(v) => { setLinkButtons(v); markDirty(); }}
+        />
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t pt-5">

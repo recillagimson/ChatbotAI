@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { sendManychatMessage, resolveManychatApiKey } from "@/lib/manychat";
 import { toPlatform, canPushPlatform, platformLabel } from "@/lib/platforms";
+import { supportsHumanAgentTag } from "@/lib/messaging-window";
 
 export const runtime = "nodejs";
 
@@ -70,7 +71,7 @@ export async function POST(
   // 502 instead of silently sending through the wrong (global) account.
   const { data: chatbot } = await supabase
     .from("chatbots")
-    .select("manychat_api_key_enc")
+    .select("manychat_api_key_enc, link_buttons_enabled")
     .eq("id", conversation.chatbot_id)
     .single();
 
@@ -92,6 +93,13 @@ export async function POST(
       text,
       apiKey,
       platform,
+      // A manual reply IS a human-agent response, so carry the HUMAN_AGENT tag on
+      // channels that support it (IG/Messenger). Harmless inside the 24h window;
+      // required to reach a lead who's been quiet up to 7 days (without it, the send
+      // fails outright the moment the standard window closes).
+      messageTag: supportsHumanAgentTag(platform) ? "HUMAN_AGENT" : undefined,
+      // Per-chatbot: render Messenger links as URL buttons (a pasted link included).
+      linkButtons: chatbot?.link_buttons_enabled === true,
     });
   } catch (err) {
     console.error("[conversation-reply] ManyChat send failed", err);

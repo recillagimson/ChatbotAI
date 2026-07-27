@@ -107,18 +107,27 @@ export function verifyManychatSecret(
 // a `buttons` array of {type:"url", caption, url}). Handles markdown [label](url)
 // and bare URLs; platform limits: max 3 buttons/message, caption max ~20 chars.
 //
-// Link buttons are OFF BY DEFAULT for every client. ManyChat/Messenger URL buttons
-// truncate the query string (dropping "?ref=..." affiliate params — a lost conversion),
-// and a raw URL is clickable on every channel anyway. So the default is: deliver links
-// as plain text, each isolated onto its own bubble (see buildOutboundMessages), with the
-// FULL URL intact. Opt back into Messenger URL buttons with LINK_BUTTONS_ENABLED=true.
+// Link buttons are OFF BY DEFAULT for every client — the default delivers links as
+// plain text, each isolated onto its own bubble (see buildOutboundMessages), with the
+// FULL URL (query string included) intact. A raw URL is clickable on every channel
+// anyway, and plain text can never drop an affiliate "?ref=..." param.
+//
+// Opt IN per-chatbot with the `link_buttons_enabled` column (threaded here as the
+// `enabled` arg) — that bot's Messenger links then render as tappable URL buttons.
+// The legacy LINK_BUTTONS_ENABLED env var still works as a GLOBAL override (turns
+// buttons on for every bot at once). Either switch only affects Messenger: Instagram
+// has no URL buttons (and strips links), so buttonsSupported is false off-Messenger.
 const LINK_BUTTONS_ENABLED = process.env.LINK_BUTTONS_ENABLED === "true";
 const BUTTON_PLATFORMS = new Set<Platform>(["messenger"]); // channels that render URL buttons
 
-/** Whether to convert links to buttons on this channel (opt-in via env; Messenger only). */
-export function buttonsSupported(platform?: Platform): boolean {
-  if (!LINK_BUTTONS_ENABLED) return false;
-  return BUTTON_PLATFORMS.has(platform ?? DEFAULT_PLATFORM);
+/**
+ * Whether to convert links to buttons on this channel. Messenger only, and only when
+ * this bot opted in (`enabled`, from chatbots.link_buttons_enabled) OR the global
+ * LINK_BUTTONS_ENABLED env override is set.
+ */
+export function buttonsSupported(platform?: Platform, enabled?: boolean): boolean {
+  if (!BUTTON_PLATFORMS.has(platform ?? DEFAULT_PLATFORM)) return false;
+  return enabled === true || LINK_BUTTONS_ENABLED;
 }
 const MAX_BUTTONS = 3;
 const MAX_BUTTON_CAPTION = 20;
@@ -201,11 +210,16 @@ export function isolateLinkBubbles(text: string): string[] {
 /**
  * Build the ManyChat `content.messages` array from reply bubbles. Default (all
  * clients, every channel): raw clickable links, each isolated onto its own bubble so
- * the link is never truncated and reads separated from the message. Opt-in legacy:
- * with LINK_BUTTONS_ENABLED=true, Messenger links render as URL buttons instead.
+ * the link is never truncated and reads separated from the message. Opt-in per bot:
+ * when `enabled` (chatbots.link_buttons_enabled) is true — or the global
+ * LINK_BUTTONS_ENABLED env override is set — Messenger links render as URL buttons.
  */
-export function buildOutboundMessages(texts: string[], platform?: Platform): ManyChatTextMessage[] {
-  if (buttonsSupported(platform)) return texts.map(messageWithLinkButtons);
+export function buildOutboundMessages(
+  texts: string[],
+  platform?: Platform,
+  enabled?: boolean
+): ManyChatTextMessage[] {
+  if (buttonsSupported(platform, enabled)) return texts.map(messageWithLinkButtons);
   return texts.flatMap(isolateLinkBubbles).map((t) => ({ type: "text", text: t }));
 }
 
@@ -396,6 +410,8 @@ export async function sendManychatMessage(opts: {
   apiKey: string;
   /** Channel the contact is on; sets ManyChat's content.type. Defaults to Instagram. */
   platform?: Platform;
+  /** Per-chatbot opt-in (chatbots.link_buttons_enabled): render Messenger links as URL buttons. */
+  linkButtons?: boolean;
 }) {
   const contentType = requireContentType(opts.platform);
 
@@ -411,7 +427,7 @@ export async function sendManychatMessage(opts: {
 
   return postSendContent({
     subscriberId: opts.subscriberId,
-    messages: buildOutboundMessages(texts, opts.platform),
+    messages: buildOutboundMessages(texts, opts.platform, opts.linkButtons),
     contentType,
     apiKey: opts.apiKey,
     messageTag: opts.messageTag,
@@ -514,6 +530,8 @@ export async function sendManychatMedia(opts: {
   messageTag?: string;
   apiKey: string;
   platform?: Platform;
+  /** Per-chatbot opt-in (chatbots.link_buttons_enabled): render Messenger caption links as URL buttons. */
+  linkButtons?: boolean;
 }): Promise<unknown> {
   const contentType = requireContentType(opts.platform);
   const platform = opts.platform ?? DEFAULT_PLATFORM;
@@ -539,7 +557,7 @@ export async function sendManychatMedia(opts: {
   if (mediaBlocks.length === 0 && !caption) return null;
 
   const messages: ManyChatOutMessage[] = [];
-  if (caption) messages.push(...buildOutboundMessages([caption], platform));
+  if (caption) messages.push(...buildOutboundMessages([caption], platform, opts.linkButtons));
   messages.push(...mediaBlocks);
 
   return postSendContent({
@@ -686,6 +704,8 @@ export async function sendManychatMessagePaced(opts: {
   apiKey: string;
   /** Channel the contact is on; forwarded to each sendContent call. */
   platform?: Platform;
+  /** Per-chatbot opt-in (chatbots.link_buttons_enabled): render Messenger links as URL buttons. */
+  linkButtons?: boolean;
   /**
    * Optional stand-down check, evaluated before each FOLLOW-ON bubble (2..N). Return
    * true to stop sending the rest (lead muted / owner took over / superseded). If it
@@ -739,6 +759,7 @@ export async function sendManychatMessagePaced(opts: {
         messageTag: opts.messageTag,
         apiKey: opts.apiKey,
         platform: opts.platform,
+        linkButtons: opts.linkButtons,
       });
     } catch (err) {
       anyFailed = true;
