@@ -64,15 +64,20 @@ const BENIGN_SHORT_REPLIES = new Set<string>([
   "none", "nope", "no", "nah", "naw", "nada", "nothing", "nothing else",
   "no more", "no more questions", "no questions", "thats it", "thats all",
   "im good", "all good", "we good", "were good", "good", "im fine", "fine",
-  "all set", "im all set",
+  "all set", "im all set", "im all good",
+  // satisfied combos (a lead often stacks a couple of benign words)
+  "no im good", "nope im good", "no all good", "nope all good", "im good thanks",
+  "all good thanks", "good thanks", "no more thanks", "no thats it", "thats it thanks",
   // affirmations / acknowledgements
   "yes", "yeah", "yep", "yup", "ya", "yah", "yes please", "sure",
   "ok", "okay", "k", "kk", "okie", "alright", "aight", "cool",
   "got it", "gotcha", "makes sense", "sounds good", "sounds great",
-  "perfect", "great", "awesome", "nice", "bet", "word",
+  "perfect", "great", "awesome", "nice", "bet", "word", "ok cool", "cool cool",
+  "ok great", "ok perfect", "sounds perfect",
   // thanks
   "thanks", "thank you", "thankyou", "ty", "thx", "thank u", "tysm",
   "appreciate it", "appreciated", "much appreciated", "ok thanks", "okay thanks",
+  "cool thanks", "great thanks", "thanks so much",
 ]);
 
 /** Normalize a reply for benign matching: lowercase, drop apostrophes, strip
@@ -86,19 +91,35 @@ export function normalizeShortReply(s: string | null | undefined): string {
     .trim();
 }
 
-// A benign WORD carrying a hostile emoji ("no 🖕", "ok 🤡") is NOT benign — since
-// normalizeShortReply strips emoji, catch these before the fast-path so they still
-// reach the model (which judges the hostility). Friendly emoji (🙏👍😊) are fine.
-const HOSTILE_EMOJI = /[\u{1F595}\u{1F921}\u{1F4A9}\u{1F926}\u{1F612}]/u; // 🖕 🤡 💩 🤦 😒
+// A benign WORD carrying a hostile emoji ("no 🖕", "ok 🤡", "nope 🤬") is NOT benign —
+// since normalizeShortReply strips emoji, catch these before the fast-path so they
+// still reach the model (which judges the hostility). ONLY emoji that unambiguously
+// insult/mock the READER belong here: 🖕 middle finger, 🤬 cursing-at, 🤡 clown/mockery.
+// Ambiguous negative-emotion emoji (😒 🤦 😡 🤮 👎 💩) are intentionally NOT here — for a
+// venting lead they usually target their OWN situation, and the screen is deliberately
+// biased toward NOT disqualifying (a false disqualify is terminal). Friendly emoji
+// (🙏👍😊) are fine and stripped.
+const HOSTILE_EMOJI = /[\u{1F595}\u{1F92C}\u{1F921}]/u; // 🖕 🤬 🤡
 
 /**
  * True when the message is an unmistakably benign short reply (see
  * BENIGN_SHORT_REPLIES) that must never trigger a disqualify. Pure + unit-tested.
+ *
+ * Burst-aware: a debounced turn is several messages joined with "\n"
+ * (combineBurstText). The whole turn counts as benign ONLY when EVERY non-empty
+ * segment is individually benign — so a burst that mixes in any non-benign line
+ * ("you're dumb\nnone") still reaches the model, which sees the full text.
  */
 export function isBenignShortReply(message: string | null | undefined): boolean {
   if (message && HOSTILE_EMOJI.test(message)) return false; // hostile emoji → let the model judge
-  const n = normalizeShortReply(message);
-  return n.length > 0 && BENIGN_SHORT_REPLIES.has(n);
+  // Split the burst BEFORE normalizing (normalize would fuse "\n" into a space and
+  // turn two benign lines into one non-member string).
+  const parts = String(message ?? "")
+    .split("\n")
+    .map(normalizeShortReply)
+    .filter((s) => s.length > 0);
+  if (parts.length === 0) return false;
+  return parts.every((p) => BENIGN_SHORT_REPLIES.has(p));
 }
 
 export async function screenDisqualify(opts: {
