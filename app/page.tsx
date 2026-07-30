@@ -10,12 +10,15 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { PricingPlans } from "@/components/landing/pricing-plans";
+import { DmPhone } from "@/components/landing/dm-phone";
+import { SiteFooter } from "@/components/landing/site-footer";
+import { ContactCard } from "@/components/landing/contact-card";
 
 const FEATURES = [
   {
     icon: Zap,
     title: "Instant AI replies",
-    body: "Powered by Claude — the most natural-sounding AI for conversations. Replies in seconds, in your exact tone.",
+    body: "Powered by Claude, the most natural-sounding AI for conversations. Replies in seconds, in your exact tone.",
   },
   {
     icon: BookOpen,
@@ -32,7 +35,7 @@ const FEATURES = [
 const STEPS = [
   { n: "01", title: "Connect Instagram", body: "Link your account through ManyChat in a few clicks." },
   { n: "02", title: "Train your AI", body: "Add your business knowledge, voice and tone." },
-  { n: "03", title: "Go live", body: "Your AI starts replying and closing — 24/7." },
+  { n: "03", title: "Go live", body: "Your AI starts replying and closing, 24/7." },
 ];
 
 export default function LandingPage() {
@@ -71,69 +74,80 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="relative z-10">
-        <div className="container py-24 text-center sm:py-32">
-          <div className="mx-auto max-w-3xl">
-            <div className="animate-rise inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/80">
-              <Instagram className="h-3.5 w-3.5 text-[#a5b4fc]" />
-              Always-on AI for Instagram, Facebook, WhatsApp, Telegram &amp; TikTok
-            </div>
+        <div className="container py-20 sm:py-24">
+          <div className="grid items-center gap-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)] lg:gap-12">
+            {/* Left: copy */}
+            <div className="text-center lg:text-left">
+              <div className="animate-rise inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/80">
+                <Instagram className="h-3.5 w-3.5 text-[#a5b4fc]" />
+                Always-on AI for Instagram, Facebook, WhatsApp, Telegram &amp; TikTok
+              </div>
 
-            <h1
-              className="animate-rise mt-7 font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-7xl"
-              style={{ animationDelay: "80ms" }}
-            >
-              Never miss a DM.
-              <br />
-              Never miss a{" "}
-              <span className="italic text-[#a5b4fc]">sale</span>.
-            </h1>
-
-            <p
-              className="animate-rise mx-auto mt-6 max-w-xl text-lg leading-relaxed text-white/65"
-              style={{ animationDelay: "160ms" }}
-            >
-              SpeedSettr is your AI teammate that answers Instagram, Facebook,
-              WhatsApp, Telegram &amp; TikTok DMs 24/7 — trained on your business,
-              your tone, and your FAQ. Closing leads while you sleep.
-            </p>
-
-            <div
-              className="animate-rise mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
-              style={{ animationDelay: "240ms" }}
-            >
-              <Link
-                href="/signup"
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#6366f1] px-7 font-semibold text-white shadow-lg shadow-[#6366f1]/30 transition-transform hover:scale-[1.03] hover:bg-[#818cf8] sm:w-auto"
+              <h1
+                className="animate-rise mt-7 font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl xl:text-7xl"
+                style={{ animationDelay: "80ms" }}
               >
-                Start now — $997/mo
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </Link>
-              <Link
-                href="#how-it-works"
-                className="flex h-12 w-full items-center justify-center rounded-full border border-white/20 px-7 font-semibold text-white transition-colors hover:bg-white/10 sm:w-auto"
-              >
-                See how it works
-              </Link>
-            </div>
+                Never miss a DM.
+                <br />
+                Never miss a{" "}
+                <span className="italic text-[#a5b4fc]">sale</span>.
+              </h1>
 
-            {/* Stat row */}
-            <div
-              className="animate-rise mx-auto mt-14 grid max-w-lg grid-cols-3 gap-4 border-t border-white/10 pt-8"
-              style={{ animationDelay: "320ms" }}
-            >
-              {[
-                { icon: Clock, stat: "24/7", label: "always replying" },
-                { icon: Zap, stat: "<30s", label: "response time" },
-                { icon: Sparkles, stat: "100%", label: "in your voice" },
-              ].map(({ icon: Icon, stat, label }) => (
-                <div key={label} className="flex flex-col items-center">
-                  <Icon className="mb-2 h-5 w-5 text-[#a5b4fc]" aria-hidden />
-                  <div className="font-display text-2xl font-semibold tabular-nums">
-                    {stat}
+              <p
+                className="animate-rise mx-auto mt-6 max-w-xl text-lg leading-relaxed text-white/65 lg:mx-0"
+                style={{ animationDelay: "160ms" }}
+              >
+                SpeedSettr is your AI teammate that answers Instagram, Facebook,
+                WhatsApp, Telegram &amp; TikTok DMs 24/7, trained on your business,
+                your tone, and your FAQ. Closing leads while you sleep.
+              </p>
+
+              <div
+                className="animate-rise mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start"
+                style={{ animationDelay: "240ms" }}
+              >
+                <Link
+                  href="/signup"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#6366f1] px-7 font-semibold text-white shadow-lg shadow-[#6366f1]/30 transition-transform hover:scale-[1.03] hover:bg-[#818cf8] sm:w-auto"
+                >
+                  Start now for $997/mo
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                </Link>
+                <Link
+                  href="#how-it-works"
+                  className="flex h-12 w-full items-center justify-center rounded-full border border-white/20 px-7 font-semibold text-white transition-colors hover:bg-white/10 sm:w-auto"
+                >
+                  See how it works
+                </Link>
+              </div>
+
+              {/* Stat row */}
+              <div
+                className="animate-rise mx-auto mt-12 grid max-w-lg grid-cols-3 gap-4 border-t border-white/10 pt-8 lg:mx-0"
+                style={{ animationDelay: "320ms" }}
+              >
+                {[
+                  { icon: Clock, stat: "24/7", label: "always replying" },
+                  { icon: Zap, stat: "<30s", label: "response time" },
+                  { icon: Sparkles, stat: "100%", label: "in your voice" },
+                ].map(({ icon: Icon, stat, label }) => (
+                  <div
+                    key={label}
+                    className="flex flex-col items-center lg:items-start"
+                  >
+                    <Icon className="mb-2 h-5 w-5 text-[#a5b4fc]" aria-hidden />
+                    <div className="font-display text-2xl font-semibold tabular-nums">
+                      {stat}
+                    </div>
+                    <div className="text-xs text-white/50">{label}</div>
                   </div>
-                  <div className="text-xs text-white/50">{label}</div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+
+            {/* Right: live DM demo */}
+            <div className="animate-rise" style={{ animationDelay: "400ms" }}>
+              <DmPhone />
             </div>
           </div>
         </div>
@@ -209,7 +223,7 @@ export default function LandingPage() {
                 Your next customer is already in your DMs.
               </h2>
               <p className="mt-4 text-white/70">
-                Let SpeedSettr answer them in seconds — day or night.
+                Let SpeedSettr answer them in seconds, day or night.
               </p>
               <Link
                 href="/signup"
@@ -223,14 +237,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="relative z-10 border-t border-white/10">
-        <div className="container flex flex-col items-center justify-between gap-4 py-8 text-sm text-white/45 sm:flex-row">
-          <Logo white size="sm" />
-          <span>
-            &copy; {new Date().getFullYear()} SpeedSettr. All rights reserved.
-          </span>
-        </div>
-      </footer>
+      <ContactCard />
+
+      <SiteFooter />
     </div>
   );
 }

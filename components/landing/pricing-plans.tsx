@@ -97,7 +97,7 @@ export function PricingPlans() {
                 <span className="font-medium text-white">
                   ${ANNUAL_TOTAL.toLocaleString()}
                 </span>{" "}
-                — save ${ANNUAL_SAVINGS.toLocaleString()}/yr
+                and save ${ANNUAL_SAVINGS.toLocaleString()}/yr
               </>
             ) : (
               "Billed monthly. Switch to yearly to save 10%."

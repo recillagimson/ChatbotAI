@@ -9,7 +9,7 @@
     --foreground: 245 45% 15%; /* deep indigo-navy near-black */
     --card: 0 0% 100%;
     --card-foreground: 245 45% 15%;
-    --primary: 239 84% 67%; /* indigo #6366f1 — buttons, links, CTAs */
+    --primary: 239 84% 67%; /* indigo #6366f1: buttons, links, CTAs */
     --primary-foreground: 0 0% 100%;
     --secondary: 226 60% 96%; /* light indigo tint */
     --secondary-foreground: 244 47% 25%;
@@ -30,9 +30,9 @@
     --sidebar-active: 239 89% 70%; /* indigo, lifted for the navy bg */
 
     /* Conversion health tokens */
-    --conv-good: 152 58% 40%;   /* green  — healthy conversion */
-    --conv-mid:  38 92% 48%;    /* amber  — middling */
-    --conv-bad:  0 72% 55%;     /* red    — poor / zero */
+    --conv-good: 152 58% 40%;   /* green:  healthy conversion */
+    --conv-mid:  38 92% 48%;    /* amber:  middling */
+    --conv-bad:  0 72% 55%;     /* red:    poor / zero */
 
     /* Chart series tokens */
     --chart-1: 239 84% 67%;     /* brand indigo (primary series) */
@@ -78,8 +78,8 @@
   /* The dashboard is a pinned app shell (fixed sidebar + a single scrolling
      <main>). Lock the window/document scroll while it's mounted so there's no
      second, outer scrollbar sitting behind <main>. Scoped via :has() to the
-     shell marker so the marketing homepage, auth pages, and the admin area —
-     which all scroll the window normally — are left untouched. */
+     shell marker so the marketing homepage, auth pages, and the admin area,
+     which all scroll the window normally, are left untouched. */
   html:has([data-app-shell]) {
     overflow: hidden;
   }
@@ -126,11 +126,59 @@
       transform: translate3d(0, -24px, 0) scale(1.08);
     }
   }
+
+  /* Chat bubble entrance (hero phone) */
+  .animate-pop {
+    animation: pop 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* "AI is typing" dots */
+  .animate-dot {
+    animation: dot 1.2s ease-in-out infinite;
+  }
+  @keyframes dot {
+    0%,
+    60%,
+    100% {
+      opacity: 0.3;
+      transform: translateY(0);
+    }
+    30% {
+      opacity: 1;
+      transform: translateY(-3px);
+    }
+  }
+
+  /* Gentle bob for the floating proof chips */
+  .animate-float {
+    animation: float 6s ease-in-out infinite alternate;
+  }
+  @keyframes float {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(-12px);
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .animate-rise,
-  .animate-drift {
+  .animate-drift,
+  .animate-pop,
+  .animate-dot,
+  .animate-float {
     animation: none !important;
   }
 }
