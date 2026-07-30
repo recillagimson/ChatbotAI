@@ -5,6 +5,7 @@ import { openaiChat, type OpenAIChatMessage } from "./openai";
 import { HISTORY_TURNS } from "./memory";
 import { renderKnownFactsBlock } from "./lead-facts";
 import { HUMANIZER_STYLE } from "./humanizer";
+import { MODELS } from "./model-tiers";
 
 let _anthropic: Anthropic | null = null;
 
@@ -33,7 +34,7 @@ export const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 // OPENAI_API_KEY for the change-request AI + embeddings, so this needs no new
 // key. Set AI_PROVIDER=anthropic to use Claude instead (needs ANTHROPIC_API_KEY).
 export const DM_AI_PROVIDER = (process.env.AI_PROVIDER || "openai").toLowerCase();
-export const OPENAI_DM_MODEL = process.env.OPENAI_DM_MODEL || "gpt-4.1-mini";
+export const OPENAI_DM_MODEL = MODELS.reply();
 
 // Shared by the DM-reply path (below) and the change-request AI (lib/openai-changes.ts).
 export const TONE_GUIDES: Record<Chatbot["tone"], string> = {
@@ -281,8 +282,8 @@ export async function generateReply(opts: {
   // return shape matches the Anthropic path (cache fields are 0, OpenAI has no
   // prompt-cache token accounting here).
   if (DM_AI_PROVIDER !== "anthropic") {
-    // gpt-4.1-mini is multimodal: send images as data-URL image_url parts on the
-    // current turn alongside the text.
+    // The DM/helper-tier model is multimodal: send images as data-URL image_url
+    // parts on the current turn alongside the text.
     const currentTurn: OpenAIChatMessage = images.length
       ? {
           role: "user",

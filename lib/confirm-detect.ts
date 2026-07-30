@@ -7,8 +7,9 @@
  * conversations.confirmed_at, which excludes the conversation from the cron drip.
  */
 import { openaiChat } from "./openai";
+import { MODELS } from "./model-tiers";
 
-const CONFIRM_MODEL = process.env.CONFIRM_DETECT_MODEL || "gpt-4.1-mini";
+const CONFIRM_MODEL = MODELS.classifier();
 
 export async function detectLeadConfirmed(opts: {
   userMessage: string;

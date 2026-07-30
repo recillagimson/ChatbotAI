@@ -42,7 +42,7 @@ export async function openaiChat(opts: {
       },
       body: JSON.stringify({
         model: opts.model,
-        max_tokens: opts.maxTokens ?? 400,
+        max_completion_tokens: opts.maxTokens ?? 400,
         messages: [{ role: "system", content: opts.system }, ...opts.messages],
       }),
       signal: controller.signal,

@@ -15,10 +15,10 @@
 // Multi-tenant + generic: the prompt extracts whatever is visible for ANY business
 // (text, numbers, names, prices, dates, charts) — it never assumes a domain.
 import { openaiChat } from "./openai";
+import { MODELS } from "./model-tiers";
 
 /** Vision model for image description. Defaults to the DM model (multimodal). */
-export const VISION_MODEL =
-  process.env.OPENAI_VISION_MODEL || process.env.OPENAI_DM_MODEL || "gpt-4.1-mini";
+export const VISION_MODEL = MODELS.vision();
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_DESCRIPTION_CHARS = 1_200;
@@ -74,7 +74,8 @@ export async function describeImage(opts: { base64: string; mediaType: string })
       timeoutMs: REQUEST_TIMEOUT_MS,
     });
     return cleanDescription(text);
-  } catch {
+  } catch (err) {
+    console.error("[vision] describeImage failed", err);
     return "";
   }
 }

@@ -11,8 +11,9 @@
  */
 import { openaiChat } from "./openai";
 import { isTag, type ConversationTag } from "./conversation-tags";
+import { MODELS } from "./model-tiers";
 
-const CLASSIFY_MODEL = process.env.CONFIRM_DETECT_MODEL || "gpt-4.1-mini";
+const CLASSIFY_MODEL = MODELS.classifier();
 
 /**
  * A `starting_later` start date must be near-term and in the future. A resolved

@@ -14,6 +14,7 @@
 // importing lib/anthropic, which imports HISTORY_TURNS from here (avoids a cycle).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { openaiChat } from "./openai";
+import { MODELS } from "./model-tiers";
 
 /** Recent messages sent to the model verbatim on every reply. */
 export const HISTORY_TURNS = Number(process.env.HISTORY_TURNS ?? 20);
@@ -22,8 +23,7 @@ export const SUMMARY_TRIGGER_TURNS = Number(process.env.SUMMARY_TRIGGER_TURNS ??
 /** Soft word budget for the running summary. */
 export const SUMMARY_MAX_WORDS = 220;
 /** Model for the (cheap, background) summarizer. */
-export const MEMORY_SUMMARY_MODEL =
-  process.env.MEMORY_SUMMARY_MODEL || process.env.OPENAI_DM_MODEL || "gpt-4.1-mini";
+export const MEMORY_SUMMARY_MODEL = MODELS.memory();
 
 export interface SummaryMessage {
   role: string;

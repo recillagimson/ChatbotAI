@@ -22,12 +22,12 @@ import { getTrivialReply } from "./limits";
 import { detectUserControl } from "./user-controls";
 import { detectExtractionAttempt } from "./extraction-detect";
 import { openaiChat } from "./openai";
+import { MODELS } from "./model-tiers";
 
 /** Max paid relevance screens per contact before we stop screening them (cost bound). */
 export const MAX_QUESTION_SCREENS = 3;
 
-const SCREEN_MODEL =
-  process.env.QUESTION_SCREEN_MODEL || process.env.CONFIRM_DETECT_MODEL || "gpt-4.1-mini";
+const SCREEN_MODEL = MODELS.questionGate();
 
 /**
  * Whole-word inquiry/interrogative signals (already lowercased tokens). A message that

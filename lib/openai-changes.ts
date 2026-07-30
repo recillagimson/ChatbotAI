@@ -13,6 +13,7 @@
 import type { Chatbot, ChangeProposal, ChangeCategory, SectionColumn, SectionEdit } from "./types";
 import { buildFullContextBlock, type KbEntryLite } from "./retrieval";
 import { SECTION_BY_CATEGORY, CATEGORY_LABELS, ALL_SECTION_COLUMNS } from "./change-categories";
+import { MODELS } from "./model-tiers";
 
 /** Current text of all three editable sections — the context an "overall" request revises. */
 export interface SectionsContext {
@@ -39,15 +40,15 @@ function renderOverallSections(sections?: SectionsContext): string {
 /**
  * Most efficient OpenAI model that reliably handles this task — multi-turn chat,
  * vision (image attachments), and function calling — at a fraction of the cost
- * of the full models. gpt-4.1-mini is the floor that still does the job: the
- * cheaper gpt-4o-mini under-calls the propose_changes tool (it asks endless
- * clarifying questions instead of ever proposing), verified against these flows.
- * Override with OPENAI_CHANGE_MODEL. The structural guarantee — only the
- * propose_changes tool is actionable, secret columns never reach the model, and
- * every publish is human-reviewed — means model choice can't cause harm, only
- * affect proposal quality.
+ * of the full models. The helper-tier model is the floor that still does the
+ * job: the cheaper gpt-4o-mini under-calls the propose_changes tool (it asks
+ * endless clarifying questions instead of ever proposing), verified against
+ * these flows. Override with OPENAI_CHANGE_MODEL. The structural guarantee —
+ * only the propose_changes tool is actionable, secret columns never reach the
+ * model, and every publish is human-reviewed — means model choice can't cause
+ * harm, only affect proposal quality.
  */
-export const CHANGE_AI_MODEL = process.env.OPENAI_CHANGE_MODEL || "gpt-4.1-mini";
+export const CHANGE_AI_MODEL = MODELS.change();
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 // Generous client timeout so a large proposal has time to stream fully; stays
@@ -61,7 +62,8 @@ const REQUEST_TIMEOUT_MS = 50_000;
  * section alone is ~1.5k tokens; 1500 truncated the tool call mid-JSON, which
  * then failed to parse → no proposal + an empty reply ("the bot stopped
  * replying"). 8000 leaves wide headroom for a large section + summary + chat text
- * (well under gpt-4.1-mini's output limit, and the 50s timeout covers the wait).
+ * (well under the helper-tier model's output limit, and the 50s timeout covers
+ * the wait).
  */
 const MAX_PROPOSAL_TOKENS = 8000;
 
@@ -487,7 +489,7 @@ export async function chatTurn(opts: {
 
   const data = await postChat({
     model: CHANGE_AI_MODEL,
-    max_tokens: MAX_PROPOSAL_TOKENS,
+    max_completion_tokens: MAX_PROPOSAL_TOKENS,
     tools: [buildProposeTool(opts.category)],
     tool_choice: "auto", // reply with a question OR propose when ready
     messages: [{ role: "system", content: system }, ...toOpenAIMessages(opts.messages)],
@@ -616,7 +618,7 @@ export async function draftChangeRequest(opts: {
 
   const data = await postChat({
     model: CHANGE_AI_MODEL,
-    max_tokens: MAX_PROPOSAL_TOKENS,
+    max_completion_tokens: MAX_PROPOSAL_TOKENS,
     tools: [buildProposeTool(opts.category)],
     tool_choice: { type: "function", function: { name: "propose_changes" } }, // forced
     messages: [

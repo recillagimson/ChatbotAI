@@ -18,13 +18,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { openaiChat } from "./openai";
 import { HISTORY_TURNS } from "./memory";
+import { MODELS } from "./model-tiers";
 
 /** Feature flag. Default ON; set LEAD_FACTS_ENABLED=false to disable the extraction
  *  (skips the background call + leaves the block empty) without a redeploy of logic. */
 export const LEAD_FACTS_ENABLED: boolean = process.env.LEAD_FACTS_ENABLED !== "false";
 /** Cheap background model — same default chain as the memory summarizer. */
-export const LEAD_FACTS_MODEL =
-  process.env.LEAD_FACTS_MODEL || process.env.OPENAI_DM_MODEL || "gpt-4.1-mini";
+export const LEAD_FACTS_MODEL = MODELS.leadFacts();
 /** Hard caps so an over-eager model can't bloat the block. */
 export const LEAD_FACTS_MAX_LINES = 14;
 export const LEAD_FACTS_MAX_CHARS = 1200;

@@ -11,8 +11,9 @@
  * prompt is generic (no client keyword/persona/offer), so it screens for every bot.
  */
 import { openaiChat } from "./openai";
+import { MODELS } from "./model-tiers";
 
-const SCREEN_MODEL = process.env.CONFIRM_DETECT_MODEL || "gpt-4.1-mini";
+const SCREEN_MODEL = MODELS.classifier();
 
 /** disqualified = abusive OR a clear rejection; bot = detected automation/spam. */
 export type ScreenOutcome = "none" | "disqualified" | "bot";
