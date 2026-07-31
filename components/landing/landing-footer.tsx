@@ -28,7 +28,7 @@ function ColumnHead({ children }: { children: React.ReactNode }) {
 }
 
 const linkClass =
-  "text-[13px] leading-none text-[#b6b4dd] transition-colors hover:text-white";
+  "text-[13px] leading-none text-[#b6b4dd] transition-colors hover:text-[#c084fc]";
 
 export function LandingFooter() {
   return (

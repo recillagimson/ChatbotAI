@@ -168,6 +168,90 @@
     transition: background-color 600000s 0s;
   }
 
+  /* Scroll reveal (homepage), from the design's support script: fade in from
+     28px below, siblings staggered 95ms apart via --reveal-delay.
+
+     `[data-motion]` is set on <html> by <ScrollMotion /> and only from inside
+     its effect, so the hidden state can never outlive the script that clears
+     it. Without JS - or under reduced motion, where the component bails before
+     setting the attribute - none of this applies and every block renders in
+     its final position. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-motion] [data-reveal] {
+      transition:
+        opacity 0.7s cubic-bezier(0.22, 0.7, 0.2, 1) var(--reveal-delay, 0ms),
+        transform 0.85s cubic-bezier(0.22, 0.7, 0.2, 1) var(--reveal-delay, 0ms);
+    }
+    [data-motion] [data-reveal]:not([data-revealed]) {
+      opacity: 0;
+      transform: translateY(28px);
+    }
+  }
+
+  /* The pricing card's top edge, sliding its gradient. */
+  .animate-shimmer {
+    background-size: 200% 100%;
+    animation: ssShimmer 5s linear infinite;
+  }
+  @keyframes ssShimmer {
+    from {
+      background-position: 0% 50%;
+    }
+    to {
+      background-position: 200% 50%;
+    }
+  }
+
+  /* "LIVE" / "AI replies are live" status dots. */
+  .animate-blink {
+    animation: ssBlink 2.2s ease-in-out infinite;
+  }
+  @keyframes ssBlink {
+    0%,
+    100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+    }
+    55% {
+      opacity: 0.55;
+      box-shadow: 0 0 0 7px rgba(52, 211, 153, 0);
+    }
+  }
+
+  /* Product-card hover reveal (homepage).
+
+     The design revealed each card on scroll entry: opacity 0 -> 1 with a 28px
+     rise, staggered 95ms between grid children. Re-pointed at hover, the same
+     motion runs inside one card at a time - the mock first, the bullet list
+     95ms behind it.
+
+     The resting offset is small and the resting opacity high on purpose. A
+     hover-only reveal must never hide content: anything starting at opacity 0
+     stays invisible to a visitor who simply doesn't point at the card. Both
+     media guards below mean the resting state is the plain one - no transform,
+     full opacity - unless the device has a real pointer and the visitor has not
+     asked for less motion. */
+  @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+    .pillar-mock,
+    .pillar-points {
+      transform: translateY(6px);
+      opacity: 0.9;
+      transition:
+        transform 0.55s cubic-bezier(0.22, 0.7, 0.2, 1),
+        opacity 0.5s cubic-bezier(0.22, 0.7, 0.2, 1);
+    }
+    .pillar-points {
+      transition-delay: 95ms;
+    }
+    .pillar:hover .pillar-mock,
+    .pillar:hover .pillar-points,
+    .pillar:focus-within .pillar-mock,
+    .pillar:focus-within .pillar-points {
+      transform: none;
+      opacity: 1;
+    }
+  }
+
   /* Subtle film grain for premium dark surfaces */
   .grain {
     position: relative;
@@ -260,7 +344,9 @@
   .animate-drift,
   .animate-pop,
   .animate-dot,
-  .animate-float {
+  .animate-float,
+  .animate-shimmer,
+  .animate-blink {
     animation: none !important;
   }
 }

@@ -72,7 +72,8 @@ export function PricingPlans() {
       {/* Plan card */}
       <div className="mt-7 flex justify-center">
         <div className="w-full max-w-[840px] overflow-hidden rounded-[24px] border border-white/[0.11] bg-[#120f30] shadow-[0_50px_90px_-50px_rgba(0,0,0,.9)]">
-          <div className="h-1.5 bg-[linear-gradient(90deg,#7c22c4,#5355cb,#818cf8)]" />
+          {/* The design shimmers this edge: a 200%-wide gradient slid across it. */}
+          <div className="animate-shimmer h-1.5 bg-[linear-gradient(90deg,#7c22c4,#5355cb,#818cf8,#7c22c4)]" />
 
           <div className="flex flex-col md:flex-row">
             {/* Price. Centred, because the inclusions column is always taller
@@ -119,7 +120,7 @@ export function PricingPlans() {
 
               <Link
                 href="/signup"
-                className="mt-[22px] flex items-center justify-center gap-2 rounded-chip bg-[linear-gradient(120deg,#7c22c4,#5355cb)] p-[15px] text-sm font-bold leading-none text-white shadow-[0_16px_32px_-16px_rgba(124,34,196,.95)] transition-transform hover:scale-[1.02]"
+                className="mt-[22px] flex items-center justify-center gap-2 rounded-chip bg-[linear-gradient(120deg,#7c22c4,#5355cb)] p-[15px] text-sm font-bold leading-none text-white shadow-[0_16px_32px_-16px_rgba(124,34,196,.95)] transition-[transform,box-shadow,filter] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:shadow-[0_26px_44px_-14px_rgba(124,34,196,1)] hover:brightness-110 motion-safe:hover:-translate-y-[3px]"
               >
                 Get started
                 <ArrowRight className="h-[18px] w-[18px]" aria-hidden />

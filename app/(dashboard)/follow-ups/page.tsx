@@ -220,24 +220,37 @@ async function FollowUpsQueue({
               The {windowHours}-hour messaging window
             </PanelEyebrow>
 
-            <div className="mt-[18px] flex h-[52px] items-stretch">
+            {/* Three equal thirds, not widths proportional to the counts. The
+                bands describe three fixed spans of a thread's life, so sizing
+                them by volume made the widest label ("bot replies freely") sit
+                in the narrowest band and truncate - the segment carrying the
+                most explaining got the least room. The counts are printed
+                inside each band and repeated on the pills below. */}
+            <div className="mt-[18px] grid h-[52px] grid-cols-3">
               <WindowBand
-                flex={Math.max(1, counts.open)}
                 tone="green"
-                title={`0 – ${windowHours - CLOSING_SOON_HOURS}h · bot replies freely`}
+                title={
+                  <>
+                    0 – {windowHours - CLOSING_SOON_HOURS}h
+                    <span className="hidden sm:inline"> · bot replies freely</span>
+                  </>
+                }
                 sub={`${num(counts.open)} thread${counts.open === 1 ? "" : "s"}`}
                 first
               />
               <WindowBand
-                flex={Math.max(1, counts.closing)}
                 tone="amber"
                 title={`${windowHours - CLOSING_SOON_HOURS} – ${windowHours}h`}
                 sub={`${num(counts.closing)} closing`}
               />
               <WindowBand
-                flex={Math.max(1, counts.manual)}
                 tone="rose"
-                title={`${windowHours}h – ${reachDays}d · you only`}
+                title={
+                  <>
+                    {windowHours}h – {reachDays}d
+                    <span className="hidden sm:inline"> · you only</span>
+                  </>
+                }
                 sub={`${num(counts.manual)} waiting`}
                 last
               />
@@ -429,16 +442,16 @@ function truncate(s: string | null, max: number): string | null {
 }
 
 function WindowBand({
-  flex,
   tone,
   title,
   sub,
   first,
   last,
 }: {
-  flex: number;
   tone: "green" | "amber" | "rose";
-  title: string;
+  /** A node, not a string: the qualifier after the time range is dropped below
+   *  `sm`, where a third of a phone's width can't hold it. */
+  title: React.ReactNode;
   sub: string;
   first?: boolean;
   last?: boolean;
@@ -460,7 +473,6 @@ function WindowBand({
   };
   return (
     <div
-      style={{ flex }}
       className={`flex min-w-0 flex-col justify-center border px-3.5 ${tones[tone]} ${
         first ? "rounded-l-ctl" : ""
       } ${last ? "rounded-r-ctl" : ""}`}

@@ -12,10 +12,12 @@ import { AlertCircle, FileText, HelpCircle, Sparkles } from "lucide-react";
  * screenshot is - they depict one conversation, they don't claim an average.
  */
 
-/** The translucent surface each mock sits on inside its card. */
+/** The translucent surface each mock sits on inside its card.
+ *  `pillar-mock` is the first stage of the card's hover reveal - see the rule
+ *  in globals.css. */
 function Inner({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-5 rounded-panel border border-white/[0.08] bg-white/[0.04] p-3.5">
+    <div className="pillar-mock mt-5 rounded-panel border border-white/[0.08] bg-white/[0.04] p-3.5">
       {children}
     </div>
   );

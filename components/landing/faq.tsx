@@ -65,7 +65,10 @@ export function Faq() {
         <details
           key={q}
           open={open}
-          className={`group px-5 py-5 sm:px-6 ${
+          /* The design slides each row's padding-left 30px on hover. Padding is
+             animated rather than the row's transform so the open answer below
+             doesn't slide with the question. */
+          className={`group px-5 py-5 transition-[background-color,padding-left] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:bg-white/[0.04] sm:px-6 sm:hover:pl-[30px] ${
             i < FAQS.length - 1 ? "border-b border-white/[0.07]" : ""
           }`}
         >

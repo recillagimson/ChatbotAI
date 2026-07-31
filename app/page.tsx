@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { SiteNav } from "@/components/landing/site-nav";
 import { ScrollBeam } from "@/components/landing/scroll-beam";
+import { ScrollMotion } from "@/components/landing/scroll-motion";
 import { DmPhone } from "@/components/landing/dm-phone";
 import { PricingPlans } from "@/components/landing/pricing-plans";
 import { Faq } from "@/components/landing/faq";
@@ -34,11 +35,12 @@ import { PRICING } from "@/lib/pricing";
 /** The brand gradient. Pulled from the logo's violet, not invented for the page. */
 const BRAND_GRADIENT = "bg-[linear-gradient(120deg,#7c22c4,#5355cb)]";
 
+/** `count` opts the figure into the scroll tick-up (see <ScrollMotion />). */
 const PROOF = [
-  { value: "24/7", label: "answering, every day of the year" },
-  { value: "<30s", label: "typical response time" },
-  { value: "100%", label: "written in your voice" },
-  { value: "5", label: "channels, one chatbot" },
+  { value: "24/7", label: "answering, every day of the year", count: false },
+  { value: "<30s", label: "typical response time", count: true },
+  { value: "100%", label: "written in your voice", count: true },
+  { value: "5", label: "channels, one chatbot", count: true },
 ];
 
 const PILLARS = [
@@ -100,6 +102,7 @@ export default function LandingPage() {
       </a>
 
       <ScrollBeam />
+      <ScrollMotion />
 
       {/* The hero wash is an absolute backdrop rather than a wrapper, so the
           nav and <main> can be siblings and the page gets exactly one main
@@ -109,13 +112,23 @@ export default function LandingPage() {
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[820px] overflow-hidden bg-[radial-gradient(110%_80%_at_12%_0%,#2e2c6d_0%,#221f52_42%,#19163e_82%,#15123a_100%)]"
       >
-        <div className="animate-drift absolute -top-36 -right-16 h-[560px] w-[560px] rounded-full bg-[radial-gradient(circle,rgba(124,34,196,.3),transparent_68%)]" />
-        <div className="animate-drift absolute -bottom-24 left-36 h-[480px] w-[480px] rounded-full bg-[radial-gradient(circle,rgba(83,85,203,.2),transparent_70%)]" />
+        {/* Parallax lives on the wrapper, the ambient drift on the orb inside
+            it. Both animate `transform`, and a CSS animation beats an inline
+            style, so on one element the drift would simply eat the parallax. */}
+        <div data-par="0.22" className="absolute -top-36 -right-16 will-change-transform">
+          <div className="animate-drift h-[560px] w-[560px] rounded-full bg-[radial-gradient(circle,rgba(124,34,196,.3),transparent_68%)]" />
+        </div>
+        <div data-par="-0.14" className="absolute -bottom-24 left-36 will-change-transform">
+          <div className="animate-drift h-[480px] w-[480px] rounded-full bg-[radial-gradient(circle,rgba(83,85,203,.2),transparent_70%)]" />
+        </div>
       </div>
 
-      <div className="relative">
-        <SiteNav />
-      </div>
+      {/* SiteNav is a direct child on purpose. It is `sticky top-0`, and a
+          sticky element can only travel inside its containing block - wrapped
+          in a div the height of the bar itself, it had nowhere to go and
+          scrolled away like a static header. Its own z-30 keeps it above the
+          hero backdrop, which is what the wrapper used to do. */}
+      <SiteNav />
 
       <main id="main" className="relative scroll-mt-4">
         {/* -------------------------------------------------------------- */}
@@ -127,7 +140,7 @@ export default function LandingPage() {
               <div className="max-w-[580px] text-center lg:text-left">
                 <div className="animate-rise inline-flex items-center gap-2.5 rounded-full border border-white/[0.11] bg-white/[0.05] py-1.5 pl-2 pr-3.5">
                   <span className="flex items-center gap-1.5 rounded-full bg-[#34d399]/[0.16] px-2 py-[3px]">
-                    <span className="h-[5px] w-[5px] rounded-full bg-[#34d399]" />
+                    <span className="animate-blink h-[5px] w-[5px] rounded-full bg-[#34d399]" />
                     <span className="text-[9.5px] font-bold leading-[1.4] text-[#34d399]">
                       LIVE
                     </span>
@@ -168,14 +181,14 @@ export default function LandingPage() {
                 >
                   <Link
                     href="/signup"
-                    className={`flex items-center justify-center gap-2.5 rounded-[13px] px-6 py-4 text-[15px] font-bold leading-none text-white shadow-[0_18px_36px_-16px_rgba(124,34,196,.95)] transition-transform hover:scale-[1.03] ${BRAND_GRADIENT}`}
+                    className={`flex items-center justify-center gap-2.5 rounded-[13px] px-6 py-4 text-[15px] font-bold leading-none text-white shadow-[0_18px_36px_-16px_rgba(124,34,196,.95)] transition-[transform,box-shadow,filter] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:shadow-[0_26px_46px_-14px_rgba(124,34,196,1)] hover:brightness-110 motion-safe:hover:-translate-y-[3px] ${BRAND_GRADIENT}`}
                   >
                     Start now for ${PRICING.monthly}/mo
                     <ArrowRight className="h-[19px] w-[19px]" aria-hidden />
                   </Link>
                   <a
                     href="#product"
-                    className="flex items-center justify-center gap-2.5 rounded-[13px] border border-white/[0.14] bg-white/[0.05] px-[22px] py-4 text-[15px] font-semibold leading-none text-white transition-colors hover:bg-white/[0.1]"
+                    className="flex items-center justify-center gap-2.5 rounded-[13px] border border-white/[0.14] bg-white/[0.05] px-[22px] py-4 text-[15px] font-semibold leading-none text-white transition-[transform,background-color,border-color] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:border-[#c084fc]/50 hover:bg-white/[0.11] motion-safe:hover:-translate-y-[3px]"
                   >
                     See how it works
                   </a>
@@ -198,7 +211,10 @@ export default function LandingPage() {
               </div>
 
               {/* The live demo - the hero visual, unchanged. */}
-              <div className="animate-rise" style={{ animationDelay: "400ms" }}>
+              <div
+                className="animate-rise transition-transform duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] motion-safe:hover:-translate-y-2.5 motion-safe:hover:-rotate-[1.2deg]"
+                style={{ animationDelay: "400ms" }}
+              >
                 <DmPhone />
               </div>
             </div>
@@ -210,15 +226,22 @@ export default function LandingPage() {
       {/* ---------------------------------------------------------------- */}
       <div className="container pb-16">
         <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {PROOF.map(({ value, label }) => (
+          {PROOF.map(({ value, label, count }) => (
             <div
               key={label}
-              className="flex flex-col-reverse rounded-card-lg border border-white/[0.09] bg-[#120f30] p-[22px]"
+              data-reveal
+              className="flex flex-col-reverse rounded-card-lg border border-white/[0.09] bg-[#120f30] p-[22px] transition-[transform,border-color,background-color] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:border-[#c084fc]/[0.42] hover:bg-[#171339] motion-safe:hover:-translate-y-1"
             >
               <dt className="mt-2.5 text-xs font-medium leading-[1.4] text-[#8b88b8]">
                 {label}
               </dt>
-              <dd className="font-display text-[32px] font-bold leading-none tabular-nums text-white">
+              {/* `data-count` opts a figure into the tick-up. "24/7" is left off
+                  deliberately - it holds two numbers, so counting the first one
+                  would animate the 24 and leave "/7" sitting there. */}
+              <dd
+                {...(count ? { "data-count": value } : {})}
+                className="font-display text-[32px] font-bold leading-none tabular-nums text-white"
+              >
                 {value}
               </dd>
             </div>
@@ -242,10 +265,15 @@ export default function LandingPage() {
             {PILLARS.map(({ n, kicker, icon: Icon, title, body, mock, points }) => (
               <div
                 key={n}
+                data-reveal
                 /* min-w-0: a grid item defaults to `min-width: auto`, so the
                    card's min-content (the widest queue row) would otherwise
-                   push the whole container past the viewport at 320px. */
-                className="flex min-w-0 flex-col rounded-[20px] border border-white/[0.09] bg-[#120f30] p-5 sm:p-[26px]"
+                   push the whole container past the viewport at 320px.
+
+                   `pillar` drives the hover reveal - see the rule in
+                   globals.css. The lift is motion-safe: only the border and
+                   shadow change for someone who asked for reduced motion. */
+                className="pillar group flex min-w-0 flex-col rounded-[20px] border border-white/[0.09] bg-[#120f30] p-5 transition-[transform,border-color,box-shadow] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:border-[#c084fc]/[0.34] hover:shadow-[0_30px_60px_-30px_rgba(124,34,196,.75)] motion-safe:hover:-translate-y-1.5 sm:p-[26px]"
               >
                 <div className="inline-flex items-center gap-1.5 self-start rounded-full border border-[#c084fc]/[0.24] bg-[#7c22c4]/[0.18] px-2.5 py-1.5 text-[10px] font-bold uppercase leading-[1.5] tracking-wide text-[#c084fc]">
                   <Icon className="h-3.5 w-3.5" aria-hidden />
@@ -260,7 +288,7 @@ export default function LandingPage() {
 
                 {mock}
 
-                <ul className="mt-auto flex flex-col gap-2.5 pt-[18px]">
+                <ul className="pillar-points mt-auto flex flex-col gap-2.5 pt-[18px]">
                   {points.map((p) => (
                     <li
                       key={p}
@@ -304,7 +332,10 @@ export default function LandingPage() {
           </div>
 
           <div className="mt-8 grid gap-[18px] md:grid-cols-3">
-            <div className="rounded-card-lg border border-white/[0.09] bg-white/[0.04] p-6">
+            <div
+              data-reveal
+              className="rounded-card-lg border border-white/[0.09] bg-white/[0.04] p-6 transition-[transform,background-color,border-color] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:border-[#c084fc]/[0.38] hover:bg-white/[0.07] motion-safe:hover:-translate-y-[5px]"
+            >
               <div className="flex items-center gap-2.5">
                 <span
                   className={`flex h-8 w-8 items-center justify-center rounded-ctl-lg font-display text-[13px] font-bold text-white ${BRAND_GRADIENT}`}
@@ -334,7 +365,10 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="rounded-card-lg border border-white/[0.09] bg-white/[0.04] p-6">
+            <div
+              data-reveal
+              className="rounded-card-lg border border-white/[0.09] bg-white/[0.04] p-6 transition-[transform,background-color,border-color] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:border-[#c084fc]/[0.38] hover:bg-white/[0.07] motion-safe:hover:-translate-y-[5px]"
+            >
               <div className="flex items-center gap-2.5">
                 <span
                   className={`flex h-8 w-8 items-center justify-center rounded-ctl-lg font-display text-[13px] font-bold text-white ${BRAND_GRADIENT}`}
@@ -364,7 +398,10 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="rounded-card-lg border border-[#c084fc]/[0.26] bg-[linear-gradient(140deg,rgba(124,34,196,.24),rgba(83,85,203,.16))] p-6">
+            <div
+              data-reveal
+              className="rounded-card-lg border border-[#c084fc]/[0.26] bg-[linear-gradient(140deg,rgba(124,34,196,.24),rgba(83,85,203,.16))] p-6 transition-[transform,border-color] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:border-[#c084fc]/[0.5] motion-safe:hover:-translate-y-[5px]"
+            >
               <div className="flex items-center gap-2.5">
                 <span className="flex h-8 w-8 items-center justify-center rounded-ctl-lg bg-[#34d399] font-display text-[13px] font-bold text-[#053f2e]">
                   3
@@ -381,7 +418,7 @@ export default function LandingPage() {
                 few, then stop watching.
               </p>
               <div className="mt-4 flex items-center gap-2.5 rounded-ctl-lg border border-[#34d399]/30 bg-[#34d399]/[0.14] px-3.5 py-2.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#34d399]" />
+                <span className="animate-blink h-1.5 w-1.5 rounded-full bg-[#34d399]" />
                 <span className="text-[11.5px] font-bold leading-none text-[#34d399]">
                   AI replies are live
                 </span>
@@ -414,7 +451,9 @@ export default function LandingPage() {
               </a>
             </div>
 
-            <Faq />
+            <div className="min-w-0 flex-1" data-reveal>
+              <Faq />
+            </div>
           </div>
         </div>
       </section>
@@ -423,7 +462,10 @@ export default function LandingPage() {
       {/* Testimonial                                                       */}
       {/* ---------------------------------------------------------------- */}
       <div className="container pb-[70px]">
-        <div className="relative overflow-hidden rounded-[22px] border border-white/[0.09] bg-[linear-gradient(130deg,#221f52,#120f30_70%)] px-6 py-8 sm:px-[38px] sm:py-[34px]">
+        <div
+          data-reveal
+          className="relative overflow-hidden rounded-[22px] border border-white/[0.09] bg-[linear-gradient(130deg,#221f52,#120f30_70%)] px-6 py-8 sm:px-[38px] sm:py-[34px]"
+        >
           <div
             aria-hidden
             className="pointer-events-none absolute -top-[70px] right-24 hidden h-[320px] w-[7px] rotate-[24deg] bg-[#7c22c4]/[0.34] lg:block"
@@ -464,7 +506,7 @@ export default function LandingPage() {
               No tiers, no per-message billing, no add-ons.
             </p>
           </div>
-          <div className="mt-6">
+          <div className="mt-6" data-reveal>
             <PricingPlans />
           </div>
         </div>
@@ -474,7 +516,10 @@ export default function LandingPage() {
       {/* Closing CTA                                                       */}
       {/* ---------------------------------------------------------------- */}
       <div className="container pb-[76px]">
-        <div className="relative overflow-hidden rounded-[24px] border border-[#c084fc]/20 bg-[radial-gradient(120%_130%_at_18%_0%,#3a1565,#1d1b4c_66%)] px-6 py-10 sm:px-11 sm:py-14">
+        <div
+          data-reveal
+          className="relative overflow-hidden rounded-[24px] border border-[#c084fc]/20 bg-[radial-gradient(120%_130%_at_18%_0%,#3a1565,#1d1b4c_66%)] px-6 py-10 sm:px-11 sm:py-14"
+        >
           <div
             aria-hidden
             className="pointer-events-none absolute -top-24 right-24 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(124,34,196,.34),transparent_70%)]"
@@ -492,14 +537,14 @@ export default function LandingPage() {
             <div className="flex flex-col gap-3 lg:ml-auto lg:min-w-[264px]">
               <Link
                 href="/signup"
-                className="flex items-center justify-center gap-2.5 rounded-[13px] bg-white px-6 py-[17px] text-[15px] font-bold leading-none text-ss-navy transition-transform hover:scale-[1.03]"
+                className="flex items-center justify-center gap-2.5 rounded-[13px] bg-white px-6 py-[17px] text-[15px] font-bold leading-none text-ss-navy transition-[transform,box-shadow] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:shadow-[0_22px_40px_-16px_rgba(0,0,0,.6)] motion-safe:hover:-translate-y-[3px]"
               >
                 Get started
                 <ArrowRight className="h-[19px] w-[19px]" aria-hidden />
               </Link>
               <a
                 href={`tel:${COMPANY.phones[0].tel}`}
-                className="flex items-center justify-center gap-2.5 rounded-[13px] border border-white/[0.24] px-6 py-[17px] text-[15px] font-semibold leading-none text-white transition-colors hover:bg-white/10"
+                className="flex items-center justify-center gap-2.5 rounded-[13px] border border-white/[0.24] px-6 py-[17px] text-[15px] font-semibold leading-none text-white transition-[transform,background-color] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:bg-white/[0.12] motion-safe:hover:-translate-y-[3px]"
               >
                 <Phone className="h-[19px] w-[19px]" aria-hidden />
                 Talk to a human first

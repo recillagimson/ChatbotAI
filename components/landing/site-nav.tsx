@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { BrandLockup } from "@/components/landing/brand-lockup";
@@ -9,6 +9,11 @@ import { cn } from "@/lib/utils";
 /**
  * Marketing nav. It sits *on* the dark canvas rather than in a white bar above
  * it, so the page opens as one uninterrupted surface.
+ *
+ * Past 40px of scroll it compacts and frosts, the way the design's script
+ * drives it. The design left the bar `position:relative`, which meant that
+ * state could never actually be seen - the bar had scrolled away by the time it
+ * applied. Sticky is what makes the animation mean anything, so the bar sticks.
  *
  * The section links are same-page anchors, so they're plain <a>: Next's <Link>
  * adds client routing this doesn't need, and a hash-only href would still push a
@@ -24,10 +29,30 @@ const SECTIONS = [
 
 export function SiteNav() {
   const [open, setOpen] = useState(false);
+  const [stuck, setStuck] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setStuck(window.scrollY > 40);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
-    <header className="relative z-30 border-b border-white/[0.07]">
-      <div className="container flex h-[74px] items-center gap-8">
+    <header
+      className={cn(
+        "sticky top-0 z-30 border-b transition-[background-color,box-shadow,border-color] duration-[350ms]",
+        stuck
+          ? "border-white/[0.07] bg-[#15123a]/[0.82] shadow-[0_14px_30px_-22px_rgba(0,0,0,.9)] backdrop-blur-[14px]"
+          : "border-white/[0.07] bg-transparent"
+      )}
+    >
+      <div
+        className={cn(
+          "container flex items-center gap-8 transition-[height] duration-[350ms] ease-[cubic-bezier(.22,.7,.2,1)]",
+          stuck ? "h-[58px]" : "h-[74px]"
+        )}
+      >
         <Link href="/" aria-label="SpeedSettr home" className="shrink-0">
           <BrandLockup />
         </Link>
@@ -50,13 +75,13 @@ export function SiteNav() {
         <div className="ml-auto flex items-center gap-2 sm:gap-2.5">
           <Link
             href="/login"
-            className="hidden whitespace-nowrap rounded-ctl-lg border border-white/[0.16] px-[15px] py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-white/[0.06] sm:block"
+            className="hidden whitespace-nowrap rounded-ctl-lg border border-white/[0.16] px-[15px] py-2.5 text-[13px] font-semibold text-white transition-colors hover:border-white/[0.32] hover:bg-white/10 sm:block"
           >
             Sign in
           </Link>
           <Link
             href="/signup"
-            className="hidden whitespace-nowrap rounded-ctl-lg bg-[linear-gradient(120deg,#7c22c4,#5355cb)] px-[18px] py-[11px] text-[13px] font-bold text-white shadow-[0_12px_26px_-14px_rgba(124,34,196,.95)] transition-transform hover:scale-[1.03] sm:block"
+            className="hidden whitespace-nowrap rounded-ctl-lg bg-[linear-gradient(120deg,#7c22c4,#5355cb)] px-[18px] py-[11px] text-[13px] font-bold text-white shadow-[0_12px_26px_-14px_rgba(124,34,196,.95)] transition-[transform,box-shadow,filter] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:shadow-[0_18px_34px_-12px_rgba(124,34,196,1)] hover:brightness-110 motion-safe:hover:-translate-y-0.5 sm:block"
           >
             Get started
           </Link>
@@ -102,14 +127,14 @@ export function SiteNav() {
             <Link
               href="/signup"
               onClick={() => setOpen(false)}
-              className="rounded-ctl-lg bg-[linear-gradient(120deg,#7c22c4,#5355cb)] px-[18px] py-3 text-center text-[14px] font-bold text-white shadow-[0_12px_26px_-14px_rgba(124,34,196,.95)]"
+              className="rounded-ctl-lg bg-[linear-gradient(120deg,#7c22c4,#5355cb)] px-[18px] py-3 text-center text-[14px] font-bold text-white shadow-[0_12px_26px_-14px_rgba(124,34,196,.95)] transition-[filter] hover:brightness-110"
             >
               Get started
             </Link>
             <Link
               href="/login"
               onClick={() => setOpen(false)}
-              className="rounded-ctl-lg border border-white/[0.16] px-[18px] py-3 text-center text-[14px] font-semibold text-white"
+              className="rounded-ctl-lg border border-white/[0.16] px-[18px] py-3 text-center text-[14px] font-semibold text-white transition-colors hover:border-white/[0.32] hover:bg-white/10"
             >
               Sign in
             </Link>
