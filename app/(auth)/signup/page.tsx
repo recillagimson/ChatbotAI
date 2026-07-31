@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Lock, Mail, MailCheck, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { AuthShell, AuthTop, AuthHeading } from "@/components/auth/auth-shell";
+import { AuthShell, AuthHeading } from "@/components/auth/auth-shell";
+import { SignupAside } from "@/components/auth/auth-brand";
 import {
   AuthCheckbox,
   AuthField,
@@ -17,7 +18,13 @@ import { MIN_PASSWORD_LENGTH, scorePassword } from "@/lib/password-strength";
 /** Enough to light the "looks like an email" tick - not a claim it's verified. */
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const TOTAL_STEPS = 4;
+/**
+ * Two steps, not the design's three: creating the account and confirming the
+ * email are all that stand between here and the app. The four-step sequence in
+ * the rail is what happens after that, on /onboarding - counting them in the
+ * same progress bar would promise a shorter sign-up than it is.
+ */
+const STEPS = ["Account", "Confirm email"];
 
 export default function SignupPage() {
   const router = useRouter();
@@ -104,10 +111,7 @@ export default function SignupPage() {
 
   if (confirmationSent) {
     return (
-      <AuthShell
-        variant="setup"
-        top={<AuthTop prompt="Already confirmed?" href="/login" cta="Sign in" />}
-      >
+      <AuthShell cta={{ href: "/login", label: "Sign in" }}>
         <StepProgress step={2} />
         <div className="mt-4">
           <AuthHeading title="Check your email">
@@ -116,18 +120,18 @@ export default function SignupPage() {
         </div>
 
         <div className="mt-6 flex flex-col gap-4">
-          <div className="flex items-start gap-3.5 rounded-chip border border-ss-line bg-ss-page-alt px-4 py-4">
-            <MailCheck className="h-5 w-5 shrink-0 text-ss-indigo" aria-hidden />
-            <p className="text-[13px] leading-[1.6] text-ss-body">
+          <div className="flex items-start gap-3.5 rounded-chip border border-white/[0.1] bg-white/[0.05] px-4 py-4">
+            <MailCheck className="h-5 w-5 shrink-0 text-[#c084fc]" aria-hidden />
+            <p className="text-[13px] leading-[1.6] text-[#b6b4dd]">
               We sent a confirmation link to{" "}
-              <span className="font-semibold text-ss-ink">{email}</span>. Click
-              it to activate your account, then sign in. If you don&apos;t see
-              it, check your spam folder.
+              <span className="font-semibold text-white">{email}</span>. Click it
+              to activate your account, then sign in. If you don&apos;t see it,
+              check your spam folder.
             </p>
           </div>
           <Link
             href="/login"
-            className="flex w-full items-center justify-center rounded-chip bg-ss-indigo p-[15px] text-sm font-bold leading-none text-white shadow-[0_12px_24px_-14px_rgba(99,102,241,.95)] transition-colors hover:bg-ss-indigo-600"
+            className="flex w-full items-center justify-center rounded-chip bg-[linear-gradient(120deg,#7c22c4,#5355cb)] p-[15px] text-sm font-bold leading-none text-white shadow-[0_18px_36px_-16px_rgba(124,34,196,.95)] transition-[filter] hover:brightness-110"
           >
             Go to sign in
           </Link>
@@ -138,16 +142,14 @@ export default function SignupPage() {
 
   return (
     <AuthShell
-      variant="setup"
-      top={
-        <AuthTop prompt="Already have an account?" href="/login" cta="Sign in" />
-      }
+      cta={{ href: "/login", label: "Sign in instead" }}
+      aside={<SignupAside />}
     >
       <StepProgress step={1} />
 
       <div className="mt-4">
         <AuthHeading title="Create your account">
-          No card needed to set your bot up.
+          Email and password - that&apos;s it. No card to create your account.
         </AuthHeading>
       </div>
 
@@ -176,7 +178,7 @@ export default function SignupPage() {
           adornment={
             emailLooksValid ? (
               <CheckCircle2
-                className="h-[17px] w-[17px] shrink-0 text-ss-green"
+                className="h-[17px] w-[17px] shrink-0 text-[#34d399]"
                 aria-label="Email address looks valid"
               />
             ) : null
@@ -203,11 +205,11 @@ export default function SignupPage() {
 
         <AuthCheckbox id="terms" checked={agreed} onChange={setAgreed} required>
           I agree to the{" "}
-          <Link href="/terms" className="font-semibold text-ss-indigo-600 underline">
+          <Link href="/terms" className="font-semibold text-[#c084fc] underline">
             Terms
           </Link>{" "}
           and{" "}
-          <Link href="/privacy" className="font-semibold text-ss-indigo-600 underline">
+          <Link href="/privacy" className="font-semibold text-[#c084fc] underline">
             Privacy Policy
           </Link>
           .
@@ -223,7 +225,7 @@ export default function SignupPage() {
           Create account
         </AuthSubmit>
 
-        <p className="text-center text-[11.5px] leading-none text-ss-faint">
+        <p className="text-center text-[11.5px] leading-none text-[#8b88b8]">
           Next: confirm your email
         </p>
       </form>
@@ -234,43 +236,42 @@ export default function SignupPage() {
 /** The bar-and-count progress marker above the heading. */
 function StepProgress({ step }: { step: number }) {
   return (
-    <div className="flex items-center gap-[7px]">
-      {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+    <div className="flex flex-wrap items-center gap-x-[7px] gap-y-2">
+      {STEPS.map((label, i) => (
         <span
-          key={i}
+          key={label}
           className={`h-1 w-[26px] rounded-full ${
-            i < step ? "bg-ss-indigo" : "bg-ss-rule"
+            i < step
+              ? "bg-[linear-gradient(90deg,#7c22c4,#5355cb)]"
+              : "bg-white/[0.14]"
           }`}
         />
       ))}
-      <span className="ml-1.5 text-[11px] font-semibold leading-none text-ss-muted">
-        Step {step} of {TOTAL_STEPS}
+      <span className="ml-1.5 text-[10.5px] font-bold uppercase leading-none tracking-[0.06em] text-[#8b88b8]">
+        Step {step} of {STEPS.length} · {STEPS[step - 1]}
       </span>
     </div>
   );
 }
 
-function StrengthMeter({
-  score,
-  label,
-}: {
-  score: number;
-  label: string;
-}) {
+function StrengthMeter({ score, label }: { score: number; label: string }) {
   // 1-2 bars amber, 3+ green: the colour should agree with the word beside it.
-  const tone = score >= 3 ? "bg-ss-green" : score >= 1 ? "bg-ss-amber" : "bg-ss-rule";
-  const text = score >= 3 ? "text-ss-green-ink" : "text-ss-amber-ink";
+  const tone =
+    score >= 3 ? "bg-[#34d399]" : score >= 1 ? "bg-[#fbbf24]" : "bg-white/[0.14]";
+  const text = score >= 3 ? "text-[#34d399]" : "text-[#fbbf24]";
   return (
     <div className="mt-2.5 flex items-center gap-2.5">
       <span className="flex flex-1 gap-[3px]" aria-hidden>
         {Array.from({ length: 4 }, (_, i) => (
           <span
             key={i}
-            className={`h-1 flex-1 rounded-full ${i < score ? tone : "bg-ss-rule"}`}
+            className={`h-1 flex-1 rounded-full ${
+              i < score ? tone : "bg-white/[0.14]"
+            }`}
           />
         ))}
       </span>
-      <span className={`text-[11px] font-semibold leading-none ${text}`}>
+      <span className={`text-[10.5px] font-semibold leading-none ${text}`}>
         {label}
       </span>
     </div>

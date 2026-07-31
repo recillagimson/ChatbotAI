@@ -136,6 +136,38 @@
     background: transparent;
   }
 
+  /* Visible keyboard focus on the dark marketing canvas.
+     The UA default ring is near-black, which measures about 1:1 against
+     #15123a - effectively invisible. Applied to the whole dark page rather
+     than per-element so a new link can't ship without one. Pointer clicks are
+     unaffected: :focus-visible only fires for keyboard/AT focus. */
+  .grain :focus-visible {
+    outline: 2px solid #c084fc;
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  /* Text inputs are the one exception: they sit inside a bordered box that
+     already lights up on :focus-within, so the blanket outline would draw a
+     second ring inside the first. This selector is (0,2,1) against the rule
+     above's (0,2,0), so it wins on specificity rather than on source order -
+     Tailwind's own `focus-visible:outline-none` ties at (0,2,0) and would lose. */
+  .grain input:focus-visible,
+  .grain textarea:focus-visible {
+    outline: none;
+  }
+  /* Chrome paints a near-white background into any field it autofills, which on
+     the dark sign-in card turns the saved email into a white slab with pale
+     grey text. The background can't be set directly on an autofilled field, so
+     the standard workaround is a transition long enough that it never arrives;
+     the text colour needs -webkit-text-fill-color, which `color` can't reach. */
+  .grain input:-webkit-autofill,
+  .grain input:-webkit-autofill:hover,
+  .grain input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #fff;
+    caret-color: #fff;
+    transition: background-color 600000s 0s;
+  }
+
   /* Subtle film grain for premium dark surfaces */
   .grain {
     position: relative;

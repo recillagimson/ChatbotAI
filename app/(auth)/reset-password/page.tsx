@@ -56,7 +56,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <AuthShell variant="proof">
+    <AuthShell>
       <AuthHeading title="Set a new password">
         Choose a new password for your account.
       </AuthHeading>

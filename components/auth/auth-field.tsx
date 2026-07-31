@@ -12,12 +12,14 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * The auth form controls: a boxed field with a leading icon, the primary
- * button, and the message banner.
+ * The auth form controls on the dark card: a boxed field with a leading icon,
+ * the gradient primary button, the message banner and the terms checkbox.
  *
- * The focus treatment is a ring rather than a thicker border - the design's
- * 1px -> 1.5px border change would shift every character in the field by half a
- * pixel when you click into it.
+ * Focus is a border-and-ring change on the box rather than the design's
+ * 1px -> 1.5px border swap, which would shift every character in the field by
+ * half a pixel the moment you clicked into it. The blanket `.grain
+ * :focus-visible` outline in globals.css is suppressed for inputs specifically
+ * so the two indicators don't stack; every other control here uses it.
  */
 
 export function AuthField({
@@ -49,7 +51,10 @@ export function AuthField({
   return (
     <div>
       <div className="flex items-center gap-2">
-        <label htmlFor={id} className="text-xs font-semibold leading-none text-ss-body">
+        <label
+          htmlFor={id}
+          className="text-[11.5px] font-semibold uppercase leading-none tracking-[0.04em] text-[#9b98c8]"
+        >
           {label}
         </label>
         {action && <div className="ml-auto">{action}</div>}
@@ -57,23 +62,20 @@ export function AuthField({
 
       <div
         className={cn(
-          "mt-2 flex items-center gap-2.5 rounded-chip border border-ss-line bg-ss-page-alt px-3.5 py-[13px] transition-colors",
-          "focus-within:border-ss-indigo focus-within:bg-white focus-within:ring-[3px] focus-within:ring-ss-indigo/[0.12]",
+          "mt-2 flex items-center gap-2.5 rounded-chip border border-white/[0.11] bg-white/[0.04] px-3.5 py-[13px] transition-colors",
+          "focus-within:border-[#8b5cf6] focus-within:bg-[#7c22c4]/10 focus-within:ring-[3px] focus-within:ring-[#8b5cf6]/20",
           className
         )}
       >
         {Icon && (
-          <Icon
-            className="h-[18px] w-[18px] shrink-0 text-ss-muted peer-focus:text-ss-indigo"
-            aria-hidden
-          />
+          <Icon className="h-[18px] w-[18px] shrink-0 text-[#8b88b8]" aria-hidden />
         )}
         <input
           id={id}
           {...props}
           type={isPassword && show ? "text" : props.type}
           className={cn(
-            "w-full min-w-0 bg-transparent text-[13.5px] leading-none text-ss-ink outline-none placeholder:text-ss-faint",
+            "w-full min-w-0 bg-transparent text-[13.5px] leading-none text-white outline-none placeholder:text-[#6e6b9c]",
             isPassword && !show && props.value ? "tracking-[0.18em]" : ""
           )}
         />
@@ -81,7 +83,7 @@ export function AuthField({
           <button
             type="button"
             onClick={() => setShow((s) => !s)}
-            className="-my-1 shrink-0 p-1 text-ss-muted transition-colors hover:text-ss-body"
+            className="-my-1 shrink-0 p-1 text-[#8b88b8] transition-colors hover:text-white"
             aria-label={show ? "Hide password" : "Show password"}
             tabIndex={-1}
           >
@@ -98,13 +100,13 @@ export function AuthField({
 
       {below}
       {hint && (
-        <p className="mt-[7px] text-[11.5px] leading-[1.4] text-ss-muted">{hint}</p>
+        <p className="mt-[7px] text-[11.5px] leading-[1.4] text-[#8b88b8]">{hint}</p>
       )}
     </div>
   );
 }
 
-/** The indigo primary action. */
+/** The gradient primary action. */
 export function AuthSubmit({
   loading,
   loadingLabel,
@@ -120,10 +122,10 @@ export function AuthSubmit({
       {...props}
       disabled={loading || props.disabled}
       className={cn(
-        "flex w-full items-center justify-center gap-2.5 rounded-chip bg-ss-indigo p-[15px] text-sm font-bold leading-none text-white",
-        "shadow-[0_12px_24px_-14px_rgba(99,102,241,.95)] transition-colors hover:bg-ss-indigo-600",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-2",
-        "disabled:cursor-not-allowed disabled:opacity-60",
+        "flex w-full items-center justify-center gap-2.5 rounded-chip p-[15px] text-sm font-bold leading-none text-white",
+        "bg-[linear-gradient(120deg,#7c22c4,#5355cb)] shadow-[0_18px_36px_-16px_rgba(124,34,196,.95)]",
+        "transition-[filter,opacity] hover:brightness-110",
+        "disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:brightness-100",
         props.className
       )}
     >
@@ -143,10 +145,10 @@ export function AuthSubmit({
 }
 
 const NOTICE_TONES = {
-  error: "border-ss-rose-line bg-ss-rose-bg text-ss-rose-ink",
-  success: "border-ss-green-line bg-ss-green-bg text-ss-green-ink",
-  info: "border-ss-amber-line bg-ss-amber-bg text-ss-amber-ink",
-  neutral: "border-ss-line bg-ss-page-alt text-ss-body",
+  error: "border-[#e11d48]/40 bg-[#e11d48]/[0.14] text-[#fca5b5]",
+  success: "border-[#34d399]/[0.3] bg-[#34d399]/[0.12] text-[#9ee7c6]",
+  info: "border-[#fbbf24]/[0.3] bg-[#d97706]/[0.14] text-[#fcd9a0]",
+  neutral: "border-white/[0.1] bg-white/[0.05] text-[#b6b4dd]",
 };
 
 /** Inline status message. `role="alert"` only for errors, so success text
@@ -172,7 +174,7 @@ export function AuthNotice({
 }
 
 /**
- * Checkbox styled to the design's filled indigo square.
+ * Checkbox styled to the design's filled gradient square.
  *
  * The tick is a real <Check> element rather than a CSS background image: an
  * inline `checked:bg-[url(data:image/svg+xml…)]` is silently dropped by
@@ -200,7 +202,9 @@ export function AuthCheckbox({
       <span
         className={cn(
           "relative mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors",
-          checked ? "border-ss-indigo bg-ss-indigo" : "border-ss-dash bg-white"
+          checked
+            ? "border-transparent bg-[linear-gradient(120deg,#7c22c4,#5355cb)]"
+            : "border-white/[0.24] bg-white/[0.06]"
         )}
       >
         <input
@@ -209,7 +213,7 @@ export function AuthCheckbox({
           checked={checked}
           required={required}
           onChange={(e) => onChange(e.target.checked)}
-          className="absolute inset-0 h-full w-full cursor-pointer appearance-none rounded-[5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-2"
+          className="absolute inset-0 h-full w-full cursor-pointer appearance-none rounded-[5px]"
         />
         {checked && (
           <Check
@@ -219,7 +223,7 @@ export function AuthCheckbox({
           />
         )}
       </span>
-      <label htmlFor={id} className="text-[12.5px] leading-[1.5] text-ss-body">
+      <label htmlFor={id} className="text-[12.5px] leading-[1.5] text-[#b6b4dd]">
         {children}
       </label>
     </div>

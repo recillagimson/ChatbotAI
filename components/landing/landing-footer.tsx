@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Lock } from "lucide-react";
-import { Logo } from "@/components/brand/logo";
+import { BrandLockup } from "@/components/landing/brand-lockup";
 import { COMPANY } from "@/lib/company";
 import { LEGAL_LINKS } from "@/components/landing/site-footer";
 
@@ -21,7 +21,7 @@ const PRODUCT_LINKS = [
 
 function ColumnHead({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10.5px] font-bold uppercase leading-none tracking-[0.14em] text-[#6e6b9c]">
+    <div className="text-[10.5px] font-bold uppercase leading-none tracking-[0.14em] text-[#8b88b8]">
       {children}
     </div>
   );
@@ -32,11 +32,11 @@ const linkClass =
 
 export function LandingFooter() {
   return (
-    <footer className="relative z-10 bg-[#14112e]">
-      <div className="container pb-8 pt-14">
+    <footer className="relative z-10 border-t border-white/[0.07] bg-[#120f30]">
+      <div className="container pb-8 pt-12 sm:pt-14">
         <div className="flex flex-col gap-10 lg:flex-row lg:gap-16">
           <div className="lg:w-[300px] lg:shrink-0">
-            <Logo white size="sm" />
+            <BrandLockup size="sm" />
             <p className="mt-4 max-w-xs text-[12.5px] leading-[1.65] text-[#8b88b8]">
               AI that answers your DMs 24/7, trained on your business, in your
               voice.
@@ -53,7 +53,7 @@ export function LandingFooter() {
                   </a>
                 ))}
                 <Link href="/login" className={linkClass}>
-                  Log in
+                  Sign in
                 </Link>
               </div>
             </div>
@@ -81,10 +81,7 @@ export function LandingFooter() {
 
             <div>
               <ColumnHead>Legal</ColumnHead>
-              <nav
-                aria-label="Legal"
-                className="mt-3.5 flex flex-col gap-2.5"
-              >
+              <nav aria-label="Legal" className="mt-3.5 flex flex-col gap-2.5">
                 {LEGAL_LINKS.map(({ href, label }) => (
                   <Link key={href} href={href} className={linkClass}>
                     {label}
@@ -95,7 +92,7 @@ export function LandingFooter() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 border-t border-white/[0.08] pt-5 text-[11.5px] leading-none text-[#6e6b9c] sm:flex-row sm:items-center">
+        <div className="mt-9 flex flex-col gap-3 border-t border-white/[0.07] pt-5 text-[11.5px] leading-none text-[#8b88b8] sm:flex-row sm:items-center">
           <span>
             &copy; {new Date().getFullYear()} {COMPANY.name}. All rights
             reserved.

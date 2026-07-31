@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { AuthShell, AuthTop, AuthHeading } from "@/components/auth/auth-shell";
+import { AuthShell, AuthHeading } from "@/components/auth/auth-shell";
 import {
   AuthField,
   AuthNotice,
@@ -36,10 +36,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <AuthShell
-      variant="proof"
-      top={<AuthTop prompt="Remembered it?" href="/login" cta="Sign in" />}
-    >
+    <AuthShell cta={{ href: "/login", label: "Sign in" }}>
       <AuthHeading title="Reset your password">
         Enter your email and we&apos;ll send you a link to set a new one.
       </AuthHeading>
@@ -48,13 +45,13 @@ export default function ForgotPasswordPage() {
         <div className="mt-6 flex flex-col gap-4">
           <AuthNotice tone="neutral">
             If an account exists for{" "}
-            <span className="font-semibold text-ss-ink">{email}</span>, a
+            <span className="font-semibold text-white">{email}</span>, a
             password-reset link is on its way. Check your inbox, and your spam
             folder.
           </AuthNotice>
           <Link
             href="/login"
-            className="inline-flex items-center gap-2 text-[13px] font-semibold text-ss-indigo-600 transition-colors hover:text-ss-indigo-800"
+            className="inline-flex items-center gap-2 text-[13px] font-semibold text-[#c084fc] transition-colors hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Back to sign in
