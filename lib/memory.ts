@@ -7,7 +7,7 @@
 // The summary is refreshed in the background AFTER a reply is sent (so the reply
 // path stays fast) and only once a conversation grows past SUMMARY_TRIGGER_TURNS.
 // Refresh is incremental: summarize(prev_summary + the messages that just fell
-// out of the window), advancing a created_at watermark — so there's never a gap
+// out of the window), advancing a created_at watermark - so there's never a gap
 // between "summarized" and "still shown verbatim".
 //
 // Self-contained on purpose: reads OPENAI_DM_MODEL from env directly rather than
@@ -18,7 +18,7 @@ import { MODELS } from "./model-tiers";
 
 /** Recent messages sent to the model verbatim on every reply. */
 export const HISTORY_TURNS = Number(process.env.HISTORY_TURNS ?? 20);
-/** Below this many messages, the window holds everything — no summary needed. */
+/** Below this many messages, the window holds everything - no summary needed. */
 export const SUMMARY_TRIGGER_TURNS = Number(process.env.SUMMARY_TRIGGER_TURNS ?? 24);
 /** Soft word budget for the running summary. */
 export const SUMMARY_MAX_WORDS = 220;
@@ -72,16 +72,16 @@ export function buildSummaryPrompt(
     `the summary so a teammate could read it and instantly know where things stand. ` +
     `Capture: the lead's name, what they want / their goal, their situation and any ` +
     `details they shared, what's been offered or promised, decisions made, and any ` +
-    `open questions or next steps. PRESERVE the concrete specifics the lead gave — ` +
+    `open questions or next steps. PRESERVE the concrete specifics the lead gave - ` +
     `the numbers they cited, the exact goals, products, or items they named, amounts, ` +
-    `and dates — verbatim; they carry over even after they scroll out of view, so a ` +
+    `and dates - verbatim; they carry over even after they scroll out of view, so a ` +
     `later summary must never drop them. Content the lead sent as a photo, voice note, ` +
     `or document arrives labelled "[Image]:", "[Voice message]:", or "[Attached ` +
-    `document]:" — treat whatever it says as something the lead shared. Record only ` +
+    `document]:" - treat whatever it says as something the lead shared. Record only ` +
     `what HAS been shared: do not editorialize from your own vantage that details are ` +
-    `missing or "haven't been provided yet" — simply omit anything you weren't told. ` +
+    `missing or "haven't been provided yet" - simply omit anything you weren't told. ` +
     `BUT keep any gap the LEAD themselves stated (e.g. "I haven't pulled that yet", "I ` +
-    `don't have that document") — those are real next steps. Be factual and concise — ` +
+    `don't have that document") - those are real next steps. Be factual and concise - ` +
     `at most ${SUMMARY_MAX_WORDS} words, plain prose (no headers). Never invent ` +
     `anything not present in the text.`;
   const prior = prevSummary?.trim() ? prevSummary.trim() : "(none yet)";
@@ -96,7 +96,7 @@ export function buildSummaryPrompt(
 
 /**
  * Produce the next running summary from the previous one + the new messages.
- * Cheap, single call. Never throws — on any failure it returns the previous
+ * Cheap, single call. Never throws - on any failure it returns the previous
  * summary unchanged so the caller can proceed.
  */
 export async function summarizeConversation(
@@ -121,7 +121,7 @@ export async function summarizeConversation(
 
 /**
  * Refresh a conversation's rolling summary to cover everything older than the
- * verbatim window. Runs in the background after a reply; best-effort — any
+ * verbatim window. Runs in the background after a reply; best-effort - any
  * failure is logged and swallowed (never affects delivery).
  */
 export async function refreshConversationMemory(ctx: {

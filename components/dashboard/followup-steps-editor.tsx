@@ -34,11 +34,11 @@ export function blankStep(delayHours = 3): EditableStep {
 
 /**
  * Map stored FollowupSteps → editable rows. `seedIfEmpty` (default true) yields a
- * single blank step when there are none — the main sequence always shows one row;
+ * single blank step when there are none - the main sequence always shows one row;
  * the optional link sequence passes false so "no link steps" stays truly empty.
  */
 export function toEditable(steps: FollowupStep[] | null | undefined, seedIfEmpty = true): EditableStep[] {
-  // auto_followup_steps is schemaless JSONB — drop any null/garbage element first.
+  // auto_followup_steps is schemaless JSONB - drop any null/garbage element first.
   const arr = Array.isArray(steps)
     ? steps.filter((s): s is FollowupStep => !!s && typeof s === "object")
     : [];
@@ -159,7 +159,7 @@ export function StepsEditor({
           {flows && flows.length > 0 && (
             <div className="space-y-3">
               <div className="space-y-1">
-                <Label htmlFor={`${idPrefix}-step-flow-ig-${i}`}>ManyChat flow — Instagram (voice) — optional</Label>
+                <Label htmlFor={`${idPrefix}-step-flow-ig-${i}`}>ManyChat flow - Instagram (voice) - optional</Label>
                 <select
                   id={`${idPrefix}-step-flow-ig-${i}`}
                   value={step.flow_ns ?? ""}
@@ -170,14 +170,14 @@ export function StepsEditor({
                   }}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">— none (send the message/assets below) —</option>
+                  <option value="">- none (send the message/assets below) -</option>
                   {flows.map((f) => (
                     <option key={f.ns} value={f.ns}>{f.name || f.ns}</option>
                   ))}
                 </select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor={`${idPrefix}-step-flow-fb-${i}`}>ManyChat flow — Facebook (voice) — optional</Label>
+                <Label htmlFor={`${idPrefix}-step-flow-fb-${i}`}>ManyChat flow - Facebook (voice) - optional</Label>
                 <select
                   id={`${idPrefix}-step-flow-fb-${i}`}
                   value={step.flow_ns_fb ?? ""}
@@ -188,14 +188,14 @@ export function StepsEditor({
                   }}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">— none (use the Instagram flow / message below) —</option>
+                  <option value="">- none (use the Instagram flow / message below) -</option>
                   {flows.map((f) => (
                     <option key={f.ns} value={f.ns}>{f.name || f.ns}</option>
                   ))}
                 </select>
               </div>
               <p className="text-xs text-muted-foreground">
-                Pick the matching flow per platform (both lists show all your flows — ManyChat
+                Pick the matching flow per platform (both lists show all your flows - ManyChat
                 doesn&apos;t tag them by channel). Set one and it fires for everyone; set both and
                 each platform gets its own. When a flow fires, the assets and message below are
                 ignored for that send.
@@ -204,7 +204,7 @@ export function StepsEditor({
           )}
 
           <div className={cn((step.flow_ns || step.flow_ns_fb) && "pointer-events-none opacity-40")}>
-            {/* Attach assets — a thumbnail multi-picker (up to MAX_STEP_ASSETS). */}
+            {/* Attach assets - a thumbnail multi-picker (up to MAX_STEP_ASSETS). */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Attach assets (optional)</Label>
@@ -283,7 +283,7 @@ export function StepsEditor({
             <div className="mt-3 space-y-1">
               <Label htmlFor={`${idPrefix}-step-text-${i}`}>
                 {step.ai_generate
-                  ? "Instruction for the AI (optional — leave blank to let it decide)"
+                  ? "Instruction for the AI (optional - leave blank to let it decide)"
                   : `Message ${step.asset_keys.length ? "/ caption" : ""}`}
               </Label>
               <Textarea

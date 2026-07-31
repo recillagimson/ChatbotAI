@@ -6,21 +6,21 @@ import { toPlatform, canPushPlatform, platformLabel } from "@/lib/platforms";
 
 export const runtime = "nodejs";
 
-// A clearly-labelled probe DM. Sending SOMETHING is unavoidable — you can't test
-// real delivery without a real send — so keep it obviously a system check.
+// A clearly-labelled probe DM. Sending SOMETHING is unavoidable - you can't test
+// real delivery without a real send - so keep it obviously a system check.
 const TEST_MESSAGE =
-  "✅ SpeedSettr delivery test — please ignore. If you can see this, replies are being delivered.";
+  "✅ SpeedSettr delivery test - please ignore. If you can see this, replies are being delivered.";
 
 /**
  * Admin delivery probe: push a real test DM to THIS conversation's contact via the
- * ManyChat Send Content API and report ManyChat's ACTUAL verdict — so the owner can
+ * ManyChat Send Content API and report ManyChat's ACTUAL verdict - so the owner can
  * see, per contact, whether a send is accepted, refused (closed 24h window, blocked
  * user, account restriction), or errored, instead of guessing from the ManyChat
  * "Test the request" panel (which only ever shows SpeedSettr's fast-ack, never the
  * pushed reply). Because postSendContent now validates the response BODY, a ManyChat
  * refusal surfaces here as a real error message rather than a phantom success.
  *
- * Admin-only (requireSuperadmin) — it sends a real DM to a real contact.
+ * Admin-only (requireSuperadmin) - it sends a real DM to a real contact.
  */
 export async function POST(
   _request: NextRequest,
@@ -48,7 +48,7 @@ export async function POST(
   const label = platformLabel(platform);
   if (!canPushPlatform(platform)) {
     return NextResponse.json(
-      { ok: false, error: `${label} has no ManyChat send API — can't push from here.` },
+      { ok: false, error: `${label} has no ManyChat send API - can't push from here.` },
       { status: 200 }
     );
   }
@@ -86,7 +86,7 @@ export async function POST(
       platform: label,
       manychat: result,
       note:
-        `ManyChat ACCEPTED the send. Now check the contact's ${label} thread — ` +
+        `ManyChat ACCEPTED the send. Now check the contact's ${label} thread - ` +
         `if the test DM does NOT appear there, the contact's 24-hour messaging window is ` +
         `closed (they must message the account first), which Instagram enforces and no code can bypass.`,
     });

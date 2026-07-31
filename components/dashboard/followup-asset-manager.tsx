@@ -40,7 +40,7 @@ const AUDIO_MIMES = new Set([
 
 function fileKindError(kind: FollowupAssetKind, file: File): string | null {
   if (file.size > MAX_FILE_BYTES) {
-    return `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is 25 MB.`;
+    return `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB - the limit is 25 MB.`;
   }
   if (kind === "audio") {
     return AUDIO_MIMES.has(file.type)
@@ -57,7 +57,7 @@ function fileKindError(kind: FollowupAssetKind, file: File): string | null {
  * Manage a chatbot's follow-up asset library: upload pictures/videos/voice notes
  * or add a link. Media uploads go DIRECTLY from the browser to the public
  * followup-assets bucket (bucket RLS scopes writes to the owner's {userId}/
- * folder) — routing bytes through an API route would hit Vercel's ~4.5 MB body
+ * folder) - routing bytes through an API route would hit Vercel's ~4.5 MB body
  * limit long before ManyChat's 25 MB cap. The API route only records metadata.
  *
  * Pictures can be added in bulk: select up to 5 images at once and each is saved
@@ -66,7 +66,7 @@ function fileKindError(kind: FollowupAssetKind, file: File): string | null {
  *
  * NOTE on Instagram: voice notes/videos only deliver on Messenger/Telegram; on
  * Instagram a step falls back to its text caption (native IG voice notes are set
- * up separately in ManyChat — see docs/followup-media.md).
+ * up separately in ManyChat - see docs/followup-media.md).
  */
 export function FollowupAssetManager({
   chatbotId,
@@ -171,7 +171,7 @@ export function FollowupAssetManager({
       if (invalid) { setError(invalid); return; }
     }
 
-    // Bulk images: the Key field is a BASE — each image gets {base}_1, {base}_2, …
+    // Bulk images: the Key field is a BASE - each image gets {base}_1, {base}_2, …
     if (isBulkImage) {
       const base = k || "image";
       if (!BASE_KEY_RE.test(base)) {
@@ -197,7 +197,7 @@ export function FollowupAssetManager({
         reset();
         startTransition(() => router.refresh());
       }
-      if (fails.length) setError(`Added ${ok} of ${files.length}. Failed — ${fails.join("; ")}`);
+      if (fails.length) setError(`Added ${ok} of ${files.length}. Failed - ${fails.join("; ")}`);
       else setNotice(`Added ${ok} image${ok === 1 ? "" : "s"} ✓`);
       return;
     }
@@ -224,7 +224,7 @@ export function FollowupAssetManager({
     setNotice(null);
     const inUse = usedKeys.includes(asset.key);
     const warning = inUse
-      ? `"${asset.key}" is used by your follow-up sequence — that step will send TEXT ONLY until you pick another asset.\n\nDelete it anyway?`
+      ? `"${asset.key}" is used by your follow-up sequence - that step will send TEXT ONLY until you pick another asset.\n\nDelete it anyway?`
       : `Delete "${asset.key}"? This can't be undone.`;
     if (!window.confirm(warning)) return;
     const res = await fetch(`/api/followup-assets?id=${asset.id}`, { method: "DELETE" });
@@ -262,7 +262,7 @@ export function FollowupAssetManager({
                   {(a.label || a.description) && (
                     <p className="truncate text-sm text-muted-foreground">
                       {a.label}
-                      {a.label && a.description ? " — " : ""}
+                      {a.label && a.description ? " - " : ""}
                       {a.description}
                     </p>
                   )}
@@ -319,7 +319,7 @@ export function FollowupAssetManager({
             />
             {kind === "image" && (
               <p className="text-xs text-muted-foreground">
-                Adding several? This becomes a base — each image gets _1, _2, …
+                Adding several? This becomes a base - each image gets _1, _2, …
               </p>
             )}
           </div>

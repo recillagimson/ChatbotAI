@@ -15,11 +15,11 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB (mirror /api/uploads)
 /**
  * POST /api/documents/extract
  * Stateless document → text. Accepts a single multipart `file`, extracts its
- * plain text (PDF/DOCX/TXT/MD/CSV), and returns `{ text }`. Nothing is stored —
+ * plain text (PDF/DOCX/TXT/MD/CSV), and returns `{ text }`. Nothing is stored -
  * the client drops the text into an editable section field. Used by the prompts
  * page (Personality upload) and available to the request-change flow.
  *
- * Auth: any logged-in user. No DB write, no storage, no ownership to check —
+ * Auth: any logged-in user. No DB write, no storage, no ownership to check -
  * the file is read in-memory and discarded.
  */
 export async function POST(request: NextRequest) {

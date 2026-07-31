@@ -1,6 +1,6 @@
 // app/api/knowledge-base/[id]/route.ts
 // Edit an existing knowledge-base entry (title + content) and re-index it so
-// retrieval stays in sync. Used by the KB list's inline editor — uploaded files
+// retrieval stays in sync. Used by the KB list's inline editor - uploaded files
 // are stored as plain-text entries, so this lets the owner clean them up after
 // extraction (fix OCR noise, trim boilerplate, correct facts).
 import { NextResponse, type NextRequest } from "next/server";

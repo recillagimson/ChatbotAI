@@ -75,7 +75,7 @@ export function diffWords(before: string, after: string): DiffOp[] {
   const a = tokenizeWords(before);
   const b = tokenizeWords(after);
   if ((a.length + 1) * (b.length + 1) > MAX_CELLS) {
-    // Too big for a word-level table — diff by lines (far fewer tokens).
+    // Too big for a word-level table - diff by lines (far fewer tokens).
     return lcsDiff(tokenizeLines(before), tokenizeLines(after));
   }
   return lcsDiff(a, b);

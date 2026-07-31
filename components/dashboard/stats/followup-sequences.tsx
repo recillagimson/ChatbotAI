@@ -8,14 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 /**
- * FollowupSequences — REAL aggregate at top + HONEST STUB per-step section
+ * FollowupSequences - REAL aggregate at top + HONEST STUB per-step section
  *
  * Shows two real numbers (followupsSent, convWithFollowup) sourced from
  * overview.followups. If followupsSent === 0 a muted note explains that
  * automated follow-ups are currently off (FOLLOWUP_ENABLED=false).
  *
  * Below the real aggregate, recreates setty.ai's Pre-Link / Post-Link
- * two-column layout as clearly muted stub cards. "—" everywhere a count
+ * two-column layout as clearly muted stub cards. "-" everywhere a count
  * would appear; "per-step tracking coming soon" badge signals placeholder.
  */
 
@@ -32,7 +32,7 @@ function StepCard({ stepLabel, sentLabel, replyLabel }: StepCardProps) {
         "rounded-lg border border-dashed border-muted-foreground/25",
         "bg-muted/10 p-4 opacity-55"
       )}
-      aria-label={`${stepLabel} — placeholder step, not tracked`}
+      aria-label={`${stepLabel} - placeholder step, not tracked`}
     >
       <p className="text-xs font-medium text-muted-foreground/70 mb-3">
         {stepLabel}
@@ -45,7 +45,7 @@ function StepCard({ stepLabel, sentLabel, replyLabel }: StepCardProps) {
             className="text-base font-display font-semibold tabular-nums text-muted-foreground/30"
             aria-hidden="true"
           >
-            —
+            -
           </span>
         </div>
         {/* Reply row */}
@@ -55,7 +55,7 @@ function StepCard({ stepLabel, sentLabel, replyLabel }: StepCardProps) {
             className="text-base font-display font-semibold tabular-nums text-muted-foreground/30"
             aria-hidden="true"
           >
-            —
+            -
           </span>
         </div>
       </div>
@@ -108,7 +108,7 @@ export function FollowupSequences({
             </div>
           </div>
 
-          {/* Off note — shown when automated follow-ups are parked */}
+          {/* Off note - shown when automated follow-ups are parked */}
           {followupsOff && (
             <p className="text-xs text-muted-foreground/70 mb-6 italic">
               Automated follow-ups are currently turned off.
@@ -134,17 +134,17 @@ export function FollowupSequences({
               <div className="flex flex-col gap-3">
                 <p
                   className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wide"
-                  aria-label="Pre-link follow-up steps — placeholder"
+                  aria-label="Pre-link follow-up steps - placeholder"
                 >
                   Pre-Link
                 </p>
                 <StepCard
-                  stepLabel="Step 1 — Initial follow-up"
+                  stepLabel="Step 1 - Initial follow-up"
                   sentLabel="Sent"
                   replyLabel="Replied"
                 />
                 <StepCard
-                  stepLabel="Step 2 — Re-engagement"
+                  stepLabel="Step 2 - Re-engagement"
                   sentLabel="Sent"
                   replyLabel="Replied"
                 />
@@ -154,17 +154,17 @@ export function FollowupSequences({
               <div className="flex flex-col gap-3">
                 <p
                   className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wide"
-                  aria-label="Post-link follow-up steps — placeholder"
+                  aria-label="Post-link follow-up steps - placeholder"
                 >
                   Post-Link
                 </p>
                 <StepCard
-                  stepLabel="Step 1 — Link reminder"
+                  stepLabel="Step 1 - Link reminder"
                   sentLabel="Sent"
                   replyLabel="Replied"
                 />
                 <StepCard
-                  stepLabel="Step 2 — Booking nudge"
+                  stepLabel="Step 2 - Booking nudge"
                   sentLabel="Sent"
                   replyLabel="Replied"
                 />

@@ -22,7 +22,7 @@ export function encryptSecret(plaintext: string): string {
   return Buffer.concat([iv, tag, ct]).toString("base64");
 }
 
-/** Decrypt a blob from encryptSecret. THROWS on wrong key or tampering (GCM auth failure) —
+/** Decrypt a blob from encryptSecret. THROWS on wrong key or tampering (GCM auth failure) -
  *  callers MUST handle this (it is how a bad/rotated master key is detected). */
 export function decryptSecret(blob: string): string {
   const buf = Buffer.from(blob, "base64");

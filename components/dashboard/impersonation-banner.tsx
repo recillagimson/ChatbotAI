@@ -34,7 +34,7 @@ export function ImpersonationBanner({
     <div className="flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950">
       <span className="flex items-center gap-2">
         <Eye className="h-4 w-4" aria-hidden="true" />
-        Viewing as <span className="font-semibold">{clientLabel}</span> — changes
+        Viewing as <span className="font-semibold">{clientLabel}</span> - changes
         save to their account.
       </span>
       <button

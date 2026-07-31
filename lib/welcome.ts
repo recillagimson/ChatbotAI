@@ -2,7 +2,7 @@
  * Openers that always count as a bare greeting, in NORMALIZED form (see
  * normalizeOpener: lowercased, all non-alphanumerics stripped). Matched by exact
  * equality, so "Hey there!" -> "heythere" is covered, but "hey my score is 649"
- * ("heymyscoreis649") is not — extra content beyond the greeting reads as substantive.
+ * ("heymyscoreis649") is not - extra content beyond the greeting reads as substantive.
  */
 export const GREETING_OPENERS: string[] = [
   "hi", "hii", "hiii", "hey", "heyy", "heyyy", "heya", "hiya",
@@ -53,7 +53,7 @@ export interface WelcomeInput {
 }
 
 /**
- * Decide whether to fire the Welcome VM flow for this inbound. Pure — the webhook
+ * Decide whether to fire the Welcome VM flow for this inbound. Pure - the webhook
  * does the claim + flow trigger. Rule order (rules-first, no AI):
  *   1. not configured (disabled / no flow) -> false
  *   2. already resolved (welcomedAt set)   -> false

@@ -8,7 +8,7 @@ import { createClient, getRealUser } from "@/lib/supabase/server";
  * A superadmin can drop into a client's real dashboard and act as them. The
  * target client id lives in an httpOnly cookie; `resolveViewAs` turns it into an
  * effective identity ONLY after re-verifying, on every read, that the real user
- * is a superadmin — so a forged cookie does nothing for a normal user. The
+ * is a superadmin - so a forged cookie does nothing for a normal user. The
  * effective identity feeds `getCurrentUser()` (lib/supabase/server.ts), which is
  * what the whole client dashboard already scopes by, so no dashboard page needs
  * to change. Auth gates (requireSuperadmin, admin layout) deliberately use
@@ -57,7 +57,7 @@ export async function getViewAsTarget(): Promise<{ id: string; email: string | n
   return target ? { id: target.id, email: target.email } : null;
 }
 
-/** Real user + impersonation target + active flag — for the banner and guards. */
+/** Real user + impersonation target + active flag - for the banner and guards. */
 export async function getImpersonation(): Promise<{
   real: { id: string; email: string | null } | null;
   target: ViewAsTarget | null;
@@ -67,7 +67,7 @@ export async function getImpersonation(): Promise<{
   return { real, target, active: !!target };
 }
 
-/** Set the impersonation cookie (route handlers only — they can write cookies). */
+/** Set the impersonation cookie (route handlers only - they can write cookies). */
 export async function setViewAs(clientId: string): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(VIEW_AS_COOKIE, clientId, {

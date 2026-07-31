@@ -14,7 +14,7 @@ const MAX_LEN = 1000; // ManyChat per-message ceiling
  *
  * Used by the conversation composer when the owner has paused the AI to take
  * over a chat. The ManyChat API key is server-only, so the browser can't push
- * directly — it posts here. Auth is the cookie session + RLS: the conversation
+ * directly - it posts here. Auth is the cookie session + RLS: the conversation
  * lookup is scoped to the current user (and double-checked with user_id), so
  * one tenant can never reply into another's conversation.
  */
@@ -56,11 +56,11 @@ export async function POST(
 
   const platform = toPlatform(conversation.platform);
   // Channels with no ManyChat send API (TikTok) can't be delivered to from here.
-  // Don't leave a phantom "sent" bubble — tell the agent to reply in that app.
+  // Don't leave a phantom "sent" bubble - tell the agent to reply in that app.
   if (!canPushPlatform(platform)) {
     return NextResponse.json(
       {
-        error: `${platformLabel(platform)} replies can't be sent from here yet — ManyChat has no ${platformLabel(platform)} sending API. Reply to this contact directly in the ${platformLabel(platform)} app.`,
+        error: `${platformLabel(platform)} replies can't be sent from here yet - ManyChat has no ${platformLabel(platform)} sending API. Reply to this contact directly in the ${platformLabel(platform)} app.`,
       },
       { status: 422 }
     );
@@ -85,7 +85,7 @@ export async function POST(
     );
   }
 
-  // Deliver to the contact's channel first — if ManyChat rejects it, don't leave a
+  // Deliver to the contact's channel first - if ManyChat rejects it, don't leave a
   // phantom "You" bubble in the thread that never actually reached the contact.
   try {
     await sendManychatMessage({

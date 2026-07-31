@@ -13,7 +13,7 @@ import { MessageBubble } from "@/components/dashboard/message-bubble";
 import type { Chatbot, TrainingPair } from "@/lib/types";
 import { isUsableTrainingPair } from "@/lib/training";
 
-/** Per-reply diagnostics from the preview route — surfaces WHY a reply looked off
+/** Per-reply diagnostics from the preview route - surfaces WHY a reply looked off
  *  (empty KB, which prompt path, how many corrections applied). */
 type Diag = {
   promptMode: string;
@@ -100,12 +100,12 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
       });
       const j = await res.json().catch(() => null);
       if (!res.ok || typeof j?.text !== "string") {
-        setChatError(j?.error ?? "The bot couldn't reply — try again.");
+        setChatError(j?.error ?? "The bot couldn't reply - try again.");
       } else {
         setMessages((prev) => [...prev, { id: newId(), role: "assistant", content: j.text, created_at: new Date().toISOString(), diag: j.diag }]);
       }
     } catch {
-      setChatError("Network error — try again.");
+      setChatError("Network error - try again.");
     }
     setSending(false);
   }
@@ -118,7 +118,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
 
   function saveCorrection(assistantId: string, botReply: string) {
     const reply = (drafts[assistantId] ?? "").trim();
-    // Scenario defaults to the preceding user message but is editable — and
+    // Scenario defaults to the preceding user message but is editable - and
     // REQUIRED, so a correction on a first message (no preceding user text) can't
     // be minted with a blank scenario that would be silently dropped on save.
     const scenario = (draftScenario[assistantId] ?? precedingUser(assistantId)).trim();
@@ -184,7 +184,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
     }
     if (!data || data.length === 0) {
       setSaveError(
-        "Couldn't save — the change didn't reach the database (you may not have permission on this bot). Nothing was saved."
+        "Couldn't save - the change didn't reach the database (you may not have permission on this bot). Nothing was saved."
       );
       return;
     }
@@ -193,7 +193,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
     router.refresh();
   }
 
-  // Enabled pairs missing a scenario or reply — silently dropped on save/at reply
+  // Enabled pairs missing a scenario or reply - silently dropped on save/at reply
   // time, so surface them instead (the "my edit did nothing" trap).
   const incompleteEnabled = pairs.filter(
     (p) => p.enabled && !(p.scenario.trim() && p.reply.trim())
@@ -204,7 +204,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
       {/* Left: sandbox chat */}
       <div className="lg:col-span-2 flex flex-col rounded-md border min-h-[28rem]">
         <div className="flex items-center justify-between border-b px-3 py-2">
-          <span className="text-sm font-medium">Test chat — sandbox (nothing here is saved to your inbox)</span>
+          <span className="text-sm font-medium">Test chat - sandbox (nothing here is saved to your inbox)</span>
           <Button type="button" variant="ghost" size="sm" onClick={() => { setMessages([]); setOpenDraft(null); }}>
             Reset chat
           </Button>
@@ -298,7 +298,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
           {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
         </div>
         <p className="text-[11px] leading-snug text-muted-foreground">
-          When a contact&rsquo;s message matches a Scenario, the bot answers with that Reply — it takes precedence over the knowledge base for that scenario. Click <strong>Save training</strong> to apply it to the live bot.
+          When a contact&rsquo;s message matches a Scenario, the bot answers with that Reply - it takes precedence over the knowledge base for that scenario. Click <strong>Save training</strong> to apply it to the live bot.
         </p>
         {pairs.length === 0 && (
           <p className="rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
@@ -343,7 +343,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
         <Button type="button" variant="outline" size="sm" onClick={addPair}>+ Add scenario</Button>
         {incompleteEnabled > 0 && (
           <p className="rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-500">
-            {incompleteEnabled} enabled scenario{incompleteEnabled === 1 ? "" : "s"} {incompleteEnabled === 1 ? "is" : "are"} missing a Scenario or Reply — they won&rsquo;t be saved or used until both are filled.
+            {incompleteEnabled} enabled scenario{incompleteEnabled === 1 ? "" : "s"} {incompleteEnabled === 1 ? "is" : "are"} missing a Scenario or Reply - they won&rsquo;t be saved or used until both are filled.
           </p>
         )}
         {saveError && <p className="rounded bg-destructive/10 px-2 py-1 text-xs text-destructive">{saveError}</p>}
@@ -359,7 +359,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
 }
 
 /** Compact per-reply diagnostics shown under a bot message in the sandbox, so the
- *  owner can SEE why a reply looked off — an empty KB is the usual "ignores my
+ *  owner can SEE why a reply looked off - an empty KB is the usual "ignores my
  *  knowledge base" culprit. */
 function DiagLine({ diag }: { diag: Diag }) {
   const kbEmpty = diag.kbEmpty;
@@ -380,7 +380,7 @@ function DiagLine({ diag }: { diag: Diag }) {
           <div className="text-amber-600 dark:text-amber-500">
             ⚠ The bot got NO knowledge base for this message
             {diag.kbMode === "retrieval"
-              ? " (nothing matched) — it can only use the persona/prompt and any trained scenarios."
+              ? " (nothing matched) - it can only use the persona/prompt and any trained scenarios."
               : "."}
           </div>
         )}

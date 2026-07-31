@@ -5,10 +5,10 @@
 -- the new `starting_later` tag, which PAUSES the auto follow-up drip (AI replies
 -- stay on) until the owner changes the tag. The date is informational: shown
 -- beside the badge and fed to the AI so it remembers when they want to start.
---   start_on   — resolved date (YYYY-MM-DD); nullable
---   start_note — the human phrase the lead used; nullable
+--   start_on   - resolved date (YYYY-MM-DD); nullable
+--   start_note - the human phrase the lead used; nullable
 -- Fail-open: missing columns read as null via the app's ?? defaults.
--- Apply BEFORE deploying the code that reads them. Idempotent — safe to re-run.
+-- Apply BEFORE deploying the code that reads them. Idempotent - safe to re-run.
 --
 -- Apply in the Supabase SQL editor.
 

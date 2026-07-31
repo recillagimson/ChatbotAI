@@ -12,7 +12,7 @@ alter table public.chatbots
 
 -- welcomed_at is created + backfilled together, inside one guard, so the backfill
 -- happens ONLY when the column is first added. Every conversation that predates this
--- column is an EXISTING contact, not a new one — mark it resolved so it can never be
+-- column is an EXISTING contact, not a new one - mark it resolved so it can never be
 -- mistaken for a brand-new contact. (A plain unconditional backfill would wrongly
 -- resolve genuinely-new contacts if the migration were ever re-run.)
 -- NOTE: this covers only rows predating the column. This migration runs at deploy while

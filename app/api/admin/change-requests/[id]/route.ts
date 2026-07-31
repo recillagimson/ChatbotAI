@@ -108,7 +108,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         .filter((e) => e.title && e.content);
       const regenCol = sectionColumnFor(cr.category);
       const currentSection = regenCol ? ((chatbot as Chatbot)[regenCol] ?? "") : "";
-      // "overall" isn't scoped to one section — pass the live text of all three.
+      // "overall" isn't scoped to one section - pass the live text of all three.
       const sections =
         cr.category === "overall"
           ? {
@@ -158,17 +158,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const existing = (sizeRows ?? []).reduce((n: number, r: { content: string | null }) => n + (r.content?.length ?? 0), 0);
     const incoming = entries.reduce((n, e) => n + e.content.length, 0);
     if (existing + incoming > MAX_KB_CHARS_PER_CHATBOT) {
-      return NextResponse.json({ error: "Knowledge base size limit reached — remove some entries." }, { status: 400 });
+      return NextResponse.json({ error: "Knowledge base size limit reached - remove some entries." }, { status: 400 });
     }
   }
 
-  // Apply the prompt (live) — by id; admin RLS overlay authorizes it.
+  // Apply the prompt (live) - by id; admin RLS overlay authorizes it.
   // "overall" writes each affected section; single-section categories write the one
   // target column; legacy requests (old shape, no section) publish into system_prompt.
   const publishCol = sectionColumnFor(cr.category);
   if (final.sections && final.sections.length) {
     // One column per section. Build a single update object so all sections publish
-    // atomically (last write per column wins — cleanSections already deduped).
+    // atomically (last write per column wins - cleanSections already deduped).
     const patch: Record<string, string> = {};
     for (const s of final.sections) {
       const content = s.section_content.trim();
@@ -190,7 +190,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   // Insert + index KB entries with the OWNER's user_id (never the admin's).
   // Insert as ONE atomic batch so a failure leaves zero new rows (no partial set)
-  // — a re-publish then can't create duplicate KB entries. Indexing runs after.
+  // - a re-publish then can't create duplicate KB entries. Indexing runs after.
   if (entries.length) {
     const { data: insertedRows, error: insertErr } = await supabase
       .from("knowledge_base")

@@ -2,22 +2,21 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Send, Sparkles } from "lucide-react";
+import { Lock, Send, Sparkles } from "lucide-react";
+import { SsButton } from "@/components/ss/controls";
 
 const MAX_LEN = 1000;
 
 /**
  * Manual reply composer for a conversation. Shown whenever the AI is silent on
- * the thread (paused, subscribed, bot-off, disqualified, or the lead muted) — i.e.
+ * the thread (paused, subscribed, bot-off, disqualified, or the lead muted) - i.e.
  * exactly when the bot won't answer on its own, so a manual/AI-assisted reply
  * can't collide with an automated one.
  *
  * "Draft AI reply" asks the server (POST /suggest-reply) for an on-brand draft
  * (the same engine the live bot uses) and drops it into the box to edit. "Send"
  * posts to /reply, which pushes the message to the contact via ManyChat and
- * records it as a `human_agent` message. Drafting delivers nothing — only Send does.
+ * records it as a `human_agent` message. Drafting delivers nothing - only Send does.
  */
 export function ConversationReplyBox({
   conversationId,
@@ -34,9 +33,16 @@ export function ConversationReplyBox({
 
   if (!botSilent) {
     return (
-      <p className="mt-4 text-sm text-muted-foreground">
-        Pause the AI above to take over and reply to this person yourself.
-      </p>
+      <div className="flex-none border-t border-ss-line bg-white px-5 py-4 sm:px-6">
+        <div className="flex items-center gap-2.5 rounded-chip border border-ss-line bg-ss-page px-3.5 py-3">
+          <Lock className="h-4 w-4 shrink-0 text-ss-muted" aria-hidden="true" />
+          <p className="text-[12.5px] leading-snug text-ss-body">
+            The AI is handling this thread. Pause it above to take over and reply
+            yourself - that way your message and an automated one can never
+            arrive at the same time.
+          </p>
+        </div>
+      </div>
     );
   }
 
@@ -67,7 +73,7 @@ export function ConversationReplyBox({
   }
 
   // Ask the server for an on-brand AI draft and drop it into the box (editable).
-  // Sends nothing — the owner reviews and clicks Send. Re-clickable to re-draft.
+  // Sends nothing - the owner reviews and clicks Send. Re-clickable to re-draft.
   function draftAiReply() {
     if (drafting || isPending) return;
     setError(null);
@@ -106,36 +112,48 @@ export function ConversationReplyBox({
   const busy = isPending || drafting;
 
   return (
-    <div className="mt-4 space-y-2">
-      <Textarea
+    <div className="flex-none border-t border-ss-line bg-white px-5 py-4 sm:px-6">
+      <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={onKeyDown}
-        rows={3}
+        rows={2}
         maxLength={MAX_LEN}
-        placeholder="Reply as a human, or click Draft AI reply to start from a suggestion..."
+        placeholder="Reply as a human - the AI stays paused on this thread until you resume it…"
         disabled={busy}
+        aria-label="Your reply"
+        className="w-full resize-none rounded-[13px] border border-ss-line bg-ss-page-alt px-[15px] py-3 text-[13px] leading-relaxed text-ss-ink outline-none transition-colors placeholder:text-ss-faint focus:border-ss-indigo-200 focus:bg-white focus:ring-2 focus:ring-ss-indigo/15 disabled:opacity-60"
       />
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-xs text-muted-foreground">
-          You&apos;re replying manually — the lead gets no automated reply on this
-          thread.
+
+      {error && (
+        <p role="alert" className="mt-2 text-[12px] font-medium text-ss-rose-ink">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-[11.5px] leading-none text-ss-muted">
+          Enter to send · Shift+Enter for a new line
         </span>
-        <div className="flex items-center gap-2">
-          <Button
+        <div className="ml-auto flex items-center gap-2">
+          <SsButton
             onClick={draftAiReply}
             disabled={busy}
-            variant="secondary"
-            size="sm"
+            variant="soft"
+            size="md"
           >
-            <Sparkles className="h-4 w-4 mr-2" />
-            {drafting ? "Drafting..." : "Draft AI reply"}
-          </Button>
-          <Button onClick={send} disabled={busy || !text.trim()} size="sm">
-            <Send className="h-4 w-4 mr-2" />
-            {isPending ? "Sending..." : "Send"}
-          </Button>
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            {drafting ? "Drafting…" : "Draft AI reply"}
+          </SsButton>
+          <SsButton
+            onClick={send}
+            disabled={busy || !text.trim()}
+            variant="primary"
+            size="md"
+          >
+            <Send className="h-4 w-4" aria-hidden="true" />
+            {isPending ? "Sending…" : "Send"}
+          </SsButton>
         </div>
       </div>
     </div>

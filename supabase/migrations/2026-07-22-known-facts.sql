@@ -1,5 +1,5 @@
 -- Known facts: a durable, compact list of concrete things the LEAD has stated or
--- shown about themselves and what they want (answers to qualifying questions —
+-- shown about themselves and what they want (answers to qualifying questions -
 -- credit score / numbers, goals, products, timeline, budget, decisions). Maintained
 -- in the background after each reply (lib/lead-facts.ts) and injected into the
 -- assistant's system prompt with a hard "never re-ask these" rule so the bot stops

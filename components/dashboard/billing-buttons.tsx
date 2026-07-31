@@ -1,15 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Loader2, CreditCard, ArrowRight } from "lucide-react";
+import { ArrowRight, CreditCard, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SsButton } from "@/components/ss/controls";
+import { money } from "@/lib/format";
 import { PRICING, type BillingCycle } from "@/lib/pricing";
 
+/**
+ * The Billing page's call to action.
+ *
+ * Two shapes. The default one is the plan card's subscribe control, with the
+ * monthly/yearly toggle. `annual` is the compact version inside the navy yearly
+ * panel - for someone who already subscribes, switching plans happens in
+ * Stripe's portal, so that variant sends them there rather than offering a
+ * second checkout that would create a duplicate subscription.
+ */
 export function BillingButtons({
   hasSubscription,
+  annual = false,
 }: {
   hasSubscription: boolean;
+  annual?: boolean;
 }) {
   const [loading, setLoading] = useState<"checkout" | "portal" | null>(null);
   const [cycle, setCycle] = useState<BillingCycle>("annual");
@@ -41,41 +53,70 @@ export function BillingButtons({
     setLoading(null);
   }
 
-  if (hasSubscription) {
+  // ---- The yearly panel's button --------------------------------------
+  if (annual) {
+    const busy = loading !== null;
     return (
-      <Button
-        onClick={() => go("portal", "/api/stripe/portal")}
-        disabled={loading !== null}
+      <SsButton
+        block
+        variant="primary"
         size="lg"
-        className="w-full sm:w-auto"
+        disabled={busy}
+        onClick={() =>
+          hasSubscription
+            ? go("portal", "/api/stripe/portal")
+            : go("checkout", "/api/stripe/checkout", { cycle: "annual" })
+        }
       >
-        {loading === "portal" ? (
-          <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden />
-        ) : (
-          <CreditCard className="h-4 w-4" aria-hidden />
-        )}
-        {loading === "portal" ? "Opening..." : "Manage subscription"}
-      </Button>
+        {busy ? (
+          <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
+        ) : null}
+        {busy
+          ? "Opening…"
+          : hasSubscription
+            ? "Switch in the billing portal"
+            : "Switch to yearly"}
+        {!busy && <ArrowRight className="h-[17px] w-[17px]" aria-hidden="true" />}
+      </SsButton>
     );
   }
 
+  // ---- Existing subscriber --------------------------------------------
+  if (hasSubscription) {
+    return (
+      <SsButton
+        onClick={() => go("portal", "/api/stripe/portal")}
+        disabled={loading !== null}
+        variant="navy"
+        size="lg"
+      >
+        {loading === "portal" ? (
+          <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
+        ) : (
+          <CreditCard className="h-4 w-4" aria-hidden="true" />
+        )}
+        {loading === "portal" ? "Opening…" : "Manage subscription"}
+      </SsButton>
+    );
+  }
+
+  // ---- New subscriber ---------------------------------------------------
   return (
-    <div className="space-y-4">
-      {/* Billing-cycle toggle */}
+    <div className="flex flex-col gap-3.5">
       <div
         role="group"
         aria-label="Billing cycle"
-        className="inline-flex items-center rounded-full border bg-muted/50 p-1 text-sm"
+        className="inline-flex w-fit items-center rounded-full border border-ss-line bg-white p-[3px]"
       >
         <button
           type="button"
           aria-pressed={cycle === "monthly"}
           onClick={() => setCycle("monthly")}
           className={cn(
-            "rounded-full px-4 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "rounded-full px-[15px] py-2 text-[12.5px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
             cycle === "monthly"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
+              ? "bg-ss-navy font-bold text-white"
+              : "font-medium text-ss-body hover:text-ss-ink"
           )}
         >
           Monthly
@@ -85,19 +126,19 @@ export function BillingButtons({
           aria-pressed={cycle === "annual"}
           onClick={() => setCycle("annual")}
           className={cn(
-            "flex items-center gap-2 rounded-full px-4 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "flex items-center gap-1.5 rounded-full px-[13px] py-2 text-[12.5px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
             cycle === "annual"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
+              ? "bg-ss-navy font-bold text-white"
+              : "font-medium text-ss-body hover:text-ss-ink"
           )}
         >
           Yearly
           <span
             className={cn(
-              "rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+              "rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase leading-[1.5] tracking-wide",
               cycle === "annual"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground"
+                ? "bg-ss-mint text-[#053f2e]"
+                : "bg-ss-chip text-ss-muted"
             )}
           >
             Save {PRICING.discountPct}%
@@ -105,34 +146,34 @@ export function BillingButtons({
         </button>
       </div>
 
-      <Button
+      <SsButton
         onClick={() => go("checkout", "/api/stripe/checkout", { cycle })}
         disabled={loading !== null}
+        variant="primary"
         size="lg"
         className="w-full sm:w-auto"
       >
         {loading === "checkout" ? (
           <>
-            <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden />
-            Redirecting to checkout...
+            <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
+            Redirecting to checkout…
           </>
         ) : (
           <>
             Subscribe ·{" "}
             {cycle === "annual"
-              ? `$${PRICING.annualPerMonth}/mo billed yearly`
-              : `$${PRICING.monthly}/mo`}
-            <ArrowRight className="h-4 w-4" aria-hidden />
+              ? `${money(PRICING.annualPerMonth)}/mo billed yearly`
+              : `${money(PRICING.monthly)}/mo`}
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </>
         )}
-      </Button>
+      </SsButton>
 
-      {cycle === "annual" && (
-        <p className="text-xs text-muted-foreground">
-          ${PRICING.annualTotal.toLocaleString()} billed once a year — save $
-          {PRICING.annualSavings.toLocaleString()}/yr.
-        </p>
-      )}
+      <p className="text-[11.5px] leading-relaxed text-ss-muted">
+        {cycle === "annual"
+          ? `${money(PRICING.annualTotal)} billed once a year - you keep ${money(PRICING.annualSavings)}.`
+          : "Cancel any time. No setup fees."}
+      </p>
     </div>
   );
 }

@@ -1,12 +1,12 @@
 // lib/openai.ts
-// Minimal OpenAI Chat Completions transport for plain (non-tool) text replies —
+// Minimal OpenAI Chat Completions transport for plain (non-tool) text replies -
 // used by the DM-reply path (lib/anthropic.ts generateReply). Raw fetch, no SDK,
 // mirroring lib/embeddings.ts / lib/openai-changes.ts which already use
 // OPENAI_API_KEY. Tool-calling lives in lib/openai-changes.ts.
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 
-/** A multimodal content part — text or an image (data: URL or https URL). */
+/** A multimodal content part - text or an image (data: URL or https URL). */
 export type OpenAIContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };

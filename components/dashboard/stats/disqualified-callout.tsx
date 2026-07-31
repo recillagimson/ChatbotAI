@@ -3,16 +3,16 @@ import { Badge } from "@/components/ui/badge";
 import { UserX } from "lucide-react";
 
 /**
- * DisqualifiedCallout — HONEST STUB
+ * DisqualifiedCallout - HONEST STUB
  *
  * Mirrors setty.ai's "Disqualified Leads" callout but rendered as a clearly
  * muted placeholder. We do not track disqualified leads; no fake number is
- * shown. The "—" value and "not tracked yet" badge make the stub status
+ * shown. The "-" value and "not tracked yet" badge make the stub status
  * immediately apparent.
  */
 export function DisqualifiedCallout() {
   return (
-    <div className="mb-8" aria-label="Disqualified leads — not tracked yet">
+    <div className="mb-8" aria-label="Disqualified leads - not tracked yet">
       <Card className="border border-border/40 bg-muted/20">
         <CardContent className="py-5 px-6">
           <div className="flex items-center gap-4">
@@ -43,16 +43,16 @@ export function DisqualifiedCallout() {
               </div>
               <p className="text-xs text-muted-foreground/60">
                 Mark conversations as disqualified to see them exit the funnel
-                here — coming soon.
+                here - coming soon.
               </p>
             </div>
 
             {/* Value placeholder */}
             <div
               className="text-2xl font-display font-semibold tabular-nums text-muted-foreground/30 shrink-0"
-              aria-label="No data — not tracked yet"
+              aria-label="No data - not tracked yet"
             >
-              —
+              -
             </div>
           </div>
         </CardContent>

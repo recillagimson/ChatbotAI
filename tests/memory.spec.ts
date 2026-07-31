@@ -44,7 +44,7 @@ const testBot = {
 } as unknown as Chatbot;
 
 test.describe("conversation memory (real OpenAI)", () => {
-  test.skip(!hasKey, "OPENAI_API_KEY not set — skipping live AI tests");
+  test.skip(!hasKey, "OPENAI_API_KEY not set - skipping live AI tests");
 
   test("summarizes a long chat: captures the lead's name and goal", async () => {
     const msgs = [

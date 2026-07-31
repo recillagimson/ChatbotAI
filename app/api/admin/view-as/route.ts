@@ -15,7 +15,7 @@ const Body = z.object({ clientId: z.string().uuid() });
  *
  * Superadmin-only. The cookie set here is also re-verified on every read in
  * lib/impersonation.ts (resolveViewAs re-checks superadmin), so a forged cookie
- * is inert for a normal user — this gate is the primary control.
+ * is inert for a normal user - this gate is the primary control.
  */
 export async function POST(request: NextRequest) {
   const admin = await requireSuperadmin();

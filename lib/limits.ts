@@ -4,11 +4,11 @@
  * Five orthogonal defenses, each fail-OPEN if Upstash Redis is not configured
  * (so local dev keeps working without setting up Redis):
  *
- *   1. Rate limit  — N messages per window per (chatbot, subscriber).
- *   2. Trivial ack — pure thanks/ok/emoji-ack → static canned reply, no AI.
- *   3. Duplicate   — same exact message within 30s → echo prior reply, no AI.
- *   4. Monthly cap — per-chatbot reply ceiling; over → static fallback, no AI.
- *   5. Last-reply cache — used by #3 to echo prior replies and by future ops.
+ *   1. Rate limit  - N messages per window per (chatbot, subscriber).
+ *   2. Trivial ack - pure thanks/ok/emoji-ack → static canned reply, no AI.
+ *   3. Duplicate   - same exact message within 30s → echo prior reply, no AI.
+ *   4. Monthly cap - per-chatbot reply ceiling; over → static fallback, no AI.
+ *   5. Last-reply cache - used by #3 to echo prior replies and by future ops.
  *
  * Tunables (all optional env vars, sane defaults):
  *   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN   (required for any gate)
@@ -66,7 +66,7 @@ export interface RateLimitResult {
   ok: boolean;
   limit: number;
   remaining: number;
-  /** True if Redis isn't configured — gate was bypassed. */
+  /** True if Redis isn't configured - gate was bypassed. */
   bypassed: boolean;
 }
 
@@ -83,7 +83,7 @@ export async function checkRateLimit(
     return { ok: r.success, limit: r.limit, remaining: r.remaining, bypassed: false };
   } catch (err) {
     console.error("[limits] rate-limit redis error", err);
-    // Fail open — better to let the message through than block a paying customer.
+    // Fail open - better to let the message through than block a paying customer.
     return { ok: true, limit: RATE_LIMIT_REQUESTS, remaining: RATE_LIMIT_REQUESTS, bypassed: true };
   }
 }
@@ -110,7 +110,7 @@ const ACK_SET = new Set([
 /**
  * Returns a canned reply string if the user's message is a pure ack /
  * thanks, or null to fall through to the AI pipeline. Bypasses Anthropic
- * entirely — typically 10-25% of real DMs in customer-service flows.
+ * entirely - typically 10-25% of real DMs in customer-service flows.
  */
 export function getTrivialReply(text: string): string | null {
   // Normalize: trim, lowercase, strip trailing punctuation, collapse spaces.

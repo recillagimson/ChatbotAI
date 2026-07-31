@@ -1,5 +1,5 @@
 /**
- * Instagram/Messenger messaging-window helpers — pure, dependency-light so both
+ * Instagram/Messenger messaging-window helpers - pure, dependency-light so both
  * the manual reply route and the push-reconciliation cron can share one source of
  * truth. Instagram/Messenger only allow a free-form (no-tag) send within 24h of the
  * contact's last message; the HUMAN_AGENT tag extends that to the channel's

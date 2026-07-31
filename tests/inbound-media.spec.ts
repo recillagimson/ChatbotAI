@@ -8,7 +8,7 @@
  *   through the production transcriber (transcribeAudio / Whisper) and assert the
  *   transcript matches.
  *
- * No dev server, no Supabase, no ManyChat — this isolates "does the AI truly
+ * No dev server, no Supabase, no ManyChat - this isolates "does the AI truly
  * understand the photo / voice note." Needs OPENAI_API_KEY (loaded from
  * .env.local by playwright.config.ts); skips if absent.
  *
@@ -48,7 +48,7 @@ const testBot = {
 } as unknown as Chatbot;
 
 test.describe("inbound media understanding (real OpenAI)", () => {
-  test.skip(!hasKey, "OPENAI_API_KEY not set — skipping live AI tests");
+  test.skip(!hasKey, "OPENAI_API_KEY not set - skipping live AI tests");
 
   test("analyzes a photo: reads the amount shown in the image", async ({ page }) => {
     // Render a realistic "screenshot a customer might send" with a known number.

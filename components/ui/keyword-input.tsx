@@ -18,7 +18,7 @@ export function splitKeywordTerms(raw: string): string[] {
  * list to add them all at once; Backspace on an empty field removes the last pill;
  * blur commits a pending draft. De-dupe is case-insensitive (keyword matching is
  * case-insensitive anyway). A long list scrolls inside a fixed max height instead
- * of ballooning the page. Controlled — it just edits the `value` string array.
+ * of ballooning the page. Controlled - it just edits the `value` string array.
  */
 export function KeywordInput({
   value,

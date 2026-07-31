@@ -1,5 +1,5 @@
 /**
- * Auto follow-up engine — step-based, hour-scale, media-rich.
+ * Auto follow-up engine - step-based, hour-scale, media-rich.
  *
  * When a contact goes silent, we proactively re-engage them with an ordered
  * sequence of steps. Each step waits `delay_hours` (from the contact's last
@@ -9,7 +9,7 @@
  *
  * Deliverability: sends carry NO message tag, so they must land inside the
  * channel's STANDARD 24h window (PLATFORM_META.standardWindowHours). That's why
- * the drip is hour-scale (3–22h) — it fits one window. Multi-day reach past 24h
+ * the drip is hour-scale (3–22h) - it fits one window. Multi-day reach past 24h
  * needs the Recurring Notifications opt-in (Phase 6). Confirmed leads and closed
  * windows stop the drip.
  *
@@ -25,7 +25,7 @@ import type { createServiceClient } from "@/lib/supabase/server";
 
 const HOUR_MS = 60 * 60 * 1000;
 
-/** Instagram's out-of-window cap (days) — kept for callers/telemetry. */
+/** Instagram's out-of-window cap (days) - kept for callers/telemetry. */
 export const IG_WINDOW_DAYS = PLATFORM_META.instagram.followupWindowDays ?? 7;
 
 /** Guardrail bounds on a step delay (hours). Kept inside one 24h window. */
@@ -34,14 +34,14 @@ export const FOLLOWUP_MAX_HOURS = 22;
 
 /**
  * Feature flag. The step engine sends inside the standard 24h window (no tag),
- * which IS deliverable — so this defaults ON. Nothing sends until a chatbot has
+ * which IS deliverable - so this defaults ON. Nothing sends until a chatbot has
  * `auto_followup_enabled` + steps configured, so enabling the machinery is safe.
  * Set FOLLOWUP_ENABLED=false to hard-disable the cron.
  */
 export const FOLLOWUP_ENABLED: boolean = process.env.FOLLOWUP_ENABLED !== "false";
 
 /**
- * Phase 6 — Recurring Notifications multi-day reach. OFF by default; enable once
+ * Phase 6 - Recurring Notifications multi-day reach. OFF by default; enable once
  * the ManyChat RN topic + opt-in are configured (see
  * docs/followup-recurring-notifications.md). When on, a contact who opted in
  * (conversations.rn_opt_in_at) can be followed up past the 24h standard window,
@@ -71,7 +71,7 @@ export function renderTemplate(
 }
 
 /**
- * True when SpeedSettr has stopped following up this lead — the same lead-states
+ * True when SpeedSettr has stopped following up this lead - the same lead-states
  * that pause the drip (evaluateFollowup's status/confirmed/bot_off/starting_later/
  * disqualified gates + the cron's user_muted_at/bot_off_at filters), collapsed to one boolean.
  * Used to mirror the "stop chasing" verdict to ManyChat as a subscriber tag
@@ -168,7 +168,7 @@ export function resolveSteps(chatbot: FollowupChatbot): FollowupStep[] {
 }
 
 /**
- * Resolve a chatbot's LINK drip steps (`auto_followup_link_steps`) — the sequence
+ * Resolve a chatbot's LINK drip steps (`auto_followup_link_steps`) - the sequence
  * used once the bot has sent the lead a link. No legacy-template fallback: an
  * empty result means "no link sequence configured", so the engine falls back to
  * the usual steps. Empty when the field is missing (pre-migration) or has no
@@ -198,7 +198,7 @@ export interface FollowupDecision {
   /** Value to write to conversations.followup_step_index after a successful send. */
   nextStepIndex?: number;
   /**
-   * True when the send falls PAST the channel's standard (24h, no-tag) window —
+   * True when the send falls PAST the channel's standard (24h, no-tag) window -
    * only possible on the RN path. Such sends need a message tag / RN delivery.
    */
   outOfWindow?: boolean;
@@ -217,7 +217,7 @@ export function evaluateFollowup(
   if (!chatbot.auto_followup_enabled) return { due: false, reason: "disabled" };
 
   // Sequence selection: once the bot has sent this lead a link (link_sent_at), use
-  // the LINK sequence — but only if one is actually configured. Otherwise (no link
+  // the LINK sequence - but only if one is actually configured. Otherwise (no link
   // sent, or no link steps set) run the usual sequence. So "if none is set, proceed
   // with the usual follow-up" falls out naturally.
   const linkSteps = conversation.link_sent_at ? resolveLinkSteps(chatbot) : [];
@@ -226,13 +226,13 @@ export function evaluateFollowup(
 
   if (conversation.status !== "active") return { due: false, reason: "not_active" };
   if (conversation.confirmed_at) return { due: false, reason: "confirmed" };
-  // Silenced by a ManyChat BOT_OFF tag sync — no drip while bot_off_at is set.
+  // Silenced by a ManyChat BOT_OFF tag sync - no drip while bot_off_at is set.
   if (conversation.bot_off_at) return { due: false, reason: "bot_off" };
   // A lead who asked to start on a future date is paused (AI replies stay on, this
   // only gates the proactive drip). Stays paused until the owner changes the tag.
   if (conversation.tag === "starting_later") return { due: false, reason: "starting_later" };
 
-  // Disqualified / detected-bot threads are dead — no drip, ever (owner-only
+  // Disqualified / detected-bot threads are dead - no drip, ever (owner-only
   // reopen). The bot is also fully silent on the reactive path via the webhook.
   if (conversation.tag === "disqualified" || conversation.tag === "bot") {
     return { due: false, reason: "disqualified" };
@@ -290,7 +290,7 @@ export function evaluateFollowup(
 
   // A step that fires a flow (Instagram or Facebook slot) carries no message tag,
   // so it can only deliver inside the standard 24h window. `outOfWindow` is only
-  // ever true on the RN path (past 24h); never select a flow step there — it
+  // ever true on the RN path (past 24h); never select a flow step there - it
   // would fire tag-less and fail/retry-loop.
   if (selectFlow(step, platform) && outOfWindow) return { due: false, reason: "window_closed" };
 
@@ -308,11 +308,11 @@ export function evaluateFollowup(
  * The "let the AI keep following up" tail step used by repeat_last mode once the
  * drip passes the last configured step: keep that last step's delay cadence, drop
  * all static content (text / assets / flows), and force AI generation so the cron's
- * generateFollowupText composes a fresh nudge from the conversation each time —
+ * generateFollowupText composes a fresh nudge from the conversation each time -
  * rather than re-sending the same final message on a loop. Pure text: on the rare
  * AI-generation failure the step has no static fallback, so the cron skips the send
  * WITHOUT advancing state (its ai_no_content guard) and the next cron run retries
- * generation at the normal cadence — never a stuck loop.
+ * generation at the normal cadence - never a stuck loop.
  */
 function aiTailStep(last: FollowupStep): FollowupStep {
   return {
@@ -356,7 +356,7 @@ export function selectFlow(
  * conditional UPDATE guarded on the exact state this run evaluated
  * (followup_step_index + last_followup_at). If another concurrent run already
  * claimed the row (overlapping cron, manual trigger), the guard matches 0 rows
- * and we return null WITHOUT sending — no double-send. If the send then fails,
+ * and we return null WITHOUT sending - no double-send. If the send then fails,
  * the claim is best-effort reverted so the next run retries while still
  * in-window (preserving the original retry-on-failure property).
  *
@@ -426,7 +426,7 @@ export async function sendFollowup(
 
   // Nothing deliverable: a caption-less step whose asset(s) were ALL deleted from
   // the library (outbound empty AND no caption text). The claim above already
-  // advanced past this broken step so the drip doesn't get stuck — but don't send
+  // advanced past this broken step so the drip doesn't get stuck - but don't send
   // (ManyChat would no-op anyway), don't log a phantom "delivered" message, and
   // don't count it as a send. Returning null makes the cron record a skip; the
   // per-key followup_asset_missing diagnostics already fired upstream.
@@ -459,7 +459,7 @@ export async function sendFollowup(
   } catch (err) {
     // 2a. Send failed: best-effort revert of OUR claim (guarded on the values we
     // wrote) so the next cron run retries this step. If the revert itself fails,
-    // the step is skipped rather than double-sent — the safer failure mode.
+    // the step is skipped rather than double-sent - the safer failure mode.
     await supabase
       .from("conversations")
       .update({
@@ -478,7 +478,7 @@ export async function sendFollowup(
   }
 
   // 3. Record the outbound message. One row per step (matches the atomic-claim
-  // model); the first asset is the representative media. content is NOT NULL —
+  // model); the first asset is the representative media. content is NOT NULL -
   // use the caption, or a note for media-only steps. media_type stays a real MIME
   // (or null): the inbox renderer matches on startsWith("image/"|"audio/"|"video/").
   const first = flow ? null : (assets[0] ?? null);
@@ -497,7 +497,7 @@ export async function sendFollowup(
     role: "assistant",
     content,
     // AI-composed follow-up (overrideText from generateFollowupText) is genuinely
-    // model-authored — tag it like the reactive AI path does; static/flow steps stay false.
+    // model-authored - tag it like the reactive AI path does; static/flow steps stay false.
     ai_generated: !!opts?.overrideText,
     tokens_used: 0,
     media_url: first?.url ?? null,

@@ -10,7 +10,10 @@ const Label = React.forwardRef<
   <LabelPrimitive.Root
     ref={ref}
     className={cn(
-      "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+      // The blueprint sets field labels a step smaller and heavier than body
+      // copy, in the muted ink - a label should name the field, not compete
+      // with the value typed into it.
+      "text-xs font-semibold leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
       className
     )}
     {...props}

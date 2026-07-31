@@ -107,10 +107,10 @@ export function KnowledgeBaseForm({
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        Add knowledge in <b>one</b> of two ways — you only need to do one.
+        Add knowledge in <b>one</b> of two ways - you only need to do one.
       </p>
 
-      {/* Option 1 — Upload files */}
+      {/* Option 1 - Upload files */}
       <form
         onSubmit={handleUpload}
         className="rounded-lg border bg-card p-5 space-y-3"
@@ -119,7 +119,7 @@ export function KnowledgeBaseForm({
           <h3 className="font-semibold">Option 1 · Upload files</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             PDF, DOCX, TXT, MD, or CSV (max 10 MB each). We extract the text for
-            you — no title needed.
+            you - no title needed.
           </p>
         </div>
         <Input
@@ -152,7 +152,7 @@ export function KnowledgeBaseForm({
         <div className="h-px flex-1 bg-border" />
       </div>
 
-      {/* Option 2 — Paste text */}
+      {/* Option 2 - Paste text */}
       <form
         onSubmit={handleSubmit}
         className="rounded-lg border bg-card p-5 space-y-4"
@@ -160,7 +160,7 @@ export function KnowledgeBaseForm({
         <div>
           <h3 className="font-semibold">Option 2 · Paste text</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Type or paste one entry — a single FAQ, policy, or note. Both fields
+            Type or paste one entry - a single FAQ, policy, or note. Both fields
             are required.
           </p>
         </div>

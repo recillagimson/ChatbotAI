@@ -16,7 +16,7 @@ const ALLOWED_TYPES = new Set<string>([...CLAUDE_IMAGE_TYPES, "application/pdf"]
 /**
  * Is this file allowed? Images/PDF are matched by MIME. For the request-changes
  * chat (scope="request") we ALSO accept knowledge documents (DOCX/TXT/MD/CSV) by
- * extension — their MIME types are unreliable across browsers/OSes.
+ * extension - their MIME types are unreliable across browsers/OSes.
  */
 function isAllowedFile(file: File, scope: "feedback" | "request"): boolean {
   if (ALLOWED_TYPES.has(file.type)) return true;

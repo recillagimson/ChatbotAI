@@ -35,7 +35,7 @@ type TestRow = Pick<
 /**
  * ADMIN-ONLY test affordance: fire a conversation's NEXT follow-up step right now,
  * bypassing the silence-delay + tag gates (evaluateFollowup is NOT called) so any
- * test conversation can exercise the real sendFollowup delivery path — including the
+ * test conversation can exercise the real sendFollowup delivery path - including the
  * Option B ManyChat voice/video FLOW trigger. sendFollowup's atomic claim still
  * refuses a self-muted or paused/taken-over chat (safety floor). Repeated calls walk
  * and wrap the sequence (VM1 -> VM2 -> VM3 -> VM1 ...). Never throws to the client.

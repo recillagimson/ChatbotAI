@@ -97,7 +97,7 @@ export default async function AdminRequestReviewPage({
   // Current text of the section this request targets (the "before" for review).
   const sectionCol = sectionColumnFor(cr.category);
   const currentSection = sectionCol && chatbot ? (chatbot[sectionCol] ?? "") : "";
-  // All three sections — the "before" for an "overall" request's multi-section diff.
+  // All three sections - the "before" for an "overall" request's multi-section diff.
   const currentSections = {
     persona_section: chatbot?.persona_section ?? "",
     offers_section: chatbot?.offers_section ?? "",
@@ -147,7 +147,7 @@ export default async function AdminRequestReviewPage({
 
       {cr.status === "draft" ? (
         <p className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          This request is still a draft — the client hasn&apos;t submitted it for
+          This request is still a draft - the client hasn&apos;t submitted it for
           review yet. It will appear in the queue once they submit it.
         </p>
       ) : chatbot ? (

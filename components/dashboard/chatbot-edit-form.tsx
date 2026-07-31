@@ -14,7 +14,7 @@ import type { Chatbot } from "@/lib/types";
 
 export function ChatbotEditForm({
   chatbot,
-  // Admins (superadmins) may edit Offers & Rebuttals directly here — both on their
+  // Admins (superadmins) may edit Offers & Rebuttals directly here - both on their
   // own bots and while viewing a client (view-as). Regular owners keep the
   // read-only, team-reviewed Request Change flow. The write is authorized by the
   // "admin all chatbots" RLS overlay; this prop only unlocks the UI.
@@ -138,14 +138,14 @@ export function ChatbotEditForm({
         />
         <p className="text-xs text-muted-foreground">
           How long to wait for the lead to finish before replying, so several quick
-          messages — or a photo sent with its caption — become ONE reply instead of a
+          messages - or a photo sent with its caption - become ONE reply instead of a
           separate reply to each. The timer resets every time they send another
           message. {MIN_DEBOUNCE_SECONDS}–{MAX_DEBOUNCE_SECONDS}s; 0 replies
           immediately. Higher means fewer split replies but a slower first reply.
         </p>
       </div>
 
-      {/* 1. Personality / Tone — directly editable. */}
+      {/* 1. Personality / Tone - directly editable. */}
       <SectionField
         id="edit-persona"
         label="Personality / Tone"
@@ -155,11 +155,11 @@ export function ChatbotEditForm({
           setSaved(false);
         }}
         rows={10}
-        placeholder="Who the bot is and how it sounds — its name, voice, tone, and personality. e.g. 'You are Max, a warm, upbeat concierge for Acme…'"
+        placeholder="Who the bot is and how it sounds - its name, voice, tone, and personality. e.g. 'You are Max, a warm, upbeat concierge for Acme…'"
         helper="This defines the bot's voice and identity. Upload a file (PDF, Word, or text) to drop its contents in, then edit. Safety rules and the knowledge base are added automatically."
       />
 
-      {/* 2 & 3. Offers and Rebuttals — read-only for owners (changed via Request
+      {/* 2 & 3. Offers and Rebuttals - read-only for owners (changed via Request
           Change, team-reviewed); directly editable for admins (own bots + view-as). */}
       {canEditSections ? (
         <>
@@ -173,7 +173,7 @@ export function ChatbotEditForm({
             }}
             rows={7}
             placeholder="Offers, services, what's included/excluded, pricing, and links."
-            helper="Admin: editing directly — saves to the live bot, bypassing the Request Change review."
+            helper="Admin: editing directly - saves to the live bot, bypassing the Request Change review."
           />
           <SectionField
             id="edit-rebuttals"
@@ -185,7 +185,7 @@ export function ChatbotEditForm({
             }}
             rows={7}
             placeholder="Common objections and how to handle them, plus FAQs."
-            helper="Admin: editing directly — saves to the live bot, bypassing the Request Change review."
+            helper="Admin: editing directly - saves to the live bot, bypassing the Request Change review."
           />
         </>
       ) : (
@@ -247,7 +247,7 @@ function ReadOnlySection({
         readOnly
         rows={7}
         value={value?.trim() || ""}
-        placeholder="Not set yet — use “Request a change” to have the team add this section."
+        placeholder="Not set yet - use “Request a change” to have the team add this section."
         className="resize-y bg-muted/40 text-muted-foreground"
       />
       <p className="text-xs text-muted-foreground">

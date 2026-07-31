@@ -1,5 +1,5 @@
 /**
- * "Is the bot silent on this thread?" — the single source of truth for whether
+ * "Is the bot silent on this thread?" - the single source of truth for whether
  * the automated assistant will NOT reply on its own to the next inbound message.
  * Mirrors the reactive-silence gates in the ManyChat webhook (route.ts):
  *   - status = ai_paused          → human takeover (gate 6)

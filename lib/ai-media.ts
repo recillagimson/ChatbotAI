@@ -2,7 +2,7 @@
  * AI-triggered media directives.
  *
  * When a chatbot has `ai_media_enabled`, the reply model is told about its
- * follow-up asset library and may emit a directive naming an asset to send —
+ * follow-up asset library and may emit a directive naming an asset to send -
  * e.g. `[[SEND_ASSET: results_video]]` on its own line. This module parses those
  * directives out of the reply text and returns the cleaned text + the ordered,
  * de-duplicated asset keys. The webhook then resolves each key to a FollowupAsset

@@ -85,10 +85,31 @@ export function resolveRange(params: { range?: string; from?: string; to?: strin
   return { from: from.toISOString(), to: to.toISOString(), rangeKey: key === "custom" ? "30d" : key };
 }
 
+/**
+ * Why the report didn't come back. Worth telling apart, because the fix differs
+ * and the wrong message sends someone to re-run a migration that is already
+ * applied:
+ *  - `not_installed` - the SQL functions were never applied to this database.
+ *  - `timed_out`     - they're installed, but the query exceeded the statement
+ *                      timeout. Real symptom on a large multi-tenant dataset.
+ *  - `failed`        - anything else (permissions, a transport error).
+ */
+export type AnalyticsProblem = "not_installed" | "timed_out" | "failed";
+
+export interface AnalyticsResult {
+  overview: AnalyticsOverview | null;
+  problem: AnalyticsProblem | null;
+}
+
+/** Postgres/PostgREST codes for "that function isn't there". */
+const MISSING_FN_CODES = new Set(["PGRST202", "PGRST203", "42883"]);
+/** Postgres: canceling statement due to statement timeout. */
+const TIMEOUT_CODE = "57014";
+
 export async function getAnalyticsOverview(
   supabase: ServerClient,
   opts: { from: string; to: string; chatbotId?: string | null }
-): Promise<AnalyticsOverview | null> {
+): Promise<AnalyticsResult> {
   const { data, error } = await supabase.rpc("analytics_overview", {
     p_from: opts.from,
     p_to: opts.to,
@@ -96,9 +117,19 @@ export async function getAnalyticsOverview(
   });
   if (error) {
     console.error("[analytics] overview failed", error);
-    return null;
+    return { overview: null, problem: classifyAnalyticsError(error) };
   }
-  return data as AnalyticsOverview | null;
+  return { overview: data as AnalyticsOverview | null, problem: null };
+}
+
+/** Map a PostgREST error to the reason a screen should show. */
+export function classifyAnalyticsError(error: {
+  code?: string | null;
+}): AnalyticsProblem {
+  const code = error.code ?? "";
+  if (MISSING_FN_CODES.has(code)) return "not_installed";
+  if (code === TIMEOUT_CODE) return "timed_out";
+  return "failed";
 }
 
 export async function getStageConversations(
@@ -120,7 +151,7 @@ export async function getStageConversations(
   return (data ?? []) as StageConversation[];
 }
 
-/** Conversion percentage; returns null when the denominator is 0 (caller renders "—"). */
+/** Conversion percentage; returns null when the denominator is 0 (caller renders "-"). */
 export function safePct(numerator: number, denominator: number): number | null {
   if (!denominator) return null;
   return (numerator / denominator) * 100;

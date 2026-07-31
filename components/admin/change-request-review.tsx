@@ -62,7 +62,7 @@ export function ChangeRequestReview({
         ? ""
         : (request.proposed?.system_prompt ?? chatbot.system_prompt ?? "")
   );
-  // "overall" — one editable revised text per affected section (initialized from the
+  // "overall" - one editable revised text per affected section (initialized from the
   // AI proposal). Approve sends these as `sections`.
   const [sections, setSections] = useState<{ section: SectionColumn; content: string }[]>(
     (request.proposed?.sections ?? []).map((s) => ({
@@ -165,7 +165,7 @@ export function ChangeRequestReview({
         className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
       >
         <span className="font-medium">Reminder:</span> Review the full
-        conversation below before publishing — an approved + published change
+        conversation below before publishing - an approved + published change
         goes live on the client&apos;s bot.
       </div>
 
@@ -275,7 +275,7 @@ export function ChangeRequestReview({
           )}
           {request.draft_error && (
             <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              The AI draft failed: {request.draft_error} — use Regenerate.
+              The AI draft failed: {request.draft_error} - use Regenerate.
             </p>
           )}
         </CardContent>
@@ -296,7 +296,7 @@ export function ChangeRequestReview({
               />
             )}
             <Label htmlFor="proposed-system-prompt" className={isSingleSection ? "text-xs font-medium uppercase tracking-wide text-muted-foreground" : "sr-only"}>
-              {isSingleSection ? "Revised (after) — editable" : "Proposed system prompt"}
+              {isSingleSection ? "Revised (after) - editable" : "Proposed system prompt"}
             </Label>
             <Textarea
               id="proposed-system-prompt"
@@ -311,7 +311,7 @@ export function ChangeRequestReview({
                   Current live prompt
                 </summary>
                 <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs">
-                  {chatbot.system_prompt || "(none — generic mode)"}
+                  {chatbot.system_prompt || "(none - generic mode)"}
                 </pre>
               </details>
             )}
@@ -319,7 +319,7 @@ export function ChangeRequestReview({
         </Card>
       )}
 
-      {/* 2b. "Overall" — one editable before/after per affected section. */}
+      {/* 2b. "Overall" - one editable before/after per affected section. */}
       {isOverall && (
         <Card>
           <CardHeader>
@@ -328,7 +328,7 @@ export function ChangeRequestReview({
           <CardContent className="space-y-6">
             {sections.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No section changes proposed — this request only adds knowledge (below).
+                No section changes proposed - this request only adds knowledge (below).
               </p>
             ) : (
               sections.map((s, i) => (
@@ -342,7 +342,7 @@ export function ChangeRequestReview({
                     htmlFor={`section-${s.section}`}
                     className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
                   >
-                    {SECTION_LABELS[s.section]} — revised (after), editable
+                    {SECTION_LABELS[s.section]} - revised (after), editable
                   </Label>
                   <Textarea
                     id={`section-${s.section}`}
@@ -515,7 +515,7 @@ export function ChangeRequestReview({
           </CardHeader>
           <CardContent className="space-y-5">
             <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
-              Approved — not live yet. Publish to apply these changes to the
+              Approved - not live yet. Publish to apply these changes to the
               client&apos;s bot.
             </p>
             <div className="flex flex-wrap gap-3">

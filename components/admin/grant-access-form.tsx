@@ -62,7 +62,7 @@ export function GrantAccessForm({
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
         setError(
           data?.error === "has_paid_subscription"
-            ? "This client already has an active paid subscription — no comp needed."
+            ? "This client already has an active paid subscription - no comp needed."
             : data?.error || "Something went wrong."
         );
         setBusy(null);

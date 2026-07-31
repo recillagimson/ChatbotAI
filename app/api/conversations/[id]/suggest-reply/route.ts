@@ -15,9 +15,9 @@ const MAX_LEN = 1000; // ManyChat per-message ceiling (mirrors the /reply route)
  * reply engine the live bot uses (persona, KB, known facts, memory summary,
  * scheduled start, trained responses) over the stored transcript and returns the
  * text for the composer to prefill. It delivers nothing and writes no
- * conversation/message rows — the owner reviews, edits, and sends via POST /reply.
+ * conversation/message rows - the owner reviews, edits, and sends via POST /reply.
  * (buildKbBlock may refresh the chatbot's retrieval_active flag, exactly as the
- * live path does — idempotent KB-mode housekeeping, not conversation state.)
+ * live path does - idempotent KB-mode housekeeping, not conversation state.)
  *
  * Auth = the cookie session + RLS, scoped to the caller's own conversation (with
  * an explicit user_id check), so one tenant can never draft into another's thread.
@@ -83,9 +83,9 @@ export async function POST(
     );
   }
   const userMessage = all[lastLeadIdx].content;
-  // Everything else is context, in chronological order — exclude ONLY the row
+  // Everything else is context, in chronological order - exclude ONLY the row
   // we're drafting a reply to. (Truncating the tail would hide our OWN most recent
-  // reply — e.g. a subscribed thread whose last row is the bot's confirmation — and
+  // reply - e.g. a subscribed thread whose last row is the bot's confirmation - and
   // the draft would then repeat or contradict it.) `human_agent` = the owner's past
   // manual replies are OUR side, so map them to `assistant`; generateReply only
   // distinguishes assistant vs. everything-else, and mapping them to `user` would
@@ -135,7 +135,7 @@ export async function POST(
 
     if (!draft) {
       return NextResponse.json(
-        { error: "Couldn't draft a reply — try again." },
+        { error: "Couldn't draft a reply - try again." },
         { status: 502 }
       );
     }
@@ -143,7 +143,7 @@ export async function POST(
   } catch (err) {
     console.error("[suggest-reply] generate failed", err);
     return NextResponse.json(
-      { error: "Couldn't draft a reply — try again." },
+      { error: "Couldn't draft a reply - try again." },
       { status: 502 }
     );
   }

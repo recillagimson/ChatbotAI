@@ -20,7 +20,7 @@ export function CopyButton({ value, className, label = "Copy" }: CopyButtonProps
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // clipboard unavailable (e.g. insecure context) — fail silently
+      // clipboard unavailable (e.g. insecure context) - fail silently
     }
   }
 

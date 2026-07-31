@@ -87,7 +87,7 @@ async function run() {
     )
     .eq("status", "active")
     .is("confirmed_at", null)
-    // Never drip to a lead who self-muted the AI ("stopmessage") — proactive
+    // Never drip to a lead who self-muted the AI ("stopmessage") - proactive
     // follow-ups would contradict the "I'll hold off" confirmation and risk an
     // IG spam report. NOTE: filtering on this column requires the
     // 2026-07-06-user-mute migration applied (an unknown column errors the whole
@@ -105,8 +105,8 @@ async function run() {
 
   const rows = (data ?? []) as unknown as CandidateRow[];
 
-  // Only send for owners with active access (active/trialing, and — for a comp
-  // grant — not past its expiry). Same predicate the DM webhook uses.
+  // Only send for owners with active access (active/trialing, and - for a comp
+  // grant - not past its expiry). Same predicate the DM webhook uses.
   const ownerIds = Array.from(new Set(rows.map((r) => r.chatbots.user_id)));
   const activeOwners = new Set<string>();
   if (ownerIds.length) {
@@ -166,7 +166,7 @@ async function run() {
     // migration; the select above already depends on it.) Edge (safe direction):
     // a message-mode group's first match that landed mid-burst or was text-less
     // isn't marked in keyword_fired, so that engaged contact simply gets no
-    // proactive drip — never the reverse (a stranger is never dripped).
+    // proactive drip - never the reverse (a stranger is never dripped).
     if (cb.keyword_gate_enabled && !(Array.isArray(row.keyword_fired) && row.keyword_fired.length)) {
       skipped++;
       bump(reasons, "keyword_gated");
@@ -216,10 +216,10 @@ async function run() {
       }
     }
     // AI Follow up: when this step is AI-driven, write the message from the
-    // conversation. Best-effort — on empty/failure overrideText stays undefined and
+    // conversation. Best-effort - on empty/failure overrideText stays undefined and
     // sendFollowup falls back to the step's static text (or safely skips).
     // Only generate when the step is AI-driven AND no flow will fire for this
-    // subscriber's platform — a flow trigger ignores the caption, so generating
+    // subscriber's platform - a flow trigger ignores the caption, so generating
     // would waste an LLM call and mislabel the recorded message.
     let overrideText: string | null | undefined;
     if (decision.step.ai_generate && !selectFlow(decision.step, toPlatform(row.platform))) {
@@ -266,10 +266,10 @@ async function run() {
     // static fallback (no caption, assets, or flow): skip WITHOUT claiming. Otherwise
     // sendFollowup's atomic claim advances last_followup_at/step_index/followup_count
     // BEFORE its own nothing-deliverable guard, silently burning a full step delay
-    // before the next retry (and inflating the count) — and the cron would mislabel
+    // before the next retry (and inflating the count) - and the cron would mislabel
     // it as "claim_lost". Skipping here leaves the row due so the NEXT cron run
     // re-attempts generation at the normal cadence. (A permanently-broken
-    // all-assets-deleted static step still advance-skips inside sendFollowup — that
+    // all-assets-deleted static step still advance-skips inside sendFollowup - that
     // path is intentional; this guard only catches the transient AI-failure tail.)
     if (
       decision.step.ai_generate &&
@@ -306,7 +306,7 @@ async function run() {
         }
       );
       if (content === null) {
-        // Another concurrent run claimed this conversation first — not an error.
+        // Another concurrent run claimed this conversation first - not an error.
         skipped++;
         bump(reasons, "claim_lost");
       } else {

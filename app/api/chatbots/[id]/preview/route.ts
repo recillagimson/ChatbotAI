@@ -13,7 +13,7 @@ const MAX_HISTORY = 40;
 /**
  * Bot Trainer sandbox reply. Runs the SAME reply pipeline as the ManyChat webhook
  * (persona + KB + guardrails + trained responses) with no ManyChat delivery and no
- * stored conversation — the transcript is ephemeral (client-held). Lets the owner
+ * stored conversation - the transcript is ephemeral (client-held). Lets the owner
  * test the bot and preview a correction (trainingPairsOverride) before saving.
  *
  * Auth: getCurrentUser() (impersonation-aware) + RLS; the chatbot is loaded scoped
@@ -93,7 +93,7 @@ export async function POST(
       scheduledStart: null,
       trainedResponses: renderTrainedResponses(pairs),
     });
-    // Diagnostics so the owner can SEE why a reply looked "off" — an empty KB
+    // Diagnostics so the owner can SEE why a reply looked "off" - an empty KB
     // (kbChars 0 in retrieval mode = the model got no knowledge base for this
     // message), which prompt path is active, and how many corrections applied.
     const kbEmpty = isEmptyKbBlock(kb.block);

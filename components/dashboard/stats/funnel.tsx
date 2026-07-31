@@ -23,7 +23,7 @@ interface FunnelProps {
 /**
  * Conversation Funnel card.
  * Renders stage bars with interleaved conversion pills and optional expanded
- * conversation lists. All expansion is URL-driven via <Link> — no client JS.
+ * conversation lists. All expansion is URL-driven via <Link> - no client JS.
  */
 export function Funnel({
   stages,
@@ -74,7 +74,7 @@ export function Funnel({
                 {idx > 0 && (
                   <ConversionPill
                     pct={
-                      // Show null ("—") when prev is 0 or this stage is stub
+                      // Show null ("-") when prev is 0 or this stage is stub
                       stage.real && stage.count !== null
                         ? safePct(
                             stage.count,

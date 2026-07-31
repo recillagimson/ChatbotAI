@@ -1,5 +1,5 @@
 // lib/embeddings.ts
-// Thin OpenAI embeddings client (fetch-based, no SDK dependency — mirrors
+// Thin OpenAI embeddings client (fetch-based, no SDK dependency - mirrors
 // lib/manychat.ts). Optional: with no OPENAI_API_KEY, isEmbeddingsEnabled()
 // is false and the whole retrieval feature stays dormant (full-context only).
 import {
@@ -46,7 +46,7 @@ async function postEmbeddings(
     if (!res.ok) {
       const body = await res.text();
       // 401 (bad/expired key) and 429 insufficient_quota (out of credit) never
-      // succeed on retry — mark them non-retryable so callers fail fast instead
+      // succeed on retry - mark them non-retryable so callers fail fast instead
       // of paying for 4 doomed attempts. Retry only transient 5xx / plain 429.
       const fatal =
         res.status === 401 ||

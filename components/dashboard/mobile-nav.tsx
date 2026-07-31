@@ -3,39 +3,47 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Logo } from "@/components/brand/logo";
-import { SidebarNav } from "@/components/dashboard/sidebar-nav";
+import { SidebarNav, BoltMark, type NavCounts } from "@/components/dashboard/sidebar-nav";
+import { MobileTabBar } from "@/components/dashboard/mobile-tabbar";
+import { AiLiveToggle } from "@/components/dashboard/ai-live-toggle";
+import { BotSwitcher } from "@/components/dashboard/bot-switcher";
+import type { WorkspaceBot } from "@/lib/workspace";
 
 /**
- * Mobile navigation for the dashboard shell — visible only below `lg`, where the
- * desktop rail ([sidebar.tsx]) is hidden. A sticky top app bar carries the brand
- * and a hamburger; tapping it slides in a drawer containing the shared
- * [SidebarNav]. The drawer traps nothing heavier than it needs to: Escape and a
- * scrim tap close it, focus moves in on open and returns to the trigger on close,
- * and it is `inert` while shut so its links stay out of the tab order.
+ * The mobile shell - a slim brand header at the top, the bottom tab bar at
+ * thumb height, and a "More" drawer holding the full navigation.
+ *
+ * The header stays light rather than navy so the phone screens read as one
+ * continuous #f6f7fc surface the way the design draws them; the navy is saved
+ * for the drawer and the hero cards, where it means something.
  */
 export function MobileNav({
   isSuperadmin = false,
   impersonating = false,
+  bots,
+  aiLive,
+  counts,
+  planName,
+  planNote,
 }: {
   isSuperadmin?: boolean;
   impersonating?: boolean;
+  bots: WorkspaceBot[];
+  aiLive: boolean;
+  counts?: NavCounts;
+  planName?: string;
+  planNote?: string;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const close = () => setOpen(false);
 
-  // Close on route change (belt-and-suspenders alongside SidebarNav's onNavigate).
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  useEffect(() => setOpen(false), [pathname]);
 
-  // Escape closes; move focus into the drawer on open and back to the trigger on close.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -43,54 +51,48 @@ export function MobileNav({
     };
     document.addEventListener("keydown", onKey);
     closeRef.current?.focus();
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      triggerRef.current?.focus();
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
   return (
     <>
-      {/* Top app bar — mobile/tablet only. */}
-      <header className="lg:hidden sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-white/10 bg-[hsl(var(--sidebar))] px-3 text-white">
-        <button
-          type="button"
-          ref={triggerRef}
-          onClick={() => setOpen(true)}
-          aria-label="Open navigation menu"
-          aria-expanded={open}
-          aria-controls="mobile-nav-drawer"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-md text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+      {/* Top strip - brand, chatbot scope, and the AI master switch. Even on a
+          phone the design refuses to hide whether replies are going out. */}
+      <header className="sticky top-0 z-30 flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-ss-line bg-ss-page px-4 py-2.5 lg:hidden">
+        <Link
+          href="/dashboard"
+          aria-label="SpeedSettr"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-ss-indigo text-white"
         >
-          <Menu className="h-5 w-5" aria-hidden="true" />
-        </button>
-        <Link href="/dashboard" aria-label="SpeedSettr" className="inline-flex">
-          <Logo white size="sm" />
+          <BoltMark size={18} />
         </Link>
+        <BotSwitcher bots={bots} className="min-w-0 flex-1" />
+        <AiLiveToggle
+          live={aiLive}
+          botIds={bots.map((b) => b.id)}
+          className="shrink-0"
+        />
       </header>
 
-      {/* Drawer — while closed the panel is `invisible`, which pulls it out of the
-          tab order and the a11y tree; `visibility` stays in the transition list so
-          the slide-out still animates before it hides. */}
+      {/* More drawer. `invisible` while shut keeps its links out of the tab
+          order; visibility stays in the transition so the slide still animates. */}
       <div className="lg:hidden">
-        {/* Scrim */}
         <div
           onClick={close}
           aria-hidden="true"
           className={cn(
-            "fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 motion-reduce:transition-none",
+            "fixed inset-0 z-40 bg-ss-navy/40 transition-opacity duration-300 motion-reduce:transition-none",
             open ? "opacity-100" : "pointer-events-none opacity-0"
           )}
         />
-        {/* Panel */}
         <aside
           id="mobile-nav-drawer"
           role="dialog"
           aria-modal="true"
           aria-label="Navigation"
           className={cn(
-            "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))] shadow-2xl transition-[transform,visibility] duration-300 ease-out motion-reduce:transition-none",
-            open ? "translate-x-0 visible" : "-translate-x-full invisible"
+            "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col bg-ss-navy text-white shadow-2xl transition-[transform,visibility] duration-300 ease-out motion-reduce:transition-none",
+            open ? "visible translate-x-0" : "invisible -translate-x-full"
           )}
         >
           <button
@@ -98,17 +100,26 @@ export function MobileNav({
             ref={closeRef}
             onClick={close}
             aria-label="Close navigation menu"
-            className="absolute right-2 top-2.5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            className="absolute right-2 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-ctl-lg text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
           <SidebarNav
             isSuperadmin={isSuperadmin}
             impersonating={impersonating}
+            counts={counts}
+            planName={planName}
+            planNote={planNote}
             onNavigate={close}
           />
         </aside>
       </div>
+
+      <MobileTabBar
+        counts={counts}
+        moreOpen={open}
+        onMore={() => setOpen((v) => !v)}
+      />
     </>
   );
 }

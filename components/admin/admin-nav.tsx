@@ -13,7 +13,7 @@ const nav = [
   { href: "/admin/feedback", label: "Feedback", icon: MessageSquare },
 ];
 
-/** The three admin destinations — rendered inline on desktop and in a
+/** The three admin destinations - rendered inline on desktop and in a
  *  horizontally scrollable row on mobile so nothing crowds or clips. */
 function NavItems({ pathname }: { pathname: string }) {
   return (

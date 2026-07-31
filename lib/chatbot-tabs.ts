@@ -1,7 +1,7 @@
 // lib/chatbot-tabs.ts
 // Single source of truth for the manage-chatbot page's sub-tabs. Drives both the
 // client segmented-control (components/dashboard/chatbot-tabs-bar.tsx) and the
-// server page's ?tab= validation (app/(dashboard)/chatbots/[id]/page.tsx) — same
+// server page's ?tab= validation (app/(dashboard)/chatbots/[id]/page.tsx) - same
 // pattern as lib/platforms.ts driving the inbox tabs. Pure data, no "use client".
 
 export const CHATBOT_TABS = [

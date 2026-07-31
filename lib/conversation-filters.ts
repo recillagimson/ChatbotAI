@@ -3,7 +3,7 @@
  * Single source of truth for building /conversations URLs and resolving the date
  * range, so the server page, the chatbot dropdown, the date control, and the pager
  * all compose the SAME params and none can drop another's filter. Unit-tested in
- * scripts/test-conversation-filters.ts (no network / no Date.now — nowMs is passed in).
+ * scripts/test-conversation-filters.ts (no network / no Date.now - nowMs is passed in).
  */
 
 /** URL/query state for the conversations inbox. Every filter lives in the URL so
@@ -16,8 +16,25 @@ export type ConvFilterState = {
   range: string | null; // date preset key ("1d" | "7d" | "30d"); null = all time
   from: string | null; // custom range start, yyyy-mm-dd
   to: string | null; // custom range end, yyyy-mm-dd (inclusive of that whole day)
+  q: string | null; // free-text match on the contact's name or handle
   page: number; // 1-based
 };
+
+/**
+ * How many filters beyond the tag tabs are currently narrowing the list - the
+ * number the design puts in the "Filters" pill. Tag is excluded because it has
+ * its own visible tabs; counting it there would double-report it.
+ */
+export function activeFilterCount(s: ConvFilterState): number {
+  return [s.platform, s.quality, s.range ?? s.from ?? s.to, s.q].filter(Boolean)
+    .length;
+}
+
+/** Trim a raw ?q= into something worth querying, or null. */
+export function cleanQuery(v: string | null | undefined): string | null {
+  const t = (v ?? "").trim();
+  return t.length >= 2 ? t.slice(0, 80) : null;
+}
 
 /** Conversations shown per page. */
 export const CONV_PAGE_SIZE = 25;
@@ -84,7 +101,9 @@ function nextDayUtcIso(ymd: string): string {
  */
 export function buildConversationsHref(
   current: ConvFilterState,
-  patch: Partial<ConvFilterState>
+  patch: Partial<ConvFilterState>,
+  /** Keeps the filters attached while a thread is open (/conversations/<id>). */
+  basePath?: string
 ): string {
   const m = { ...current, ...patch };
   // A patch that touches `page` is a pager click (keep it); anything else is a
@@ -98,7 +117,9 @@ export function buildConversationsHref(
   if (m.range) params.set("range", m.range);
   if (m.from) params.set("from", m.from);
   if (m.to) params.set("to", m.to);
+  if (m.q) params.set("q", m.q);
   if (page > 1) params.set("page", String(page));
   const qs = params.toString();
-  return qs ? `/conversations?${qs}` : "/conversations";
+  const base = basePath ?? "/conversations";
+  return qs ? `${base}?${qs}` : base;
 }

@@ -46,7 +46,7 @@ export function KpiStatCard({
             valueTone
           )}
         >
-          {stub ? <span className="opacity-40">—</span> : value}
+          {stub ? <span className="opacity-40">-</span> : value}
         </div>
         <div className="flex items-center gap-2 mt-1">
           {sub && (

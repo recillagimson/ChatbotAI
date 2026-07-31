@@ -1,7 +1,7 @@
 /**
  * Outbound-delivery tracking helpers. When a ManyChat push throws after its own
  * retries, the saved message row is marked `delivery_status='failed'` so the
- * reconcile cron (app/api/cron/reconcile-pushes) can retry it — instead of the
+ * reconcile cron (app/api/cron/reconcile-pushes) can retry it - instead of the
  * reply being silently lost. Best-effort by construction: a tracking write must
  * NEVER break the reply flow, so every helper swallows its own errors.
  */
@@ -10,7 +10,7 @@ import type { createServiceClient } from "@/lib/supabase/server";
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 /** Insert a message row and return its id (or null on failure). Lets the caller
- *  mark THIS row failed if the subsequent push throws — no racy "recent message"
+ *  mark THIS row failed if the subsequent push throws - no racy "recent message"
  *  guessing. Never throws. */
 export async function insertMessageReturningId(
   supabase: ServiceClient,

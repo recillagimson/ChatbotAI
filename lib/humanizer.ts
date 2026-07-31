@@ -1,5 +1,5 @@
 /**
- * Humanizer style block — appended to every DM system prompt so replies read
+ * Humanizer style block - appended to every DM system prompt so replies read
  * like a person typing, not AI copy. Distilled for short chat messages from
  * the "humanizer" skill (github.com/blader/humanizer): banned AI-tell
  * vocabulary, no em dashes, no negative parallelisms, no forced triplets,
@@ -7,7 +7,7 @@
  *
  * Deliberately STATIC text: buildSystemPrompt output must stay deterministic
  * so the Anthropic ephemeral prompt cache keeps hitting. Persona precedence is
- * explicit in the header — this is channel hygiene, not a competing identity.
+ * explicit in the header - this is channel hygiene, not a competing identity.
  * lib/sanitize.ts remains the outbound backstop for any dash that slips through.
  */
 export const HUMANIZER_STYLE = `WRITING STYLE (keep the persona's voice; if the persona above conflicts with anything here, the persona wins)

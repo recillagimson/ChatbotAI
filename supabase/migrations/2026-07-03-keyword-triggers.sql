@@ -1,4 +1,4 @@
--- Keyword triggers — per-chatbot keyword auto-reply with first-touch dedup.
+-- Keyword triggers - per-chatbot keyword auto-reply with first-touch dedup.
 --
 -- chatbots.keyword_triggers = ordered JSONB array of keyword groups:
 --   [{ id, keywords[], exclude[], first_reply_text, first_reply_asset_key?,
@@ -15,8 +15,8 @@
 -- canned reply once (harmless), never strands the contact with no reply.
 --
 -- Re-runnable. Apply in the Supabase dashboard SQL editor BEFORE deploying the
--- keyword-trigger code (the code fail-opens — treats a missing column as "no
--- triggers configured" — so deploy ordering is safe either way).
+-- keyword-trigger code (the code fail-opens - treats a missing column as "no
+-- triggers configured" - so deploy ordering is safe either way).
 alter table public.chatbots
   add column if not exists keyword_triggers jsonb not null default '[]'::jsonb;
 

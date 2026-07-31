@@ -7,7 +7,7 @@ import { buildConversationsHref, type ConvFilterState } from "@/lib/conversation
 /**
  * Chatbot filter for the Conversations inbox. URL-driven (like the platform tabs
  * on the same page): navigates to ?chatbot=<id> while preserving every other
- * active filter (platform, tag, date range) and resetting to page 1 — all via the
+ * active filter (platform, tag, date range) and resetting to page 1 - all via the
  * shared buildConversationsHref helper. "All chatbots" clears the filter.
  */
 export function ConversationFilter({

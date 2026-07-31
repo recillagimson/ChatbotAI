@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 /**
  * Scrollable message container that keeps the latest message in view. Messages
  * render oldest-first, so on load (and after a refresh that adds a reply) we pin
- * the scroll to the bottom — the natural position for a chat thread.
+ * the scroll to the bottom - the natural position for a chat thread.
  */
 export function ChatScroll({
   children,

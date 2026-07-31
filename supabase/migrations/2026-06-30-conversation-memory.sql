@@ -1,6 +1,6 @@
 -- Conversation memory: a rolling prose summary of messages older than the
 -- verbatim window, so the bot remembers long chats. Both columns nullable;
--- existing conversations are unaffected (no backfill — the summary builds up as
+-- existing conversations are unaffected (no backfill - the summary builds up as
 -- new messages arrive past the window).
 --
 -- memory_summary    = running summary of earlier turns (lead's name, goal,

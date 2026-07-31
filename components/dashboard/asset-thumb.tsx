@@ -10,7 +10,7 @@ import type { FollowupAssetKind } from "@/lib/types";
  * a kind icon. Works with a public Supabase URL OR a local blob: URL, so it
  * previews both existing assets and files picked but not yet uploaded.
  *
- * Raw <img>/<video> (not next/image) — the followup-assets bucket is public and
+ * Raw <img>/<video> (not next/image) - the followup-assets bucket is public and
  * there's no CSP / next.config image restriction, so remote URLs render directly.
  */
 export function AssetThumb({

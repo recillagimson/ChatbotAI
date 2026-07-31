@@ -83,7 +83,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // 300s (Vercel Pro ceiling) so the background push can pace a multi-bubble reply
 // with a 15–30s human trickle between bubbles (see sendManychatMessagePaced). Must
-// be a static literal — Next can't read this from an env var. On the 60s Hobby
+// be a static literal - Next can't read this from an env var. On the 60s Hobby
 // budget this is capped to 60; lower BUBBLE_PACING_BUDGET_MS to match if you revert.
 export const maxDuration = 300;
 
@@ -121,7 +121,7 @@ const BodySchema = z.object({
   rn_opt_in: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
   rn_topic_id: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
   // Lead tagging (PARKED): `is_leads` is still accepted for backward compatibility
-  // with existing ManyChat flows but is now IGNORED — the tag branch was removed so
+  // with existing ManyChat flows but is now IGNORED - the tag branch was removed so
   // a stray is_leads=1 can no longer silently swallow a real DM. To un-park, restore
   // the branch from git history and re-consult is_lead in the keyword gate (#19).
   is_leads: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
@@ -133,7 +133,7 @@ const BodySchema = z.object({
   // or bot_off=false (tag removed). Sets/clears conversations.bot_off_at.
   bot_off: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
   // ManyChat BOT_ON tag sync (the inverse of BOT_OFF): a tag-change automation posts
-  // bot_on=true (tag added) to hand the conversation back to the bot — clears the
+  // bot_on=true (tag added) to hand the conversation back to the bot - clears the
   // owner-set pauses (bot_off_at + status ai_paused). Handled just before the 4c BOT_OFF
   // sync; it does NOT clear the lead's own "stopmessage" mute.
   bot_on: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
@@ -195,7 +195,7 @@ async function logPushFailure(
 /**
  * Helper for canned-reply paths (rate-limit-passed gates that bypass the AI):
  * persists the outbound message in the conversation and pushes via ManyChat.
- * Each side is independent — a ManyChat failure doesn't lose the DB row.
+ * Each side is independent - a ManyChat failure doesn't lose the DB row.
  */
 async function persistAndPush(
   supabase: ReturnType<typeof createServiceClient>,
@@ -232,11 +232,11 @@ async function persistAndPush(
 
 /**
  * Canned keyword-trigger reply: persists the outbound text (+ an optional saved
- * asset) and delivers it — like persistAndPush but with media support. The asset
+ * asset) and delivers it - like persistAndPush but with media support. The asset
  * is OWNER-configured, so it sends regardless of chatbot.ai_media_enabled (that
  * flag only governs AI-emitted [[SEND_ASSET]] directives). Push only on channels
  * with a send API; on response channels (TikTok) the caller returns the text in
- * the body and media is skipped (no send API there). Each side is independent —
+ * the body and media is skipped (no send API there). Each side is independent -
  * a ManyChat failure never loses the DB row.
  */
 async function sendKeywordCannedReply(
@@ -371,7 +371,7 @@ export async function POST(request: NextRequest) {
 
   // 3b. Resolve the ManyChat API key for this chatbot (decrypt the per-chatbot
   // key, or fall back to the global env key for un-migrated owners). A decrypt
-  // failure is a HARD error — we NEVER fall back to the env key, which would push
+  // failure is a HARD error - we NEVER fall back to the env key, which would push
   // this tenant's reply through the owner's account. On failure we log a distinct
   // event and leave apiKey null so pushes are skipped but messages still persist.
   let apiKey: string | null = null;
@@ -384,7 +384,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 3c. Duplicate-message dedup: same TEXT inside 30s → silently absorb. No row,
-  // no reply, no unread bump — a ManyChat re-delivery leaves zero trace, and a
+  // no reply, no unread bump - a ManyChat re-delivery leaves zero trace, and a
   // rapid re-tap folds into the in-flight run's debounce burst (the first tap's
   // run answers once). Skipped when media is attached (two different photos can
   // share empty/identical text). Control words (stopmessage/resumemessage) are
@@ -392,7 +392,7 @@ export async function POST(request: NextRequest) {
   // have the 3rd command swallowed as a "duplicate" and leave the lead in the
   // wrong state. The reset keyword is exempt for the same reason (a re-reset within
   // 30s must reset, not be absorbed). Trade-off: a deliberate identical re-send
-  // within 30s won't appear in the owner's inbox — the reply would be the same.
+  // within 30s won't appear in the owner's inbox - the reply would be the same.
   if (
     !hasMedia &&
     baseText &&
@@ -425,8 +425,8 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   // is_leads lead-tagging is PARKED (owner decision). A ManyChat flow may still send
-  // is_leads=1; it is now accepted and IGNORED here — no tag, no silent short-circuit
-  // — so a real DM is never swallowed. To un-park: restore this tag branch from git
+  // is_leads=1; it is now accepted and IGNORED here - no tag, no silent short-circuit
+  // - so a real DM is never swallowed. To un-park: restore this tag branch from git
   // history and re-add `is_lead` to `alreadyEngaged` at 6-gate below. See CLAUDE.md #19.
 
   let conversationId = existing?.id;
@@ -475,18 +475,18 @@ export async function POST(request: NextRequest) {
     conversationStatus = created.status;
   } else {
     // A reply RE-ARMS the drip timing but KEEPS the sequence position, so the lead
-    // advances to the NEXT step the next time they go quiet — never a repeat of
+    // advances to the NEXT step the next time they go quiet - never a repeat of
     // step 1. (Resetting followup_step_index here was a bug: a lead who replied
     // briefly then went quiet kept getting the same first follow-up over and over,
     // and the later steps the owner configured never fired.) Loop mode governs only
     // what happens AFTER the last step (stop / repeat_last / cycle), matching its UI
-    // label — it is NOT a "restart on reply" switch. Clearing last_followup_at
+    // label - it is NOT a "restart on reply" switch. Clearing last_followup_at
     // re-arms the timing (the next step's delay is measured from this reply) and the
     // fresh last_message_at reopens the 24h send window.
     //
     // A muted lead's inbound must NOT re-arm the drip: freeze last_followup_at so the
     // sequence resumes cleanly from where it was once they un-mute. (The cron already
-    // skips muted leads via the user_muted_at filter, so this is inert while muted —
+    // skips muted leads via the user_muted_at filter, so this is inert while muted -
     // but freezing it keeps the timing correct for resume.)
     const muted = !!existing.user_muted_at;
     await supabase
@@ -507,7 +507,7 @@ export async function POST(request: NextRequest) {
   // brand-new state so the full funnel (welcome VM, keyword triggers, follow-ups) can
   // be re-tested. Runs right after the step-4 upsert but BEFORE the inbound is recorded
   // (step 5), BEFORE the "4a" RN opt-in below, and BEFORE every silencing gate
-  // (human-takeover/subscribed/disqualified/keyword-gate/mute) — so it can recover a
+  // (human-takeover/subscribed/disqualified/keyword-gate/mute) - so it can recover a
   // stuck (subscribed/muted/paused) thread and leaves no trace of the reset word.
   // Scoped to the sender's OWN conversation. Universal admin secret, not a tenant
   // literal (like the stop/resume words). Fail-open: on any error it returns an honest
@@ -517,10 +517,10 @@ export async function POST(request: NextRequest) {
     const RESET_FAILED = "Couldn't reset the conversation, please try again.";
     try {
       // Wipe the transcript + restore fresh-conversation defaults via the shared
-      // helper — the SAME reset the admin "Reset conversation" button runs, so the
+      // helper - the SAME reset the admin "Reset conversation" button runs, so the
       // two can never drift. It returns ok:false (not a throw) on a silent RLS deny /
       // transient error, which would otherwise read as a false "reset done" on the
-      // exact stuck thread this tool exists to recover — surface it honestly.
+      // exact stuck thread this tool exists to recover - surface it honestly.
       const { ok: resetOk, error: resetErr } = await resetConversation(
         supabase,
         conversationId
@@ -529,7 +529,7 @@ export async function POST(request: NextRequest) {
         console.error("[manychat-webhook] reset gate DB error", resetErr);
         return manychatReply(sanitizeReply(RESET_FAILED), { ai_skipped: true, reason: "reset_failed" });
       }
-      // Best-effort ack — NOT persisted, so the thread stays empty. On push channels
+      // Best-effort ack - NOT persisted, so the thread stays empty. On push channels
       // this is the visible confirmation; the response body below covers other channels.
       if (apiKey && canPushPlatform(platform)) {
         await sendManychatMessage({
@@ -564,30 +564,30 @@ export async function POST(request: NextRequest) {
       );
   }
 
-  // 4b-on. ManyChat BOT_ON tag sync — the inverse of the 4c BOT_OFF handler below, and
+  // 4b-on. ManyChat BOT_ON tag sync - the inverse of the 4c BOT_OFF handler below, and
   // checked FIRST so an explicit resume wins even if a stray `bot_off` field rides along
   // in the same payload (a cloned tag-sync template can carry both). bot_on=true HANDS
-  // THE CONVERSATION BACK TO THE BOT: clear the OWNER pauses — bot_off_at (BOT_OFF tag)
-  // and status ai_paused→active (dashboard human-takeover) — AND stamp bot_forced_on_at,
+  // THE CONVERSATION BACK TO THE BOT: clear the OWNER pauses - bot_off_at (BOT_OFF tag)
+  // and status ai_paused→active (dashboard human-takeover) - AND stamp bot_forced_on_at,
   // a persistent manual override that force-engages the contact so the keyword-only gate
   // (6-gate) is bypassed: the bot then replies to this contact regardless of whether
-  // their message matches a keyword. This is the "ignore the keywords I set" behavior —
+  // their message matches a keyword. This is the "ignore the keywords I set" behavior -
   // a keyword-gated bot would otherwise silence a never-matched contact forever. The
   // reply lands on the contact's NEXT inbound (this tag-sync request carries no message),
   // symmetric with how BOT_OFF silences the next message. It deliberately does NOT clear
   // the lead's own user_muted_at ("stopmessage" opt-out; the lead re-enables with
   // "resumemessage"), nor business/safety states (subscribed confirmed_at,
-  // disqualified/flagged) — so BOT_ON never re-engages a converted customer, a detected
+  // disqualified/flagged) - so BOT_ON never re-engages a converted customer, a detected
   // bot, or someone who opted out; those gates (6-subscribed/6-disqualified) sit above
   // 6-gate and still silence. (status→active would also clear a hypothetical extraction
-  // auto-pause, dormant today since AUTO_PAUSE_ON_EXTRACTION is false — give that its own
+  // auto-pause, dormant today since AUTO_PAUSE_ON_EXTRACTION is false - give that its own
   // marker if it's ever enabled.) reply_claimed_for is left untouched so a concurrent
   // in-flight burst reply's single-flight claim isn't dropped. Runs before the
   // empty-message ack. Fail-open: a DB error is logged, still acked.
   if (conversationId && isTruthyFlag(body.bot_on)) {
     // TWO writes on purpose. PostgREST rejects an UPDATE that references an un-migrated
     // column ATOMICALLY, so folding bot_forced_on_at into the resume update would ALSO
-    // drop bot_off_at:null + status:active in any deploy-before-migrate window — silently
+    // drop bot_off_at:null + status:active in any deploy-before-migrate window - silently
     // regressing BOT_ON's pre-existing resume. Do the resume first (always-present columns,
     // order-independent), then stamp the override separately + best-effort so a missing
     // column fails THIS write alone and leaves the resume standing (same fail-soft idiom
@@ -602,14 +602,14 @@ export async function POST(request: NextRequest) {
       .update({ bot_forced_on_at: new Date().toISOString() })
       .eq("id", conversationId)
       .then(() => {}, () => {});
-    // Resuming may re-allow follow-ups — reconcile the ManyChat no-followup flag.
+    // Resuming may re-allow follow-ups - reconcile the ManyChat no-followup flag.
     after(() => syncNoFollowupFlag(supabase, conversationId!));
     return manychatReply("", { ai_skipped: true, reason: "bot_on_set" });
   }
 
   // 4c. ManyChat BOT_OFF tag sync. A tag-change automation posts bot_off=true (tag
   // added) or bot_off=false (tag removed), with no message. Set/clear the per-subscriber
-  // silence flag and ack — the flag never reaches the AI. Runs before the empty-message
+  // silence flag and ack - the flag never reaches the AI. Runs before the empty-message
   // ack so a no-message control request is handled here. When bot_off is absent (a normal
   // message) this is skipped; a bot-off subscriber's later DMs are silenced by the
   // 6-bot-off gate below. Fail-open: a DB error is logged, the request is still acked.
@@ -656,12 +656,12 @@ export async function POST(request: NextRequest) {
     return manychatReply("", { ai_skipped: true, reason: "human_takeover" });
   }
 
-  // 6-subscribed. A confirmed customer/subscriber gets NO automated messages — the
+  // 6-subscribed. A confirmed customer/subscriber gets NO automated messages - the
   // bot goes fully silent (a teammate handles them from here). Mirrors human-
   // takeover, and sits above the keyword/mute/trivial/AI paths so a customer never
   // gets a reply of any kind. The inbound is already persisted + unread-bumped
   // (step 5) so the owner still SEES the message. Note: the CONVERTING turn is not
-  // silenced — confirmed_at is null when that message reaches here; 9a sets it
+  // silenced - confirmed_at is null when that message reaches here; 9a sets it
   // afterward, so a final reply lands and only the NEXT message is silenced. The
   // follow-up cron already excludes confirmed_at, so the drip is stopped too.
   if (existing?.confirmed_at) {
@@ -669,7 +669,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 6-bot-off. A subscriber tagged BOT_OFF in ManyChat (synced to bot_off_at by the
-  // 4c handler) gets NO automated messages — fully silent, same as subscribed/human-
+  // 4c handler) gets NO automated messages - fully silent, same as subscribed/human-
   // takeover. The inbound is already persisted + unread-bumped (step 5) so the owner
   // sees it to answer by hand. Fail-open: a missing column reads as not-off.
   if (existing?.bot_off_at) {
@@ -677,7 +677,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 6-disqualified. A disqualified / detected-bot thread gets NO automated
-  // messages — same full silence as a subscribed customer (gate 6 above). This
+  // messages - same full silence as a subscribed customer (gate 6 above). This
   // catches every turn AFTER the first; the first offending message is silenced
   // by the pre-reply screen (step 7b below). The owner reopens by changing the
   // tag in the inbox; this gate reads existing.tag, so replies resume the moment
@@ -686,36 +686,36 @@ export async function POST(request: NextRequest) {
     return manychatReply("", { ai_skipped: true, reason: "disqualified_stopped" });
   }
 
-  // 6-gate. Keyword-only reply mode — the OUTERMOST filter for a gated bot (only
+  // 6-gate. Keyword-only reply mode - the OUTERMOST filter for a gated bot (only
   // human-takeover above it). When ON, the bot only engages contacts who have
   // shown intent via a keyword (personal/private accounts that don't want the AI
   // replying to unrelated people). The keyword is an ENTRY qualifier, not a
   // per-message filter: a contact unlocks the bot by matching a keyword once
   // (recorded on keyword_fired at 6c) and is then a possible lead, so every later
-  // message — keyword or not — falls through and gets answered, so the bot can
+  // message - keyword or not - falls through and gets answered, so the bot can
   // carry the conversation it started ("repair or funding?" → the lead's plain
   // answer still gets a reply). A contact who has NEVER matched a keyword stays
   // silent. Deliberately placed ABOVE 6-mute/6a/6b/6c: a gated stranger must get
-  // NO automatic reply of ANY kind — not a stop/resume confirmation, not the
+  // NO automatic reply of ANY kind - not a stop/resume confirmation, not the
   // trivial ack, not the extraction deflection, not the AI. (If the gate sat below
-  // 6-mute, a stranger typing "stopmessage" would get an "I'll hold off" bubble —
+  // 6-mute, a stranger typing "stopmessage" would get an "I'll hold off" bubble -
   // an auto-reply to a non-lead, which is exactly what this feature forbids.)
   // `keywordGroup` is computed here and reused by 6c. baseText only: a media-only
   // DM matches nothing → still gated for a never-engaged contact (an engaged lead
   // falls through). Fail-open: a missing column reads as false (gate off). The
   // inbound is already persisted (step 5) + unread-bumped, so the owner still SEES
-  // a gated message in the inbox to answer manually — only the AUTO reply is
+  // a gated message in the inbox to answer manually - only the AUTO reply is
   // withheld, like human-takeover.
   const keywordGroup = baseText
     ? firstMatchingGroup(baseText, chatbot.keyword_triggers ?? [], chatbot.keyword_strict_enabled ?? false)
     : null;
   // Engaged = matched a keyword before (keyword_fired non-empty). Lead-tagging via
   // is_leads is PARKED (see the note where the branch was), so is_lead is no longer
-  // consulted here — engagement is keyword-only.
+  // consulted here - engagement is keyword-only.
   const alreadyEngaged =
     Array.isArray(existing?.keyword_fired) && existing!.keyword_fired.length > 0;
   // BOT_ON manual override (4b-on): the owner tagged this contact BOT_ON to force the bot
-  // to engage them regardless of the keyword gate — treat them as engaged so a
+  // to engage them regardless of the keyword gate - treat them as engaged so a
   // never-matched contact still gets a reply. Fail-open: a missing column reads as off.
   const forcedOn = !!existing?.bot_forced_on_at;
   // Answer-opener-questions softening: a stranger who was screened as a genuine inquiry
@@ -725,13 +725,13 @@ export async function POST(request: NextRequest) {
     // The gate WOULD silence this stranger. Opt-in softening: if they OPENED with a
     // genuine business question, answer it and start the conversation instead of going
     // silent. Two-stage + bounded, fail-CLOSED at every step (any miss/error → stay
-    // gated, i.e. the pre-feature silence — the safe direction for a privacy gate):
+    // gated, i.e. the pre-feature silence - the safe direction for a privacy gate):
     //   1. keyword_gate_answer_questions must be on for this bot;
     //   2. question_screen_count < MAX_QUESTION_SCREENS caps the paid screens per contact;
     //   3. Stage 1 isSubstantiveInquiry (free) rejects greetings/acks/control/probes/noise;
     //   4. Stage 2 screenInquiryRelevance (cheap AI) confirms it's a real prospect inquiry.
     // On a pass we stamp question_engaged_at (best-effort) and FALL THROUGH to the normal
-    // welcome/AI path — normally the AI answers the question, though if their opener ALSO
+    // welcome/AI path - normally the AI answers the question, though if their opener ALSO
     // matches a welcome_keyword or is a comment opt-in the Welcome VM greets them instead
     // (still "starts the conversation", just via the VM). We deliberately do NOT write
     // keyword_fired (keeps keyword/lead analytics clean) and
@@ -768,18 +768,18 @@ export async function POST(request: NextRequest) {
     if (!answerAsInquiry) {
       return manychatReply("", { ai_skipped: true, reason: "keyword_gate_blocked" });
     }
-    // else: fall through to the welcome/AI path — the inquiry gets answered.
+    // else: fall through to the welcome/AI path - the inquiry gets answered.
   }
 
   // 6-mute. Self-service pause/resume. A lead silences the AI by texting
   // "stopmessage" and turns it back on with "resumemessage". Tracked on
   // conversations.user_muted_at, INDEPENDENT of the owner's human-takeover
   // (status='ai_paused', gated above) so a lead can't resume a chat a human has
-  // taken over — and no confirmation bubble fires into a human's conversation.
+  // taken over - and no confirmation bubble fires into a human's conversation.
   // Runs before rate-limit so a control word is never dropped, and returns a
   // muted lead before any AI cost. On a gated bot the 6-gate above has already
   // silenced never-engaged strangers, so this only ever sees engaged leads (or
-  // non-gated bots) — a stranger's "stopmessage" never reaches here. Fail-open: a
+  // non-gated bots) - a stranger's "stopmessage" never reaches here. Fail-open: a
   // missing column reads as not-muted. Control words are exempt from the 30s dedup
   // gate above (they toggle state), so a duplicate "stopmessage" isn't re-confirmed
   // by the idempotence below (stop-while-already-muted → silent, no second bubble),
@@ -795,14 +795,14 @@ export async function POST(request: NextRequest) {
     if (unmuteErr) console.error("[manychat-webhook] unmute write failed", unmuteErr);
     await persistAndPush(supabase, conversationId!, body.subscriber_id, RESUME_CONFIRMATION, chatbot.user_id, chatbot.id, apiKey, platform);
     // Un-mute may un-block the lead; reconcile the ManyChat flag post-response
-    // (reads truth — keeps the tag if the thread is still subscribed/disqualified).
+    // (reads truth - keeps the tag if the thread is still subscribed/disqualified).
     after(() => syncNoFollowupFlag(supabase, conversationId!));
     return manychatReply(sanitizeReply(RESUME_CONFIRMATION), { ai_skipped: true, reason: "user_resumed" });
   }
   if (control === "stop" && !isMuted) {
     // Overwrite reply_claimed_for so an in-flight burst run (a question asked
     // seconds earlier, still generating/pushing) fails its single-flight CAS
-    // release and discards — the lead doesn't get an answer bubble AFTER the
+    // release and discards - the lead doesn't get an answer bubble AFTER the
     // "I'll hold off" confirmation.
     const { error: muteErr } = await supabase
       .from("conversations")
@@ -810,7 +810,7 @@ export async function POST(request: NextRequest) {
       .eq("id", conversationId!);
     if (muteErr) console.error("[manychat-webhook] mute write failed", muteErr);
     await persistAndPush(supabase, conversationId!, body.subscriber_id, STOP_CONFIRMATION, chatbot.user_id, chatbot.id, apiKey, platform);
-    // A self-mute blocks follow-ups — mirror to ManyChat post-response.
+    // A self-mute blocks follow-ups - mirror to ManyChat post-response.
     after(() => syncNoFollowupFlag(supabase, conversationId!));
     return manychatReply(sanitizeReply(STOP_CONFIRMATION), { ai_skipped: true, reason: "user_paused" });
   }
@@ -820,7 +820,7 @@ export async function POST(request: NextRequest) {
     return manychatReply("", { ai_skipped: true, reason: "user_muted" });
   }
 
-  // 6-welcome. First-contact greeting decision — opted-in bots only, and placed
+  // 6-welcome. First-contact greeting decision - opted-in bots only, and placed
   // below the subscribed/disqualified/keyword-gate/mute floors so we never greet
   // those. If the opener is a bare greeting/keyword (or a comment-campaign opt-in)
   // fire the native ManyChat Welcome VM flow and skip the AI; a substantive opener
@@ -856,7 +856,7 @@ export async function POST(request: NextRequest) {
         // supabase-js resolves a DB failure as { data: null, error } instead of
         // throwing, which would look EXACTLY like a lost claim below and silently
         // drop this message (no VM, no AI). Throw so the catch falls through to the
-        // normal AI path — fail-open.
+        // normal AI path - fail-open.
         if (claimError) throw new Error(`welcome claim failed: ${claimError.message}`);
         if (claimed?.length) {
           await supabase.from("messages").insert({
@@ -872,7 +872,7 @@ export async function POST(request: NextRequest) {
           // non-keyword message is silenced at 6-gate and the follow-up cron skips them
           // (both key off keyword_fired). Record the match here, mirroring 6c's markFired,
           // so a welcomed lead stays "engaged". Best-effort: a lost update just leaves
-          // them gated — the same failure mode 6c already tolerates. Only the welcome-FIRED
+          // them gated - the same failure mode 6c already tolerates. Only the welcome-FIRED
           // path needs this; the substantive fall-through still reaches 6c normally.
           if (keywordGroup) {
             const firedIds: string[] = Array.isArray(existing?.keyword_fired)
@@ -915,7 +915,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 6a. Rate limit per (chatbot, subscriber). Silent drop on flood — no push,
+  // 6a. Rate limit per (chatbot, subscriber). Silent drop on flood - no push,
   // no AI cost. The inbound message is already recorded so a spamming user is
   // still visible in the dashboard inbox.
   const rl = await checkRateLimit(chatbot.id, body.subscriber_id);
@@ -932,11 +932,11 @@ export async function POST(request: NextRequest) {
   // in-voice reply from the persona instead of a generic canned line. Also
   // skipped while a debounce claim is pending: a "thanks" landing mid-burst
   // must fall through to the AI path (claim + supersede) so the burst's real
-  // question still gets answered — a canned ack row would otherwise become a
+  // question still gets answered - a canned ack row would otherwise become a
   // burst boundary and strand it.
   // A bot counts as a "persona bot" if it has a custom voice in EITHER form: the
   // legacy `system_prompt` column OR the newer editable sections (persona / offers
-  // / rebuttals). Section-mode bots — which is most current clients — have an EMPTY
+  // / rebuttals). Section-mode bots - which is most current clients - have an EMPTY
   // system_prompt, so checking only that let the generic English ack leak into
   // bilingual / non-English personas (e.g. a Spanish chat getting "Got it! Let me
   // know if there's anything else." on a bare "ok"). Mirror buildSystemPrompt's own
@@ -1099,7 +1099,7 @@ export async function POST(request: NextRequest) {
 
   // Best-effort claim release for abort paths (human takeover / burst already
   // answered): clears our claim so the trivial-ack shortcut re-arms. A failed
-  // release is harmless — the next message's claim overwrites it anyway.
+  // release is harmless - the next message's claim overwrites it anyway.
   const releaseClaim = async (): Promise<void> => {
     if (!inboundId) return;
     await supabase
@@ -1122,7 +1122,7 @@ export async function POST(request: NextRequest) {
     mode: "burst" | "single" = "single",
     // synchronous: this runs on the RESPONSE path (reply returned in the HTTP body
     // under ManyChat's ~10s timeout, no debounce to absorb latency). When true we
-    // skip the extra per-image vision-describe call — the current turn still gets
+    // skip the extra per-image vision-describe call - the current turn still gets
     // the raw image as vision; we just don't persist a text description.
     synchronous = false
   ): Promise<{ text: string; assets: OutboundAsset[]; tagWork?: Promise<void> } | null> => {
@@ -1168,7 +1168,7 @@ export async function POST(request: NextRequest) {
     let effectiveMessage = composeUserMessage({ text: baseText, textParts });
 
     // 6f. Debounce (burst mode): sleep out the quiet period, then only proceed
-    // if this run's claim survived — every newer message OVERWRITES the claim,
+    // if this run's claim survived - every newer message OVERWRITES the claim,
     // so its run takes over and answers the whole burst instead. That's the
     // "timer resets while they keep typing" behavior. Media processing above
     // already backfilled this row, so a superseded run still leaves its
@@ -1199,7 +1199,7 @@ export async function POST(request: NextRequest) {
         return null;
       }
       // Superseded: a newer message claimed the reply while we slept. (A null
-      // `fresh` — transient fetch error — falls through: fail-open to a reply.)
+      // `fresh` - transient fetch error - falls through: fail-open to a reply.)
       if (fresh && fresh.reply_claimed_for !== inboundId) return null;
       memorySummary = fresh?.memory_summary ?? memorySummary;
       confirmedAt = fresh?.confirmed_at ?? confirmedAt;
@@ -1230,7 +1230,7 @@ export async function POST(request: NextRequest) {
       priorHistory = prior;
       // One consolidated user turn for the whole burst. This run's own row uses
       // the in-memory text (fresher if its media backfill failed); earlier rows
-      // contribute their stored content — transcripts/doc text if their runs
+      // contribute their stored content - transcripts/doc text if their runs
       // finished backfilling, else the provisional attachment label. Vision
       // image parts stay this-run-only (known limitation for burst images).
       effectiveMessage = combineBurstText(burst, inboundId, effectiveMessage);
@@ -1258,19 +1258,19 @@ export async function POST(request: NextRequest) {
           .is("confirmed_at", null); // never overwrite a just-confirmed customer
         if (tagErr) {
           // Surface a rejected write (e.g. the 2026-07-14 migration not yet applied,
-          // so the tag CHECK rejects disqualified/bot) instead of silently no-opping —
+          // so the tag CHECK rejects disqualified/bot) instead of silently no-opping -
           // otherwise the bot keeps replying to abuse with nothing in the logs (gotcha #15).
           console.error("[manychat-webhook] disqualify tag write failed", tagErr);
         }
         await releaseClaim(); // mirror the stand-down path (single-flight CAS release)
-        // Disqualified/bot blocks follow-ups — mirror to ManyChat (already in the
+        // Disqualified/bot blocks follow-ups - mirror to ManyChat (already in the
         // after() background window, so await it; never throws).
         await syncNoFollowupFlag(supabase, conversationId!);
         return null; // no reply pushed; the step-9a classifier is never reached
       }
     }
 
-    // 7a. Follow-up media library — only when the bot may send AI-triggered media.
+    // 7a. Follow-up media library - only when the bot may send AI-triggered media.
     // Fetched once here so the same list feeds the system-prompt catalog AND the
     // directive resolution below.
     const assetLib = chatbot.ai_media_enabled
@@ -1324,7 +1324,7 @@ export async function POST(request: NextRequest) {
 
     // 8a. AI-triggered media: pull [[SEND_ASSET: key]] directives out of the reply
     // and resolve them to library assets. Capped per reply: one asset is the norm,
-    // three is plenty — a reply spamming the whole library is never desirable, and
+    // three is plenty - a reply spamming the whole library is never desirable, and
     // the cap keeps a single sendContent call far under ManyChat's 10-message limit.
     const MAX_AI_ASSETS = 3;
     const assets: OutboundAsset[] = [];
@@ -1336,7 +1336,7 @@ export async function POST(request: NextRequest) {
           const asset = resolveAssetByKey(assetLib, key);
           if (!asset?.url) continue;
           assets.push({ kind: asset.kind, url: asset.url });
-          // media_type stays a real MIME (or null) — the inbox renderer matches
+          // media_type stays a real MIME (or null) - the inbox renderer matches
           // on startsWith("image/"|"audio/"|"video/").
           assetRows.push({
             content: `(sent ${asset.kind}: ${asset.key})`,
@@ -1349,12 +1349,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 8b. Single-flight release (burst mode): atomically clear our claim. Zero
-    // rows updated means a newer message claimed while we were generating —
+    // rows updated means a newer message claimed while we were generating -
     // discard this reply WITHOUT persisting or sending; the newer run's burst
     // covers everything, so the lead gets one consolidated answer instead of
     // two overlapping ones. The occasional wasted generation is the price of
     // never double-replying. (A transient release error falls through to a
-    // send — worst case matches today's per-message behavior.)
+    // send - worst case matches today's per-message behavior.)
     if (mode === "burst" && inboundId) {
       const { data: released, error: releaseError } = await supabase
         .from("conversations")
@@ -1371,8 +1371,8 @@ export async function POST(request: NextRequest) {
 
     // 8c. Final mute/pause re-check (ALL modes). The burst guard above only
     // covers burst runs and only catches a mute set DURING the debounce sleep;
-    // a stop that lands while the AI is generating — or ANY mute in single /
-    // response mode, which skip the burst guards — would otherwise still push.
+    // a stop that lands while the AI is generating - or ANY mute in single /
+    // response mode, which skip the burst guards - would otherwise still push.
     // Re-read right before persisting and stand down if the lead muted or the
     // owner took over. Retry once on a null fetch, then fail-open (never drop a
     // legitimate reply on a transient blip).
@@ -1443,7 +1443,7 @@ export async function POST(request: NextRequest) {
     ]);
 
     // Redis side-state: cache for dedup echo + bump monthly counter (best-effort).
-    // A media-only reply has no text to echo — skip the cache (the dedup gate then
+    // A media-only reply has no text to echo - skip the cache (the dedup gate then
     // falls back to its canned ack for an instant repeat, which is acceptable).
     await Promise.all([
       replyText
@@ -1456,7 +1456,7 @@ export async function POST(request: NextRequest) {
     // starting_later/needs_human/subscribed. `subscribed` stamps confirmed_at (stops
     // the drip AND, via gate 6-subscribed, silences the bot next message);
     // `starting_later` records the start date + note (pauses the drip via
-    // evaluateFollowup — AI replies stay on). Push channels only (background — no
+    // evaluateFollowup - AI replies stay on). Push channels only (background - no
     // latency on a synchronous response-channel reply), only while not already
     // confirmed (a confirmed thread is silenced upstream). Never blocks.
     let tagWork: Promise<void> | undefined;
@@ -1466,7 +1466,7 @@ export async function POST(request: NextRequest) {
       // "just paid!" answered with media still gets detected.
       const botReply = replyText || (assets.length ? "(sent media)" : "");
       const today = new Date().toISOString().slice(0, 10); // UTC; lets the model resolve "Wednesday"
-      // KICK OFF but don't await here — the classify OpenAI round-trip is a pure
+      // KICK OFF but don't await here - the classify OpenAI round-trip is a pure
       // side-effect (writes tag/confirmed_at/start_*) not needed to build or deliver
       // the reply. The caller awaits `tagWork` AFTER the push, so tagging runs
       // concurrently with delivery instead of delaying the first bubble, yet still
@@ -1483,7 +1483,7 @@ export async function POST(request: NextRequest) {
                 confirmed_by: "ai",
                 tag: "subscribed",
                 start_on: null,
-                start_note: null, // they started — clear any scheduled-start
+                start_note: null, // they started - clear any scheduled-start
               })
               .eq("id", conversationId!)
               .is("confirmed_at", null);
@@ -1511,7 +1511,7 @@ export async function POST(request: NextRequest) {
                 if (startOn !== null) payload.start_on = startOn;
                 if (startNote !== null) payload.start_note = startNote;
               } else {
-                // Moving off starting_later (only needs_human can, via rank) — clear the
+                // Moving off starting_later (only needs_human can, via rank) - clear the
                 // scheduled-start so the badge/AI don't reference a stale date. Keeps the
                 // invariant: start fields set ⇔ tag = starting_later.
                 payload.start_on = null;
@@ -1547,7 +1547,7 @@ export async function POST(request: NextRequest) {
   // 10. Deliver. Two paths depending on whether the channel has a ManyChat send API:
   if (canPushPlatform(platform) && apiKey) {
     // Single-flight claim: mark THIS message as the one the conversation's next
-    // reply answers. Newer messages overwrite the claim (their run takes over —
+    // reply answers. Newer messages overwrite the claim (their run takes over -
     // the debounce "timer reset"); the background run below only proceeds if its
     // claim survived the sleep. Fail-open: on any error (e.g. the migration not
     // yet applied) fall back to per-message replies exactly as before.
@@ -1570,7 +1570,7 @@ export async function POST(request: NextRequest) {
     after(async () => {
       try {
         const result = await generateAndPersistReply(claimed ? "burst" : "single");
-        if (!result) return; // stood down — a newer run owns the consolidated reply
+        if (!result) return; // stood down - a newer run owns the consolidated reply
         const { text: replyText, assets } = result;
         const bubbles = splitIntoMessages(replyText);
         // Per-chatbot: render Messenger links as tappable URL buttons (default off).
@@ -1635,14 +1635,14 @@ export async function POST(request: NextRequest) {
         await refreshConversationMemory({ supabase, conversationId: conversationId! });
         await refreshKnownFacts({ supabase, conversationId: conversationId! });
       } catch (err) {
-        // after() runs detached — swallow so nothing crashes the background task.
+        // after() runs detached - swallow so nothing crashes the background task.
         console.error("[manychat-webhook] background processing failed", err);
       }
     });
     return manychatReply("", { ai_queued: true });
   }
 
-  // RESPONSE channels (TikTok — no ManyChat send API yet) OR no API key: ManyChat
+  // RESPONSE channels (TikTok - no ManyChat send API yet) OR no API key: ManyChat
   // can't be pushed to, so generate synchronously and RETURN the reply in the body
   // for the client's flow to deliver (map `reply`/render the dynamic content). This
   // shares the ~10s timeout risk we avoid for push channels, but TikTok replies are
@@ -1654,7 +1654,7 @@ export async function POST(request: NextRequest) {
   try {
     // On a normal response (non-push) channel the pre-reply disqualify screen is
     // skipped (it's gated by canPushPlatform). It could still evaluate on the rare
-    // misconfig where a push-capable platform reaches this path with no API key —
+    // misconfig where a push-capable platform reaches this path with no API key -
     // but a null (stood-down) result just falls back to the default replyText
     // below, so this path never wrongly silences a lead.
     const result = await generateAndPersistReply("single", true);

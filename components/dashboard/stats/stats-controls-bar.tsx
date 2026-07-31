@@ -1,23 +1,18 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { RefreshCw } from "lucide-react";
+import { CalendarRange, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RangeKey } from "@/lib/analytics";
 
 type RangePill = { key: RangeKey; label: string };
 
 const RANGE_PILLS: RangePill[] = [
-  { key: "7d", label: "7 Days" },
-  { key: "30d", label: "30 Days" },
-  { key: "month", label: "This Month" },
-  { key: "lastmonth", label: "Last Month" },
-  { key: "all", label: "All Time" },
-];
-
-const VIEW_TABS = [
-  { key: "funnel", label: "Funnel" },
-  { key: "events", label: "Events" },
+  { key: "7d", label: "7 days" },
+  { key: "30d", label: "30 days" },
+  { key: "month", label: "This month" },
+  { key: "lastmonth", label: "Last month" },
+  { key: "all", label: "All time" },
 ];
 
 function withParams(
@@ -26,11 +21,8 @@ function withParams(
 ): string {
   const p = new URLSearchParams(current.toString());
   for (const [k, v] of Object.entries(updates)) {
-    if (v === null || v === "") {
-      p.delete(k);
-    } else {
-      p.set(k, v);
-    }
+    if (v === null || v === "") p.delete(k);
+    else p.set(k, v);
   }
   return p.toString();
 }
@@ -39,18 +31,24 @@ export interface StatsControlsBarProps {
   rangeKey: RangeKey;
   customFrom?: string;
   customTo?: string;
-  bot: string | null;
-  tab: string;
-  chatbots: { id: string; name: string }[];
+  /** The comparison note printed at the right of the bar. */
+  comparison?: string;
 }
 
+/**
+ * The Statistics date controls - a segmented preset row and a custom range,
+ * matching the design's single filter line.
+ *
+ * The chatbot selector that used to live here is gone: scope is now a workspace
+ * global in the top bar, so a second bot picker on this one page would be a
+ * second source of truth. The split-test stub is gone too - the design's rule is
+ * that a control which does nothing is worse than no control.
+ */
 export function StatsControlsBar({
   rangeKey,
   customFrom,
   customTo,
-  bot,
-  tab,
-  chatbots,
+  comparison,
 }: StatsControlsBarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -60,69 +58,56 @@ export function StatsControlsBar({
     router.push(`${pathname}?${qs}`, { scroll: false });
   }
 
-  // ── Date range pills ──────────────────────────────────────────────────────
   function handleRangePill(key: RangeKey) {
     push(withParams(searchParams, { range: key, from: null, to: null }));
   }
 
-  // ── Custom date inputs ────────────────────────────────────────────────────
   function handleCustomDate(which: "from" | "to", val: string) {
     const from = which === "from" ? val : (customFrom ?? "");
     const to = which === "to" ? val : (customTo ?? "");
-    if (from && to) {
-      push(withParams(searchParams, { from, to, range: null }));
-    } else {
-      push(withParams(searchParams, { from: null, to: null }));
-    }
+    if (from && to) push(withParams(searchParams, { from, to, range: null }));
+    else push(withParams(searchParams, { from: null, to: null }));
   }
 
-  // ── View tab ──────────────────────────────────────────────────────────────
-  function handleTab(key: string) {
-    push(withParams(searchParams, { tab: key }));
-  }
-
-  // ── Bot selector ──────────────────────────────────────────────────────────
-  function handleBot(value: string) {
-    push(withParams(searchParams, { bot: value || null }));
-  }
-
-  // ── Refresh ───────────────────────────────────────────────────────────────
-  function handleRefresh() {
-    router.refresh();
-  }
-
-  const pillBase =
-    "inline-flex items-center justify-center min-h-[44px] px-3 py-2 rounded-md text-sm font-medium transition-colors " +
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 " +
-    "motion-reduce:transition-none";
-
-  const pillActive = "bg-primary text-primary-foreground shadow";
-  const pillInactive =
-    "border border-input bg-background hover:bg-accent hover:text-accent-foreground";
+  const custom = !!(customFrom && customTo);
 
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-2">
-      {/* ── Date range pills ── */}
+    <div className="flex flex-wrap items-center gap-2.5">
       <div
-        className="flex flex-wrap items-center gap-1"
+        className="flex flex-wrap items-center gap-0.5 rounded-[10px] border border-ss-line bg-white p-[3px]"
         role="group"
         aria-label="Date range"
       >
-        {RANGE_PILLS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={rangeKey === key}
-            onClick={() => handleRangePill(key)}
-            className={cn(pillBase, rangeKey === key ? pillActive : pillInactive)}
-          >
-            {label}
-          </button>
-        ))}
+        {RANGE_PILLS.map(({ key, label }) => {
+          const active = !custom && rangeKey === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => handleRangePill(key)}
+              className={cn(
+                "rounded-ctl px-3 py-2 text-[12px] leading-none transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
+                "motion-reduce:transition-none",
+                active
+                  ? "bg-ss-indigo font-bold text-white"
+                  : "font-medium text-ss-body hover:bg-ss-page hover:text-ss-ink"
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* ── Custom date range ── */}
-      <div className="flex items-center gap-1">
+      <div
+        className={cn(
+          "flex items-center gap-1.5 rounded-[10px] border bg-white px-3 py-2",
+          custom ? "border-ss-indigo-200" : "border-ss-line"
+        )}
+      >
+        <CalendarRange className="h-[15px] w-[15px] shrink-0 text-ss-muted" aria-hidden="true" />
         <label className="sr-only" htmlFor="stats-from">
           From date
         </label>
@@ -131,14 +116,11 @@ export function StatsControlsBar({
           type="date"
           value={customFrom ?? ""}
           onChange={(e) => handleCustomDate("from", e.target.value)}
-          className={cn(
-            "flex h-11 rounded-md border border-input bg-background px-3 py-2 text-sm",
-            "ring-offset-background placeholder:text-muted-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            "tabular-nums"
-          )}
+          className="bg-transparent text-[12px] leading-none tabular-nums text-ss-ink outline-none"
         />
-        <span className="text-muted-foreground text-sm select-none">–</span>
+        <span className="select-none text-ss-faint" aria-hidden="true">
+          -
+        </span>
         <label className="sr-only" htmlFor="stats-to">
           To date
         </label>
@@ -147,127 +129,24 @@ export function StatsControlsBar({
           type="date"
           value={customTo ?? ""}
           onChange={(e) => handleCustomDate("to", e.target.value)}
-          className={cn(
-            "flex h-11 rounded-md border border-input bg-background px-3 py-2 text-sm",
-            "ring-offset-background placeholder:text-muted-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            "tabular-nums"
-          )}
+          className="bg-transparent text-[12px] leading-none tabular-nums text-ss-ink outline-none"
         />
       </div>
 
-      {/* ── Divider ── */}
-      <div className="hidden sm:block h-8 w-px bg-border" aria-hidden="true" />
-
-      {/* ── View tabs ── */}
-      <div
-        className="flex items-center gap-1 rounded-lg bg-muted p-1"
-        role="group"
-        aria-label="View"
-      >
-        {VIEW_TABS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={tab === key}
-            onClick={() => handleTab(key)}
-            className={cn(
-              "inline-flex items-center justify-center min-h-[44px] px-3 py-1.5 rounded-md text-sm font-medium transition-all",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              "motion-reduce:transition-none",
-              tab === key
-                ? "bg-primary text-primary-foreground shadow"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Bot selector ── */}
-      <div className="relative">
-        <label className="sr-only" htmlFor="stats-bot">
-          Filter by chatbot
-        </label>
-        <select
-          id="stats-bot"
-          value={bot ?? ""}
-          onChange={(e) => handleBot(e.target.value)}
-          className={cn(
-            "flex h-11 min-w-[160px] appearance-none rounded-md border border-input bg-background px-3 py-2 pr-8 text-sm",
-            "ring-offset-background",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            "cursor-pointer"
-          )}
-          aria-label="Filter by chatbot"
-        >
-          <option value="">All chatbots</option>
-          {chatbots.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        {/* Chevron decoration */}
-        <svg
-          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </div>
-
-      {/* ── Split Test stub ── */}
-      <div
-        className="flex items-center gap-1 rounded-lg bg-muted/60 p-1 opacity-60"
-      >
-        {(["All", "Control", "Variant 2"] as const).map((label, i) => (
-          <button
-            key={label}
-            type="button"
-            disabled
-            aria-disabled="true"
-            title="Split testing coming soon"
-            aria-label={`${label} — split testing coming soon`}
-            className={cn(
-              "inline-flex items-center justify-center min-h-[44px] px-3 py-1.5 rounded-md text-sm",
-              "cursor-not-allowed transition-none",
-              i === 0
-                ? "bg-muted-foreground/20 text-muted-foreground font-medium"
-                : "text-muted-foreground"
-            )}
-          >
-            {label}
-          </button>
-        ))}
-        <span className="ml-1 inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-400">
-          soon
-        </span>
-      </div>
-
-      {/* ── Refresh ── */}
       <button
         type="button"
-        onClick={handleRefresh}
-        className={cn(
-          "inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-md border border-input bg-background px-3 py-2",
-          "text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          "motion-reduce:transition-none"
-        )}
+        onClick={() => router.refresh()}
         aria-label="Refresh statistics"
+        className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-ss-line bg-white text-ss-body transition-colors hover:border-ss-dash hover:text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
       >
-        <RefreshCw className="h-4 w-4" aria-hidden="true" />
-        <span className="sr-only">Refresh</span>
+        <RefreshCw className="h-[18px] w-[18px]" aria-hidden="true" />
       </button>
+
+      {comparison && (
+        <span className="ml-auto text-[11.5px] leading-none text-ss-faint">
+          {comparison}
+        </span>
+      )}
     </div>
   );
 }

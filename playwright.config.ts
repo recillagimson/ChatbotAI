@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 // Load .env.local into process.env so tests can reach the real OpenAI API
 // (Next loads this automatically; Playwright does not). Only fills keys that
-// aren't already set in the environment. Minimal KEY=VALUE parser — no deps.
+// aren't already set in the environment. Minimal KEY=VALUE parser - no deps.
 try {
   for (const line of readFileSync(".env.local", "utf8").split("\n")) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
@@ -16,7 +16,7 @@ try {
     if (!(key in process.env)) process.env[key] = val;
   }
 } catch {
-  /* no .env.local — tests that need a key will skip */
+  /* no .env.local - tests that need a key will skip */
 }
 
 export default defineConfig({

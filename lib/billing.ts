@@ -64,7 +64,7 @@ export async function reconcileFromCheckoutSession(
 
   // Authorization: fail CLOSED. Only sync a session that explicitly carries
   // this signed-in user's id (our checkout always sets it). Missing metadata is
-  // denied — otherwise a user could pass an arbitrary session_id and attach
+  // denied - otherwise a user could pass an arbitrary session_id and attach
   // someone else's subscription to their own account (IDOR).
   const sessionUser = session.metadata?.supabase_user_id as string | undefined;
   if (!sessionUser || sessionUser !== userId) return;

@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { SsButton, SsStatus } from "@/components/ss/controls";
 import { Pause, Play, CheckCircle2, RotateCcw, Send, RefreshCw, Voicemail, Radio } from "lucide-react";
 import {
   CONVERSATION_TAGS,
@@ -16,6 +17,19 @@ import {
   type QualityTag,
 } from "@/lib/conversation-quality";
 
+/**
+ * The thread's control surface - identity row plus the tag / quality / action
+ * row beneath it.
+ *
+ * Both rows live in one component because they share optimistic state: pausing
+ * the AI has to flip the header's "AI ACTIVE" badge in the same tick as the
+ * button, and marking a lead subscribed has to move the tag select. Splitting
+ * them would mean lifting all of that into the server page and losing the
+ * instant feedback.
+ *
+ * `identity` is the contact block the page renders (avatar, name, channel) -
+ * passed in so the server can own the display data while this owns the state.
+ */
 export function ConversationActions({
   conversationId,
   currentStatus,
@@ -24,6 +38,8 @@ export function ConversationActions({
   currentStartOn = null,
   userMutedAt = null,
   isAdmin = false,
+  identity,
+  meta,
 }: {
   conversationId: string;
   currentStatus: string;
@@ -32,6 +48,8 @@ export function ConversationActions({
   currentStartOn?: string | null;
   userMutedAt?: string | null;
   isAdmin?: boolean;
+  identity?: React.ReactNode;
+  meta?: React.ReactNode;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -60,7 +78,7 @@ export function ConversationActions({
   const confirmed = tag === "subscribed";
 
   // Best-effort: mirror the new stop-follow-up state to ManyChat (server-only key,
-  // so we POST to a thin route). Fire-and-forget — a failure never affects the UI.
+  // so we POST to a thin route). Fire-and-forget - a failure never affects the UI.
   function fireFollowupFlagSync() {
     fetch(`/api/conversations/${conversationId}/followup-flag`, { method: "POST" }).catch(() => {});
   }
@@ -85,27 +103,27 @@ export function ConversationActions({
           setTestResult("Follow-up sent.");
           router.refresh();
         } else if (res.ok && data.ok) {
-          setTestResult("Skipped — lead is muted/paused or the step has nothing to send.");
+          setTestResult("Skipped - lead is muted/paused or the step has nothing to send.");
         } else if (data.reason === "no_steps") {
           setTestResult("No follow-up steps configured.");
         } else if (data.reason === "no_subscriber") {
           setTestResult("No ManyChat subscriber on this conversation.");
         } else {
-          setTestResult("Couldn't send — check the ManyChat connection.");
+          setTestResult("Couldn't send - check the ManyChat connection.");
         }
       } catch {
-        setTestResult("Couldn't send — network error.");
+        setTestResult("Couldn't send - network error.");
       }
     });
   }
 
   // ADMIN-ONLY: fire this conversation's Welcome VM flow right now, bypassing the
   // shouldSendWelcome gate (welcomed_at / opener / keyword-gate), to test the real
-  // ManyChat welcome delivery — the same flow the webhook triggers on a first-contact
+  // ManyChat welcome delivery - the same flow the webhook triggers on a first-contact
   // greeting. The endpoint (requireSuperadmin) is the real gate; this button only shows
   // for admins. Re-clickable; the server records the send + one-time-stamps welcomed_at.
   function sendWelcome() {
-    // Fires a real DM to a real contact via ManyChat — confirm so a misclick (e.g. while
+    // Fires a real DM to a real contact via ManyChat - confirm so a misclick (e.g. while
     // pausing AI on an already-welcomed live thread) can't push a surprise welcome VM.
     if (
       !window.confirm(
@@ -137,17 +155,17 @@ export function ConversationActions({
         } else if (data.reason === "no_subscriber") {
           setWelcomeResult("No ManyChat subscriber on this conversation.");
         } else if (data.reason === "manychat_key_unavailable") {
-          setWelcomeResult("ManyChat key unavailable — check the connection.");
+          setWelcomeResult("ManyChat key unavailable - check the connection.");
         } else {
-          setWelcomeResult("Couldn't send — check the ManyChat connection.");
+          setWelcomeResult("Couldn't send - check the ManyChat connection.");
         }
       } catch {
-        setWelcomeResult("Couldn't send — network error.");
+        setWelcomeResult("Couldn't send - network error.");
       }
     });
   }
 
-  // ADMIN-ONLY: wipe this conversation back to brand-new state — deletes the whole
+  // ADMIN-ONLY: wipe this conversation back to brand-new state - deletes the whole
   // transcript and clears welcomed_at / keyword_fired / tag / mute / follow-up progress
   // so the full funnel (welcome VM, keyword triggers, follow-ups) can be re-tested. Same
   // reset the RESET_KEYWORD webhook word runs. Destructive + irreversible → confirm
@@ -171,16 +189,16 @@ export function ConversationActions({
         });
         const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
         if (res.ok && data.ok) {
-          setResetResult("Conversation reset — send the opener to test the welcome.");
+          setResetResult("Conversation reset - send the opener to test the welcome.");
           fireFollowupFlagSync();
           router.refresh();
         } else if (res.status === 403) {
           setResetResult("Not allowed.");
         } else {
-          setResetResult("Couldn't reset — try again.");
+          setResetResult("Couldn't reset - try again.");
         }
       } catch {
-        setResetResult("Couldn't reset — network error.");
+        setResetResult("Couldn't reset - network error.");
       }
     });
   }
@@ -192,7 +210,7 @@ export function ConversationActions({
     if (
       !window.confirm(
         "Send a real test DM to this contact via ManyChat? Use this to check whether " +
-          "replies are actually being delivered — it will show ManyChat's exact response."
+          "replies are actually being delivered - it will show ManyChat's exact response."
       )
     ) {
       return;
@@ -214,10 +232,10 @@ export function ConversationActions({
         } else if (data.ok) {
           setDeliveryResult(data.note ?? "ManyChat accepted the send.");
         } else {
-          setDeliveryResult(`Not delivered — ManyChat said: ${data.error ?? "unknown error"}`);
+          setDeliveryResult(`Not delivered - ManyChat said: ${data.error ?? "unknown error"}`);
         }
       } catch {
-        setDeliveryResult("Couldn't run the test — network error.");
+        setDeliveryResult("Couldn't run the test - network error.");
       }
     });
   }
@@ -273,7 +291,7 @@ export function ConversationActions({
   }
 
   // Change the quality rating (good/bad/unrated). Orthogonal to the funnel tag and
-  // to follow-up gating — a plain owner label, so no confirmed_at / flag sync.
+  // to follow-up gating - a plain owner label, so no confirmed_at / flag sync.
   function changeQuality(next: QualityTag | "") {
     if (next === quality) return;
     const prev = quality;
@@ -333,131 +351,160 @@ export function ConversationActions({
     });
   }
 
+  const notes = [welcomeResult, testResult, deliveryResult, resetResult].filter(
+    Boolean
+  ) as string[];
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="flex items-center gap-1.5 text-sm">
-        <span className="text-muted-foreground">Tag</span>
-        <select
-          value={tag}
-          disabled={isPending}
-          onChange={(e) => changeTag(e.target.value as ConversationTag)}
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          {CONVERSATION_TAGS.map((t) => (
-            <option key={t} value={t}>
-              {TAG_LABEL[t]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex items-center gap-1.5 text-sm">
-        <span className="text-muted-foreground">Quality</span>
-        <select
-          value={quality}
-          disabled={isPending}
-          onChange={(e) => changeQuality(e.target.value as QualityTag | "")}
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="">Unrated</option>
-          {CONVERSATION_QUALITY.map((q) => (
-            <option key={q} value={q}>
-              {QUALITY_LABEL[q]}
-            </option>
-          ))}
-        </select>
-      </label>
-      {tag === "starting_later" && (
-        <label className="flex items-center gap-1.5 text-sm">
-          <span className="text-muted-foreground">Start</span>
-          <input
-            type="date"
-            value={startOn}
+    <div className="flex-none border-b border-ss-line bg-white px-5 py-4 sm:px-6">
+      {/* ---- Identity + the one primary action ------------------------- */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
+        {identity}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <SsStatus tone={paused ? "amber" : muted ? "rose" : "green"}>
+            {paused ? "AI paused" : muted ? "Muted by lead" : "AI active"}
+          </SsStatus>
+          <SsButton
+            onClick={toggle}
             disabled={isPending}
-            onChange={(e) => setStart(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-          />
-        </label>
-      )}
-      {muted && (
-        <Button onClick={unmute} disabled={isPending} variant="outline" size="sm">
-          <Play className="h-4 w-4 mr-2" /> Un-mute (re-enable AI)
-        </Button>
-      )}
-      <Button onClick={toggle} disabled={isPending} variant="outline" size="sm">
-        {paused ? (
-          <>
-            <Play className="h-4 w-4 mr-2" /> Resume AI replies
-          </>
-        ) : (
-          <>
-            <Pause className="h-4 w-4 mr-2" /> Pause AI (take over)
-          </>
+            variant={paused ? "primary" : "navy"}
+            size="md"
+          >
+            {paused ? (
+              <>
+                <Play className="h-4 w-4" aria-hidden="true" /> Resume AI
+              </>
+            ) : (
+              <>
+                <Pause className="h-4 w-4" aria-hidden="true" /> Pause AI &amp;
+                take over
+              </>
+            )}
+          </SsButton>
+        </div>
+      </div>
+
+      {meta ? <div className="mt-1.5">{meta}</div> : null}
+
+      {/* ---- Tag · quality · the rest ---------------------------------- */}
+      <div className="mt-3.5 flex flex-wrap items-center gap-2">
+        <Field label="Tag">
+          <select
+            value={tag}
+            disabled={isPending}
+            onChange={(e) => changeTag(e.target.value as ConversationTag)}
+            aria-label="Conversation tag"
+            className={SELECT}
+          >
+            {CONVERSATION_TAGS.map((t) => (
+              <option key={t} value={t}>
+                {TAG_LABEL[t]}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Quality">
+          <select
+            value={quality}
+            disabled={isPending}
+            onChange={(e) => changeQuality(e.target.value as QualityTag | "")}
+            aria-label="Conversation quality"
+            className={SELECT}
+          >
+            <option value="">Unrated</option>
+            {CONVERSATION_QUALITY.map((q) => (
+              <option key={q} value={q}>
+                {QUALITY_LABEL[q]}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        {tag === "starting_later" && (
+          <Field label="Start">
+            <input
+              type="date"
+              value={startOn}
+              disabled={isPending}
+              onChange={(e) => setStart(e.target.value)}
+              aria-label="Date this lead wants to start"
+              className={SELECT}
+            />
+          </Field>
         )}
-      </Button>
-      <Button
-        onClick={() => changeTag(confirmed ? "lead" : "subscribed")}
-        disabled={isPending}
-        variant={confirmed ? "outline" : "default"}
-        size="sm"
-      >
-        {confirmed ? (
-          <>
-            <RotateCcw className="h-4 w-4 mr-2" /> Reopen (resume messages)
-          </>
-        ) : (
-          <>
-            <CheckCircle2 className="h-4 w-4 mr-2" /> Mark subscribed
-          </>
-        )}
-      </Button>
-      {isAdmin && (
-        <>
-          <Button
-            onClick={sendWelcome}
+
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {muted && (
+            <SsButton onClick={unmute} disabled={isPending} variant="outline" size="sm">
+              <Play className="h-[15px] w-[15px]" aria-hidden="true" /> Un-mute
+            </SsButton>
+          )}
+          <SsButton
+            onClick={() => changeTag(confirmed ? "lead" : "subscribed")}
             disabled={isPending}
-            variant="secondary"
+            variant={confirmed ? "outline" : "soft"}
             size="sm"
           >
-            <Voicemail className="h-4 w-4 mr-2" /> Send welcome message
-          </Button>
-          {welcomeResult && (
-            <span className="text-xs text-muted-foreground">{welcomeResult}</span>
+            {confirmed ? (
+              <>
+                <RotateCcw className="h-[15px] w-[15px]" aria-hidden="true" /> Reopen
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-[15px] w-[15px]" aria-hidden="true" /> Mark
+                subscribed
+              </>
+            )}
+          </SsButton>
+
+          {isAdmin && (
+            <>
+              <SsButton onClick={sendWelcome} disabled={isPending} variant="outline" size="sm">
+                <Voicemail className="h-[15px] w-[15px]" aria-hidden="true" /> Welcome
+              </SsButton>
+              <SsButton onClick={sendTestFollowup} disabled={isPending} variant="outline" size="sm">
+                <Send className="h-[15px] w-[15px]" aria-hidden="true" /> Follow-up now
+              </SsButton>
+              <SsButton onClick={testDelivery} disabled={isPending} variant="outline" size="sm">
+                <Radio className="h-[15px] w-[15px]" aria-hidden="true" /> Test delivery
+              </SsButton>
+              <SsButton
+                onClick={resetConversation}
+                disabled={isPending}
+                variant="danger-outline"
+                size="sm"
+              >
+                <RefreshCw className="h-[15px] w-[15px]" aria-hidden="true" /> Reset
+              </SsButton>
+            </>
           )}
-          <Button
-            onClick={sendTestFollowup}
-            disabled={isPending}
-            variant="secondary"
-            size="sm"
-          >
-            <Send className="h-4 w-4 mr-2" /> Send follow-up now
-          </Button>
-          {testResult && (
-            <span className="text-xs text-muted-foreground">{testResult}</span>
-          )}
-          <Button
-            onClick={testDelivery}
-            disabled={isPending}
-            variant="secondary"
-            size="sm"
-          >
-            <Radio className="h-4 w-4 mr-2" /> Test delivery
-          </Button>
-          {deliveryResult && (
-            <span className="text-xs text-muted-foreground">{deliveryResult}</span>
-          )}
-          <Button
-            onClick={resetConversation}
-            disabled={isPending}
-            variant="destructive"
-            size="sm"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" /> Reset conversation
-          </Button>
-          {resetResult && (
-            <span className="text-xs text-muted-foreground">{resetResult}</span>
-          )}
-        </>
+        </div>
+      </div>
+
+      {notes.length > 0 && (
+        <p role="status" className="mt-2.5 text-[11.5px] leading-snug text-ss-body">
+          {notes.join(" · ")}
+        </p>
       )}
     </div>
+  );
+}
+
+const SELECT =
+  "h-[34px] rounded-ctl border border-ss-line bg-white px-2.5 text-[12px] font-semibold leading-none text-ss-ink outline-none transition-colors focus:border-ss-indigo-200 focus:ring-2 focus:ring-ss-indigo/20 disabled:opacity-60";
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={cn("flex items-center gap-2")}>
+      <span className="ss-eyebrow tracking-[0.08em] text-ss-muted">{label}</span>
+      {children}
+    </label>
   );
 }

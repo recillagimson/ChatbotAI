@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Loader2, RotateCcw } from "lucide-react";
+import { SsButton } from "@/components/ss/controls";
 
 interface RetrainBotButtonProps {
   chatbotId: string;
-  variant?: "default" | "outline" | "secondary";
-  size?: "default" | "sm";
+  variant?: "primary" | "navy" | "outline" | "soft";
+  size?: "sm" | "md" | "lg";
   className?: string;
 }
 
@@ -20,12 +20,12 @@ interface Result {
 /**
  * Rebuilds a chatbot's knowledge index (re-embeds every KB entry) and clears the
  * short-lived reply/dedup caches, so edits take effect right away. POSTs to
- * /api/chatbots/[id]/reindex — impersonation-aware, so it works under admin "view as".
+ * /api/chatbots/[id]/reindex - impersonation-aware, so it works under admin "view as".
  */
 export function RetrainBotButton({
   chatbotId,
-  variant = "outline",
-  size = "default",
+  variant = "primary",
+  size = "md",
   className,
 }: RetrainBotButtonProps) {
   const router = useRouter();
@@ -50,13 +50,13 @@ export function RetrainBotButton({
           indexed > 0
             ? `${indexed} of ${entries} ${unit} re-indexed`
             : `${entries} ${unit} refreshed`;
-        setResult({ ok: true, text: `Retrained — ${detail}, caches cleared ✓` });
+        setResult({ ok: true, text: `Retrained - ${detail}, caches cleared ✓` });
         router.refresh();
       } else {
-        setResult({ ok: false, text: data.error ?? "Retrain failed — please try again." });
+        setResult({ ok: false, text: data.error ?? "Retrain failed - please try again." });
       }
     } catch {
-      setResult({ ok: false, text: "Network error — please try again." });
+      setResult({ ok: false, text: "Network error - please try again." });
     } finally {
       setRunning(false);
     }
@@ -64,7 +64,7 @@ export function RetrainBotButton({
 
   return (
     <div className={className}>
-      <Button
+      <SsButton
         type="button"
         variant={variant}
         size={size}
@@ -74,18 +74,23 @@ export function RetrainBotButton({
       >
         {running ? (
           <>
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             Retraining…
           </>
         ) : (
           <>
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
             Retrain bot
           </>
         )}
-      </Button>
+      </SsButton>
       {result && (
-        <p className={`mt-2 text-xs ${result.ok ? "text-green-600" : "text-destructive"}`}>
+        <p
+          role="status"
+          className={`mt-2 text-[11.5px] font-medium leading-snug ${
+            result.ok ? "text-ss-green-ink" : "text-ss-rose-ink"
+          }`}
+        >
           {result.text}
         </p>
       )}

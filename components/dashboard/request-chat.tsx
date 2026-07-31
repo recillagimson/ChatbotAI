@@ -30,11 +30,11 @@ type ChatMessage = {
 
 const CATEGORY_ORDER: ChangeCategory[] = ["personality", "offers", "rebuttals", "other", "overall"];
 const CATEGORY_BLURB: Record<ChangeCategory, string> = {
-  personality: "The bot's voice and tone. Applies instantly — no team review.",
+  personality: "The bot's voice and tone. Applies instantly - no team review.",
   offers: "Services, packages, inclusions/exclusions, prices, links. Team-reviewed.",
   rebuttals: "How the bot handles objections and FAQs. Team-reviewed.",
   other: "Add facts to the knowledge base. Team-reviewed.",
-  overall: "Not sure which part? Describe it and we'll update any part it affects — voice, offers, rebuttals & knowledge. Team-reviewed.",
+  overall: "Not sure which part? Describe it and we'll update any part it affects - voice, offers, rebuttals & knowledge. Team-reviewed.",
 };
 
 type CurrentSections = Record<SectionColumn, string>;
@@ -197,7 +197,7 @@ export function RequestChat({
 
   const hint = noProject
     ? "Pick a project on the left to start."
-    : `Tell me what you'd like to change about ${projectName ?? "your bot"} — you can type, attach a screenshot or knowledge file (PDF/DOCX/TXT), or use the mic.`;
+    : `Tell me what you'd like to change about ${projectName ?? "your bot"} - you can type, attach a screenshot or knowledge file (PDF/DOCX/TXT), or use the mic.`;
 
   return (
     <div className="flex min-h-[100dvh] flex-col">
@@ -406,7 +406,7 @@ export function RequestChat({
                       {applying ? "Applying…" : "Apply now"}
                     </Button>
                     <p className="text-xs text-muted-foreground">
-                      Personality changes go live on your bot right away — no team review needed.
+                      Personality changes go live on your bot right away - no team review needed.
                     </p>
                   </>
                 ) : (
@@ -423,12 +423,12 @@ export function RequestChat({
             )}
             {status === "pending" && (
               <p className="rounded-md bg-green-100 px-3 py-2 text-sm text-green-800">
-                Submitted — the SpeedSettr team will review it.
+                Submitted - the SpeedSettr team will review it.
               </p>
             )}
             {status === "applied" && (
               <p className="rounded-md bg-green-100 px-3 py-2 text-sm text-green-800">
-                Applied — this change is live on your bot. Start a new request to make more changes.
+                Applied - this change is live on your bot. Start a new request to make more changes.
               </p>
             )}
             {decided && status !== "pending" && status !== "applied" && (

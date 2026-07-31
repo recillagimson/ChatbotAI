@@ -1,28 +1,47 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft, Flag } from "lucide-react";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/admin";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { InboxList } from "@/components/dashboard/inbox-list";
 import { ConversationActions } from "@/components/dashboard/conversation-actions";
 import { ConversationReplyBox } from "@/components/dashboard/conversation-reply-box";
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
-import { PlatformBadge } from "@/components/dashboard/platform-badge";
-import { MessageBubble } from "@/components/dashboard/message-bubble";
+import { MessageBubble, DayDivider } from "@/components/dashboard/message-bubble";
+import { SsAvatar, SsChip } from "@/components/ss/controls";
+import { ChannelChip } from "@/components/ss/channel";
 import { contactDisplayName, contactHandle } from "@/lib/contact";
 import { signAttachment } from "@/lib/storage";
-import { TAG_LABEL, TAG_VARIANT, tagOf } from "@/lib/conversation-tags";
-import { QUALITY_LABEL, QUALITY_VARIANT, qualityOf } from "@/lib/conversation-quality";
+import { botNameOf } from "@/lib/utils";
+import { shortDate } from "@/lib/format";
+import { TAG_LABEL, tagOf } from "@/lib/conversation-tags";
+import { QUALITY_LABEL, qualityOf } from "@/lib/conversation-quality";
 import { botReplySilenced } from "@/lib/conversation-silence";
+import { inboxKey, readInboxFilters } from "@/lib/inbox-params";
+import { buildConversationsHref } from "@/lib/conversation-filters";
+import { SkInboxList } from "@/components/ss/skeleton";
 
+export const dynamic = "force-dynamic";
+
+/**
+ * A thread, open beside the list it came from.
+ *
+ * The list pane re-renders here with the same filters, so opening a conversation
+ * never costs you your place - the design's reason for making the inbox
+ * two-pane in the first place. On mobile the list is hidden and this fills the
+ * screen, with a back link to the queue.
+ */
 export default async function ConversationDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { id } = await params;
+  const current = readInboxFilters(await searchParams);
+
   const supabase = await createClient();
   const user = await getCurrentUser();
   const isAdmin = !!(await requireSuperadmin());
@@ -42,9 +61,9 @@ export default async function ConversationDetailPage({
     .eq("conversation_id", id)
     .order("created_at", { ascending: true });
 
-  // Resolve a viewable URL for each message that carries media. media_url holds a
+  // Resolve a viewable URL for each message carrying media. media_url holds a
   // storage path in the private request-uploads bucket (sign it), unless it's
-  // already an absolute URL. Signed links are short-lived but fine for this view.
+  // already absolute. Signed links are short-lived but fine for this view.
   const mediaUrls = new Map<string, string>();
   for (const m of messages ?? []) {
     if (!m.media_url) continue;
@@ -54,119 +73,125 @@ export default async function ConversationDetailPage({
     if (url) mediaUrls.set(m.id, url);
   }
 
-  // mark read
   if (conversation.unread_count > 0) {
-    await supabase
-      .from("conversations")
-      .update({ unread_count: 0 })
-      .eq("id", id);
+    await supabase.from("conversations").update({ unread_count: 0 }).eq("id", id);
   }
 
+  const name = contactDisplayName(
+    conversation.contact_name,
+    conversation.contact_username
+  );
+  const handle = contactHandle(conversation.contact_username);
+  const tag = tagOf(conversation.tag);
+  const quality = qualityOf(conversation.quality_tag);
+  const urgent = tag === "needs_human";
+
   return (
-    <div className="h-full flex flex-col p-4 sm:p-6 max-w-3xl mx-auto w-full">
-      <Button
-        asChild
-        variant="ghost"
-        size="sm"
-        className="mb-3 shrink-0 self-start"
+    <div className="flex h-full min-h-0 bg-ss-page">
+      {/* The list stays mounted on desktop; a phone shows one pane at a time. */}
+      {/* Same boundary as the list route: filtering while a thread is open
+          re-queries the list only, so the thread beside it stays put. */}
+      <Suspense
+        key={inboxKey(current)}
+        fallback={<SkInboxList className="hidden lg:flex" />}
       >
-        <Link href="/conversations">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          All conversations
-        </Link>
-      </Button>
+        <InboxList current={current} selectedId={id} className="hidden lg:flex" />
+      </Suspense>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 shrink-0">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-display font-semibold tracking-tight">
-              {contactDisplayName(
-                conversation.contact_name,
-                conversation.contact_username
-              )}
-            </h1>
-            <PlatformBadge platform={conversation.platform} />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {(conversation.chatbots as { name: string } | null)?.name ?? "—"}
-            {contactHandle(conversation.contact_username)
-              ? ` · @${contactHandle(conversation.contact_username)}`
-              : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={TAG_VARIANT[tagOf(conversation.tag)]}>
-            {TAG_LABEL[tagOf(conversation.tag)]}
-          </Badge>
-          {qualityOf(conversation.quality_tag) && (
-            <Badge variant={QUALITY_VARIANT[qualityOf(conversation.quality_tag)!]}>
-              {QUALITY_LABEL[qualityOf(conversation.quality_tag)!]}
-            </Badge>
-          )}
-          {tagOf(conversation.tag) === "starting_later" &&
-            (conversation.start_note || conversation.start_on) && (
-              <span className="text-xs text-muted-foreground">
-                · {conversation.start_note || conversation.start_on}
-              </span>
-            )}
-          {conversation.user_muted_at && (
-            <Badge variant="secondary">Muted by user</Badge>
-          )}
-          {conversation.bot_off_at && (
-            <Badge variant="secondary">Bot off</Badge>
-          )}
-          {(conversation.extraction_attempts ?? 0) > 0 && (
-            <Badge variant="destructive">
-              Flagged{conversation.extraction_attempts > 1 ? ` ×${conversation.extraction_attempts}` : ""}
-            </Badge>
-          )}
-          {conversation.confirmed_at && (
-            <Badge variant="success">
-              Confirmed ✓ ({conversation.confirmed_by === "ai" ? "AI" : "manual"})
-            </Badge>
-          )}
-          <Badge
-            variant={
-              conversation.status === "active"
-                ? "success"
-                : conversation.status === "ai_paused"
-                  ? "warning"
-                  : "secondary"
-            }
-          >
-            {conversation.status === "ai_paused"
-              ? "AI paused"
-              : conversation.status}
-          </Badge>
-        </div>
-      </div>
-
-      <div className="shrink-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-ss-page-alt">
         <ConversationActions
           conversationId={conversation.id}
           currentStatus={conversation.status}
-          currentTag={tagOf(conversation.tag)}
-          currentQuality={qualityOf(conversation.quality_tag)}
+          currentTag={tag}
+          currentQuality={quality}
           currentStartOn={conversation.start_on ?? null}
           userMutedAt={conversation.user_muted_at ?? null}
           isAdmin={isAdmin}
+          identity={
+            <div className="flex min-w-0 items-center gap-3">
+              <Link
+                href={buildConversationsHref(
+                  current,
+                  { page: current.page },
+                  "/conversations"
+                )}
+                aria-label="Back to the inbox"
+                className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-ctl-lg text-ss-body transition-colors hover:bg-ss-page lg:hidden"
+              >
+                <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+              </Link>
+              <SsAvatar name={name} size={40} tone={urgent ? "rose" : "indigo"} />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="truncate font-display text-[17px] font-bold leading-[1.1] text-ss-ink">
+                    {name}
+                  </h1>
+                  <ChannelChip platform={conversation.platform} />
+                  <SsChip tone={urgent ? "rose" : "indigo"}>
+                    {TAG_LABEL[tag]}
+                  </SsChip>
+                  {quality && (
+                    <SsChip tone={quality === "good" ? "green" : "rose-soft"}>
+                      {QUALITY_LABEL[quality]}
+                    </SsChip>
+                  )}
+                  {(conversation.extraction_attempts ?? 0) > 0 && (
+                    <SsChip tone="rose">
+                      Flagged
+                      {conversation.extraction_attempts > 1
+                        ? ` ×${conversation.extraction_attempts}`
+                        : ""}
+                    </SsChip>
+                  )}
+                </div>
+              </div>
+            </div>
+          }
+          meta={
+            <p className="text-[12px] leading-none text-ss-muted">
+              {botNameOf(conversation.chatbots) ?? "-"}
+              {handle ? ` · @${handle}` : ""}
+              {` · ${(messages ?? []).length} message${(messages ?? []).length === 1 ? "" : "s"}`}
+              {` · first seen ${shortDate(conversation.created_at)}`}
+              {conversation.bot_off_at ? " · bot off (ManyChat tag)" : ""}
+              {conversation.start_note
+                ? ` · starting ${conversation.start_note}`
+                : ""}
+            </p>
+          }
         />
-      </div>
 
-      <Card className="mt-4 flex-1 min-h-0 flex flex-col overflow-hidden">
-        <ChatScroll className="flex-1 min-h-0 p-4 space-y-3">
+        <ChatScroll className="ss-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-5 py-6 sm:px-6">
           {!messages?.length && (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              No messages yet.
+            <p className="py-10 text-center text-[12.5px] text-ss-muted">
+              No messages yet on this thread.
             </p>
           )}
-          {messages?.map((m) => (
-            <MessageBubble key={m.id} message={m} mediaUrl={mediaUrls.get(m.id)} />
-          ))}
-        </ChatScroll>
-      </Card>
+          {(messages ?? []).map((m, i) => {
+            const prev = i > 0 ? messages![i - 1] : null;
+            const newDay =
+              !prev ||
+              new Date(prev.created_at).toDateString() !==
+                new Date(m.created_at).toDateString();
+            return (
+              <div key={m.id} className="contents">
+                {newDay && <DayDivider label={dayLabel(m.created_at)} />}
+                <MessageBubble message={m} mediaUrl={mediaUrls.get(m.id)} />
+              </div>
+            );
+          })}
 
-      <div className="shrink-0">
+          {urgent && (
+            <div className="flex items-center gap-2.5 self-stretch rounded-[13px] border border-dashed border-ss-indigo-200 bg-ss-indigo-50 px-3.5 py-3">
+              <Flag className="h-4 w-4 shrink-0 text-ss-indigo-700" aria-hidden="true" />
+              <p className="text-[11.5px] leading-snug text-ss-indigo-700">
+                Flagged <strong>needs attention</strong> - the AI stopped here so
+                you can close it yourself.
+              </p>
+            </div>
+          )}
+        </ChatScroll>
+
         <ConversationReplyBox
           conversationId={conversation.id}
           botSilent={botReplySilenced(conversation)}
@@ -174,4 +199,14 @@ export default async function ConversationDetailPage({
       </div>
     </div>
   );
+}
+
+/** "TODAY", "YESTERDAY", or the date - the divider label between days. */
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return "Today";
+  const yesterday = new Date(now.getTime() - 86_400_000);
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

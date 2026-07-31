@@ -4,23 +4,26 @@
 
 @layer base {
   :root {
-    /* Brand: deep navy #1e1b4b + primary indigo #6366f1 (SpeedSettr blueprint) */
-    --background: 226 60% 99%; /* barely-there indigo tint so white cards pop */
-    --foreground: 245 45% 15%; /* deep indigo-navy near-black */
+    /* Brand: deep navy #1e1b4b + primary indigo #6366f1 (SpeedSettr blueprint).
+       Every value below is the HSL of a literal hex from the dashboard design,
+       so the shadcn-token surfaces (auth, admin, marketing) and the dashboard's
+       explicit `ss-*` palette resolve to the same colors. */
+    --background: 230 50% 98%; /* #f6f7fc - the app page ground */
+    --foreground: 244 47% 20%; /* #1e1b4b - deep navy, all strong text */
     --card: 0 0% 100%;
-    --card-foreground: 245 45% 15%;
-    --primary: 239 84% 67%; /* indigo #6366f1: buttons, links, CTAs */
+    --card-foreground: 244 47% 20%;
+    --primary: 239 84% 67%; /* #6366f1: buttons, links, CTAs */
     --primary-foreground: 0 0% 100%;
-    --secondary: 226 60% 96%; /* light indigo tint */
-    --secondary-foreground: 244 47% 25%;
-    --muted: 226 50% 96%;
-    --muted-foreground: 240 12% 46%;
-    --accent: 230 60% 95%; /* hover surface */
-    --accent-foreground: 240 50% 30%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 230 35% 90%;
-    --input: 230 35% 90%;
+    --secondary: 233 100% 97%; /* #eef0ff - indigo chip fill */
+    --secondary-foreground: 244 47% 41%; /* #4338ca */
+    --muted: 230 27% 96%; /* #f1f2f7 */
+    --muted-foreground: 234 14% 60%; /* #8b8ea8 - the design's label gray */
+    --accent: 233 100% 97%; /* #eef0ff - hover surface */
+    --accent-foreground: 244 47% 41%;
+    --destructive: 347 77% 50%; /* #e11d48 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 235 33% 93%; /* #e7e8f3 - the single card hairline */
+    --input: 232 24% 87%; /* #d6d8e8 - field borders read one step stronger */
     --ring: 239 84% 67%;
     --radius: 0.5rem;
 
@@ -86,6 +89,53 @@
 }
 
 @layer utilities {
+  /* Every metric in the dashboard is a tabular figure - the design leans on
+     Outfit's lining numerals so a ticking count never shifts its neighbours. */
+  .ss-num {
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  /* The eyebrow label above a stat ("SPEED TO LEAD · LAST 7 DAYS"). */
+  .ss-eyebrow {
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* Horizontal filter rails (mobile pill rows, chatbot tab bars) scroll but must
+     not show a bar - the design shows them bleeding off the edge. */
+  .ss-rail {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .ss-rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Slim scrollbar for the inbox list and thread panes, which scroll
+     independently inside the two-pane shell. */
+  .ss-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #d6d8e8 transparent;
+  }
+  .ss-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .ss-scroll::-webkit-scrollbar-thumb {
+    background: #d6d8e8;
+    border-radius: 999px;
+  }
+  .ss-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
   /* Subtle film grain for premium dark surfaces */
   .grain {
     position: relative;

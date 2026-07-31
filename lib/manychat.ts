@@ -37,7 +37,7 @@ export class ManychatKeyError extends Error {
 /**
  * Resolve the ManyChat API key for a chatbot.
  * - If the chatbot has an encrypted key, decrypt it. A decryption failure
- *   (bad/rotated master key) is a HARD error — never fall back to the global
+ *   (bad/rotated master key) is a HARD error - never fall back to the global
  *   env key, which would send this tenant's reply through the owner's account.
  * - Otherwise fall back to the global MANYCHAT_API_KEY (the un-migrated owner).
  * - Throw ManychatKeyError if neither is available.
@@ -89,7 +89,7 @@ export function verifyManychatSecret(
  * Actively send a message back to the user via ManyChat's Send Content API.
  *
  * This is our PRIMARY delivery mechanism. ManyChat's "Get Dynamic Content"
- * (rendering the External Request response inline) is unreliable on Instagram —
+ * (rendering the External Request response inline) is unreliable on Instagram -
  * it silently drops the reply. So instead the flow is a fire-and-forget
  * External Request, and we push the reply here.
  *
@@ -107,13 +107,13 @@ export function verifyManychatSecret(
 // a `buttons` array of {type:"url", caption, url}). Handles markdown [label](url)
 // and bare URLs; platform limits: max 3 buttons/message, caption max ~20 chars.
 //
-// Link buttons are OFF BY DEFAULT for every client — the default delivers links as
+// Link buttons are OFF BY DEFAULT for every client - the default delivers links as
 // plain text, each isolated onto its own bubble (see buildOutboundMessages), with the
 // FULL URL (query string included) intact. A raw URL is clickable on every channel
 // anyway, and plain text can never drop an affiliate "?ref=..." param.
 //
 // Opt IN per-chatbot with the `link_buttons_enabled` column (threaded here as the
-// `enabled` arg) — that bot's Messenger links then render as tappable URL buttons.
+// `enabled` arg) - that bot's Messenger links then render as tappable URL buttons.
 // The legacy LINK_BUTTONS_ENABLED env var still works as a GLOBAL override (turns
 // buttons on for every bot at once). Either switch only affects Messenger: Instagram
 // has no URL buttons (and strips links), so buttonsSupported is false off-Messenger.
@@ -134,7 +134,7 @@ const MAX_BUTTON_CAPTION = 20;
 
 export type ManyChatButton = { type: "url"; caption: string; url: string };
 export type ManyChatTextMessage = { type: "text"; text: string; buttons?: ManyChatButton[] };
-/** A media bubble (image/video/audio/file) — ManyChat fetches `url` at send time. */
+/** A media bubble (image/video/audio/file) - ManyChat fetches `url` at send time. */
 export type ManyChatMediaMessage = { type: MediaBlockKind; url: string };
 export type ManyChatOutMessage = ManyChatTextMessage | ManyChatMediaMessage;
 
@@ -169,7 +169,7 @@ export function messageWithLinkButtons(text: string): ManyChatTextMessage {
 
 /**
  * Split one reply bubble so every link sits on its OWN bubble, separated from the
- * surrounding sentence — the default outbound link style for all channels/clients.
+ * surrounding sentence - the default outbound link style for all channels/clients.
  * Markdown `[label](url)` keeps the label inline and isolates the url; trailing
  * sentence punctuation is peeled off the link so it stays clickable; the FULL URL
  * (query string included) is preserved verbatim. A bubble with no link returns
@@ -177,13 +177,13 @@ export function messageWithLinkButtons(text: string): ManyChatTextMessage {
  */
 export function isolateLinkBubbles(text: string): string[] {
   const t = (text ?? "")
-    // Markdown [label](url) -> "label url " — the TRAILING space matters: without it,
+    // Markdown [label](url) -> "label url " - the TRAILING space matters: without it,
     // back-to-back links "[a](u1)[b](u2)" would fuse "b" onto u1 and corrupt the URL.
     .replace(MD_LINK_RE, (_m, label: string, url: string) => `${label} ${url} `)
     .trim();
   if (!t) return [];
   const out: string[] = [];
-  // Push a text fragment, dropping residue that is ONLY punctuation/brackets — the
+  // Push a text fragment, dropping residue that is ONLY punctuation/brackets - the
   // leftover of isolating a wrapped URL, so "(https://x)" never emits a lone "(" bubble.
   // Emojis and real words are kept (they aren't in the punctuation class).
   const pushText = (s: string) => {
@@ -211,8 +211,8 @@ export function isolateLinkBubbles(text: string): string[] {
  * Build the ManyChat `content.messages` array from reply bubbles. Default (all
  * clients, every channel): raw clickable links, each isolated onto its own bubble so
  * the link is never truncated and reads separated from the message. Opt-in per bot:
- * when `enabled` (chatbots.link_buttons_enabled) is true — or the global
- * LINK_BUTTONS_ENABLED env override is set — Messenger links render as URL buttons.
+ * when `enabled` (chatbots.link_buttons_enabled) is true - or the global
+ * LINK_BUTTONS_ENABLED env override is set - Messenger links render as URL buttons.
  */
 export function buildOutboundMessages(
   texts: string[],
@@ -229,7 +229,7 @@ function requireContentType(platform?: Platform): string {
   const contentType = PLATFORM_META[platform ?? DEFAULT_PLATFORM].manychatType;
   if (!contentType) {
     throw new Error(
-      `ManyChat has no send API for platform "${platform}" — deliver via the webhook response instead.`
+      `ManyChat has no send API for platform "${platform}" - deliver via the webhook response instead.`
     );
   }
   return contentType;
@@ -238,11 +238,11 @@ function requireContentType(platform?: Platform): string {
 /**
  * Decide what to do after a `fetch` throw in postSendContent: retry it, or (for
  * media) assume it was delivered and stop. ANY thrown transport error is
- * ambiguous for media — a client timeout/abort OR a network error (e.g. an
+ * ambiguous for media - a client timeout/abort OR a network error (e.g. an
  * ECONNRESET / premature close surfacing as a TypeError) that may have fired
  * AFTER ManyChat already relayed the asset. Re-POSTing risks a duplicate video,
  * which the owner ranks worse than a rare miss, so `assumeDeliveredOnError`
- * stops. (429/5xx never reach here — they don't throw — so postSendContent still
+ * stops. (429/5xx never reach here - they don't throw - so postSendContent still
  * retries those: the server explicitly rejected the send, so it was NOT
  * delivered.) The permanent-4xx error is re-thrown by identity before this is
  * called. Pure + exported for scripts/test-manychat-retry.ts.
@@ -256,7 +256,7 @@ export function classifySendError(
   // was already sent) → never re-POST a video/image; assume delivered.
   if (opts.assumeDeliveredOnError) return "assume_delivered";
   // Text: a client TIMEOUT/ABORT means our fetch was aborted AFTER the request went
-  // out — ManyChat may well have delivered the DM already, so re-POSTing would deliver
+  // out - ManyChat may well have delivered the DM already, so re-POSTing would deliver
   // a DUPLICATE. Assume delivered and stop. A connection-level failure (e.g. a
   // TypeError "fetch failed") means the request likely never completed → safe to retry
   // (it was not delivered). 429/5xx are handled in postSendContent (server rejected).
@@ -267,7 +267,7 @@ export function classifySendError(
 /**
  * ManyChat's Send Content API returns HTTP 200 even for business-logic REFUSALS
  * (a closed 24h messaging window, "can't message this user", an account-level
- * messaging restriction) — the real outcome is the body's `status` field, exactly
+ * messaging restriction) - the real outcome is the body's `status` field, exactly
  * like every other ManyChat endpoint (see validateManychatApiKey/listManychatFlows).
  * Treating a bare HTTP 200 as delivered persists a phantom "sent" bubble that never
  * reached the contact. Returns the refusal message when the body says error, else
@@ -290,14 +290,14 @@ export function manychatSendRejection(json: unknown): string | null {
  *
  * Retry transient failures (429 / 5xx / network) so a ManyChat blip doesn't
  * silently drop a reply that's already saved to the DB. Other 4xx errors
- * (invalid subscriber, closed messaging window) are permanent — throw
+ * (invalid subscriber, closed messaging window) are permanent - throw
  * immediately.
  *
  * Failure policy differs by content (see classifySendError). TEXT treats a client
- * TIMEOUT/ABORT as delivered (the request was already sent — re-POSTing would double
+ * TIMEOUT/ABORT as delivered (the request was already sent - re-POSTing would double
  * the reply, the exact "same message twice" bug), and only retries connection-level
  * failures (request never completed) plus 429/5xx (server rejected → not delivered).
- * MEDIA passes `assumeDeliveredOnError` — a slow-but-successful video that trips ANY
+ * MEDIA passes `assumeDeliveredOnError` - a slow-but-successful video that trips ANY
  * transport error must NOT be re-POSTed, or the lead receives it twice; assume it was
  * delivered and stop. Both text and media use a 15s default `attemptTimeoutMs` so a
  * normal-but-slow ManyChat relay completes cleanly instead of tripping the timeout.
@@ -313,10 +313,10 @@ async function postSendContent(opts: {
    *  responds before we abort (aborting mid-flight risks a duplicate re-POST). */
   attemptTimeoutMs?: number;
   /** When a send throws a transport error (timeout/network) AFTER the request was
-   *  sent, assume delivered and stop instead of retrying (media only — a duplicate
+   *  sent, assume delivered and stop instead of retrying (media only - a duplicate
    *  is worse than a rare miss). 429/5xx still retry (server rejected, not sent).
    *  NOTE: even without this flag, text now assumes-delivered on a TIMEOUT/ABORT
-   *  specifically (see classifySendError) — this flag additionally covers connection
+   *  specifically (see classifySendError) - this flag additionally covers connection
    *  errors, which text still retries. */
   assumeDeliveredOnError?: boolean;
 }) {
@@ -348,7 +348,7 @@ async function postSendContent(opts: {
       });
 
       if (res.ok) {
-        // HTTP 200 is necessary but NOT sufficient — ManyChat signals a refused send
+        // HTTP 200 is necessary but NOT sufficient - ManyChat signals a refused send
         // (closed window, blocked user, account restriction) with status:"error" in
         // the 200 body. Surface it as a failure so the caller doesn't record a phantom
         // "sent" bubble, and so the reply can be retried/reconciled instead of lost.
@@ -358,7 +358,7 @@ async function postSendContent(opts: {
           lastError = new Error(
             `ManyChat send refused (HTTP 200): ${rejection} (attempt ${attempt + 1}/${ATTEMPTS})`
           );
-          // ManyChat evaluated the send and said no — this is a decision, not a transport
+          // ManyChat evaluated the send and said no - this is a decision, not a transport
           // blip, so re-POSTing won't help and risks a duplicate. Treat as permanent.
           throw lastError;
         }
@@ -379,7 +379,7 @@ async function postSendContent(opts: {
     } catch (err) {
       // Re-throw the permanent-4xx error constructed above.
       if (err === lastError) throw err;
-      // Media: a transport error means the request was already sent — assume it
+      // Media: a transport error means the request was already sent - assume it
       // was delivered and stop rather than re-POST (no duplicate video). Text
       // falls through and retries.
       if (
@@ -515,7 +515,7 @@ export interface OutboundAsset {
  *
  * Channel-aware: image/video/audio assets become native media bubbles ONLY on
  * channels that accept them (Instagram = image only; Messenger/Telegram = all).
- * An unsupported media asset (e.g. a voice note on Instagram) is dropped — the
+ * An unsupported media asset (e.g. a voice note on Instagram) is dropped - the
  * text caption still delivers so nothing is lost. `link` assets are appended to
  * the caption as a raw URL (sent as text on every channel). Returns null when
  * there is nothing deliverable (no supported media and no text).
@@ -550,7 +550,7 @@ export async function sendManychatMedia(opts: {
   }
 
   // Caption + any link assets fold into one text bubble (links kept raw so they
-  // stay clickable on channels that render them; IG may strip them — accepted).
+  // stay clickable on channels that render them; IG may strip them - accepted).
   const captionParts = [sanitizeReply((opts.text ?? "").trim()), ...linkUrls].filter(Boolean);
   const caption = captionParts.join("\n").trim();
 
@@ -584,7 +584,7 @@ export async function sendManychatMedia(opts: {
 // floor); the trickle is the length-scaled gap before bubbles 2..N. All tunables
 // are env-overridable. The total sleep time is fit under a budget at send time (see
 // sendManychatMessagePaced / pacingFits) so it never exceeds the webhook's
-// maxDuration — on Vercel Pro (maxDuration=300) the full 10–30s trickle fits even
+// maxDuration - on Vercel Pro (maxDuration=300) the full 10–30s trickle fits even
 // for a 6-bubble reply; on the 60s Hobby budget long replies pace what fits and send
 // the remainder immediately (never dropped).
 
@@ -600,7 +600,7 @@ const PER_CHAR_MS = 24; // typing-speed feel (~per character) for bubble 0
 const FIRST_MIN_MS = 1_200; // a real reply never lands instantly
 const FIRST_MAX_MS = 4_000; // cap composing time even for a long first bubble
 // Length-scaled gap before each LATER bubble: gap = len * BUBBLE_GAP_PER_CHAR_MS,
-// clamped to [BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS] — a short bubble waits the 10s
+// clamped to [BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS] - a short bubble waits the 10s
 // floor, a long one up to the 30s ceiling. All three are env-tunable.
 const BUBBLE_GAP_MIN_MS = readMsEnv("BUBBLE_GAP_MIN_MS", 10_000);
 const BUBBLE_GAP_MAX_MS = Math.max(
@@ -608,7 +608,7 @@ const BUBBLE_GAP_MAX_MS = Math.max(
   readMsEnv("BUBBLE_GAP_MAX_MS", 30_000)
 ); // floor max at min so a mis-set env can't invert the range
 // Per-character "typing" rate for later bubbles. Default 150ms/char reaches the 30s
-// ceiling at ~200 chars and the 10s floor at ≤~67 chars — tune to taste.
+// ceiling at ~200 chars and the 10s floor at ≤~67 chars - tune to taste.
 const BUBBLE_GAP_PER_CHAR_MS = readMsEnv("BUBBLE_GAP_PER_CHAR_MS", 150);
 // Total sleep budget: a bubble's gap is only slept if it FINISHES at/under this, so
 // cumulative pacing never overshoots the function's maxDuration. Sized for Vercel
@@ -645,10 +645,10 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
  * - Bubble 0: a read pause + short length-scaled composing time, clamped to
  *   FIRST_MIN..FIRST_MAX (the send loop also lifts it to the THINKING_MS floor), so
  *   the first reply lands quickly and feels responsive.
- * - Bubbles 1..N: a length-scaled "typing" gap — len * BUBBLE_GAP_PER_CHAR_MS,
- *   clamped to [BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS] — so a short message waits ~10s
+ * - Bubbles 1..N: a length-scaled "typing" gap - len * BUBBLE_GAP_PER_CHAR_MS,
+ *   clamped to [BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS] - so a short message waits ~10s
  *   and a long one up to ~30s, automatically scaling with the bubble's length.
- * Deterministic (no I/O, no RNG). No total down-scaling — the budget is enforced at
+ * Deterministic (no I/O, no RNG). No total down-scaling - the budget is enforced at
  * send time by pacingFits, so real gaps are never silently shrunk.
  * Exported for unit testing.
  */
@@ -665,7 +665,7 @@ export function computeBubbleDelays(bubbles: string[]): number[] {
 /**
  * Pure: should we actually sleep `wait` ms before the next bubble? True only if the
  * gap is positive, the request hasn't passed the deadline, AND the whole gap finishes
- * within the pacing budget — so cumulative sleep never overshoots the function's
+ * within the pacing budget - so cumulative sleep never overshoots the function's
  * maxDuration (a long random gap late in a reply is skipped rather than blowing the
  * budget; that bubble just sends immediately). Exported for unit testing.
  */
@@ -683,7 +683,7 @@ export function pacingFits(
  * follow-on bubbles drip in 15–30s apart (see computeBubbleDelays). Each bubble is
  * its own sendContent call (reusing sendManychatMessage for per-call sanitize +
  * retry). A sleep happens only while it fits the pacing budget (pacingFits) so the
- * background task never exceeds the webhook's maxDuration — once the budget is spent,
+ * background task never exceeds the webhook's maxDuration - once the budget is spent,
  * remaining bubbles send immediately (pacing degrades, nothing is dropped).
  *
  * Because the trickle can span minutes, an optional `shouldAbort` is checked before
@@ -691,7 +691,7 @@ export function pacingFits(
  * superseded this run, the remaining bubbles are NOT sent and { aborted: true } is
  * returned so the caller can skip the media send too.
  *
- * Every attempted bubble is always sent — a single send failure is logged and the
+ * Every attempted bubble is always sent - a single send failure is logged and the
  * rest still send; throws once at the end if any failed so the caller can record
  * push_failed. Abort is NOT a failure (no throw).
  */
@@ -709,7 +709,7 @@ export async function sendManychatMessagePaced(opts: {
   /**
    * Optional stand-down check, evaluated before each FOLLOW-ON bubble (2..N). Return
    * true to stop sending the rest (lead muted / owner took over / superseded). If it
-   * throws, this loop keeps going (fail-open) — dropping a legit reply on a transient
+   * throws, this loop keeps going (fail-open) - dropping a legit reply on a transient
    * blip is the worse outcome, and the next bubble re-checks anyway.
    */
   shouldAbort?: () => Promise<boolean>;
@@ -728,7 +728,7 @@ export async function sendManychatMessagePaced(opts: {
     // generating). Later bubbles use their random trickle gap.
     const elapsed = performance.now() - startedAt;
     const wait = i === 0 ? Math.max(gaps[i], thinkingDelayMs(elapsed)) : gaps[i];
-    // Sleep only while the WHOLE gap finishes within budget — otherwise send the
+    // Sleep only while the WHOLE gap finishes within budget - otherwise send the
     // rest immediately so we never overshoot maxDuration (bubbles never dropped).
     if (pacingFits(elapsed, wait)) {
       await sleep(wait);
@@ -802,7 +802,7 @@ export async function validateManychatApiKey(
  *
  * THROWS on hard failure so sendFollowup's existing claim-revert-and-retry runs
  * (exactly like sendManychatMedia). A client TIMEOUT/ABORT is treated as
- * assume-delivered (returns success, no retry) — re-triggering would double-send
+ * assume-delivered (returns success, no retry) - re-triggering would double-send
  * the voice note, the same rule as duplicate media (gotcha #18). A genuine
  * connection failure (request never completed) is retried. 429/5xx are retried.
  */

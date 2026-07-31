@@ -4,7 +4,7 @@
  * response so callers destructure `{ data, error }` exactly as they would without it.
  *
  * For the inbound webhook the point is durability: a transient Postgres/network blip
- * while recording the inbound message must not silently drop it — retry a couple of
+ * while recording the inbound message must not silently drop it - retry a couple of
  * times first.
  *
  * BOUNDED latency: these calls run on the synchronous PRE-ACK path (before the webhook
@@ -12,7 +12,7 @@
  * up as a SLOW call, not an instant error. So each attempt is capped by `timeoutMs`
  * via an AbortSignal that actually cancels the query (fn must forward it to supabase's
  * `.abortSignal(signal)`); on timeout the attempt aborts and is retried. Worst-case
- * added time is `attempts * timeoutMs + sum(backoff)` — with the defaults, ~6.35s —
+ * added time is `attempts * timeoutMs + sum(backoff)` - with the defaults, ~6.35s -
  * instead of the UNBOUNDED wait a plain un-timed call (the pre-change code) would incur
  * on a stalled connection. `sleep` is injectable so the retry logic is unit-testable
  * without real delays.

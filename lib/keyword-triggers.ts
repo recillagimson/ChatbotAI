@@ -8,7 +8,7 @@
  * match "163". An empty include list never matches (a half-filled group can't
  * swallow every message).
  *
- * Pure + synchronous — no I/O, no per-chatbot literals (gotcha #12: the words
+ * Pure + synchronous - no I/O, no per-chatbot literals (gotcha #12: the words
  * live in the chatbot's own `keyword_triggers` data, never hardcoded here).
  * Covered by scripts/test-keyword-match.ts.
  */
@@ -39,7 +39,7 @@ export function containsWord(normalizedText: string, keyword: string): boolean {
 /**
  * Strip surrounding non-alphanumerics (punctuation, emoji, spaces) after normalize,
  * keeping internal words intact. Same edge-strip the reset keyword uses
- * (lib/reset-keyword.ts) — kept local so this module stays self-contained.
+ * (lib/reset-keyword.ts) - kept local so this module stays self-contained.
  */
 function stripEdges(s: string): string {
   return normalize(typeof s === "string" ? s : "").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
@@ -96,7 +96,7 @@ export function firstMatchingGroup(
  * Keyword-only reply mode gate (chatbots.keyword_gate_enabled). A keyword is an
  * ENTRY qualifier, not a per-message filter: a contact "unlocks" the bot by
  * matching a keyword once (becoming a possible lead), and from then on the bot
- * replies to ALL their messages — keyword or not — so it can actually carry the
+ * replies to ALL their messages - keyword or not - so it can actually carry the
  * conversation it started. A contact who has never matched a keyword stays
  * silent. Returns true when the inbound should be silently gated (no AI, no ack).
  *

@@ -6,39 +6,29 @@ import { sectionColumnFor } from "@/lib/change-categories";
 import type { ChangeCategory, ChangeProposal, Chatbot, SectionColumn, TranscriptMessage } from "@/lib/types";
 import { Plus, FolderClosed, History as HistoryIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SsDot } from "@/components/ss/controls";
 
 type CrStatus = "draft" | "pending" | "approved" | "applied" | "rejected";
 
 // Client-facing status pills (soft pill + leading dot). A draft is always in the
 // client's court (reply or submit) → "Needs your reply"; submitted = "In review";
 // approved/applied (live) = "Approved"; rejected = "Declined".
-const STATUS_META: Record<CrStatus, { label: string; pill: string; dot: string }> = {
-  draft: {
-    label: "Needs your reply",
-    pill: "bg-amber-50 text-amber-700 ring-amber-600/20",
-    dot: "bg-amber-500",
-  },
-  pending: {
-    label: "In review",
-    pill: "bg-green-50 text-green-700 ring-green-600/20",
-    dot: "bg-green-500",
-  },
-  approved: {
-    label: "Approved",
-    pill: "bg-green-600 text-white ring-green-700/30",
-    dot: "bg-white/90",
-  },
-  applied: {
-    label: "Approved",
-    pill: "bg-green-600 text-white ring-green-700/30",
-    dot: "bg-white/90",
-  },
-  rejected: {
-    label: "Declined",
-    pill: "bg-red-50 text-red-700 ring-red-600/20",
-    dot: "bg-red-500",
-  },
+const STATUS_META: Record<
+  CrStatus,
+  { label: string; tone: "amber" | "green" | "rose" }
+> = {
+  draft: { label: "Needs your reply", tone: "amber" },
+  pending: { label: "In review", tone: "green" },
+  approved: { label: "Approved", tone: "green" },
+  applied: { label: "Applied", tone: "green" },
+  rejected: { label: "Declined", tone: "rose" },
 };
+
+const PILL_TONE = {
+  amber: "bg-ss-amber-bg text-ss-amber-ink",
+  green: "bg-ss-green-bg text-ss-green-ink",
+  rose: "bg-ss-rose-bg text-ss-rose-ink",
+} as const;
 
 function greetingFor(name: string | null): string {
   const hour = new Date().getHours();
@@ -121,7 +111,7 @@ export default async function RequestsPage({
       ? sp.category
       : "personality";
 
-  // Current text of the active project's sections — the "before" side of the
+  // Current text of the active project's sections - the "before" side of the
   // proposal review. `currentSection` is the single targeted section (single-section
   // categories); `currentSections` is all three, for the "overall" multi-diff.
   // Empty for no project / empty sections.
@@ -176,120 +166,146 @@ export default async function RequestsPage({
     );
   }
 
+  const needsYou = history.filter((h) => h.status === "draft").length;
+
   return (
-    <div className="lg:grid lg:grid-cols-[260px_1fr] min-h-[100dvh]">
-      {/* Left rail */}
-      <aside className="hidden lg:flex flex-col border-r bg-muted/30">
-        <div className="p-4">
+    <div className="flex h-full min-h-0 bg-ss-page">
+      {/* ---- Left rail: new request, chatbot scope, history -------------- */}
+      <aside className="hidden w-[286px] shrink-0 flex-col border-r border-ss-line bg-white lg:flex">
+        <div className="p-3.5">
           <Link
             href="/requests"
             className={cn(
-              "flex h-11 items-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              !isThread && !activeProjectId && "border-primary/40"
+              "flex items-center justify-center gap-2 rounded-ctl-lg px-3 py-3 text-[13px] font-semibold leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
+              !isThread && !activeProjectId
+                ? "bg-ss-indigo text-white hover:bg-ss-indigo-600"
+                : "border border-ss-line text-ss-ink hover:bg-ss-page"
             )}
           >
-            <Plus className="h-4 w-4" aria-hidden="true" />
+            <Plus className="h-[17px] w-[17px]" aria-hidden="true" />
             New request
           </Link>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 pb-6 space-y-6" aria-label="Requests navigation">
-          <div>
-            <p className="flex items-center gap-2 px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <FolderClosed className="h-3.5 w-3.5" aria-hidden="true" />
-              Projects
+        <nav
+          className="ss-scroll flex-1 overflow-y-auto px-3.5 pb-6"
+          aria-label="Requests navigation"
+        >
+          <p className="flex items-center gap-2 px-2 pb-2 pt-3 text-[9.5px] font-semibold uppercase leading-none tracking-[0.14em] text-ss-faint">
+            <FolderClosed className="h-3.5 w-3.5" aria-hidden="true" />
+            Chatbot
+          </p>
+          {projects.length === 0 ? (
+            <p className="px-2 text-[11.5px] leading-relaxed text-ss-muted">
+              Create a chatbot first - a change request always targets one.
             </p>
-            {projects.length === 0 ? (
-              <p className="px-2 text-xs text-muted-foreground">Create a chatbot first.</p>
-            ) : (
-              <ul className="space-y-0.5">
-                {projects.map((p) => {
-                  const active = !isThread && activeProjectId === p.id;
-                  return (
-                    <li key={p.id}>
-                      <Link
-                        href={`/requests?project=${p.id}`}
-                        aria-current={active ? "true" : undefined}
-                        className={cn(
-                          "flex min-h-[40px] items-center rounded-md px-2 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                          active
-                            ? "bg-primary/10 font-medium text-primary"
-                            : "text-foreground/80 hover:bg-accent hover:text-accent-foreground"
-                        )}
-                      >
-                        <span className="truncate">{p.name}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
+          ) : (
+            <ul className="flex flex-col gap-[3px]">
+              {projects.map((proj) => {
+                const active = !isThread && activeProjectId === proj.id;
+                return (
+                  <li key={proj.id}>
+                    <Link
+                      href={"/requests?project=" + proj.id}
+                      aria-current={active ? "true" : undefined}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-ctl px-3 py-2.5 text-[13px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
+                        active
+                          ? "bg-ss-indigo-50 font-bold text-ss-indigo-800"
+                          : "font-medium text-ss-body hover:bg-ss-page hover:text-ss-ink"
+                      )}
+                    >
+                      <SsDot tone={active ? "green" : "idle"} className="h-1.5 w-1.5" />
+                      <span className="truncate">{proj.name}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
-          <div>
-            <p className="flex items-center gap-2 px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <HistoryIcon className="h-3.5 w-3.5" aria-hidden="true" />
-              History
+          <p className="flex items-center gap-2 px-2 pb-2 pt-5 text-[9.5px] font-semibold uppercase leading-none tracking-[0.14em] text-ss-faint">
+            <HistoryIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            History
+            {needsYou > 0 && (
+              <span className="ml-auto rounded-full bg-ss-amber-bg px-[7px] py-0.5 text-[9.5px] font-bold leading-[1.6] text-ss-amber-ink">
+                {needsYou} NEED YOU
+              </span>
+            )}
+          </p>
+          {history.length === 0 ? (
+            <p className="px-2 text-[11.5px] leading-relaxed text-ss-muted">
+              No requests yet. Describe a change in your own words and it comes
+              back as an edit you can review before it goes live.
             </p>
-            {history.length === 0 ? (
-              <p className="px-2 text-xs text-muted-foreground">No requests yet.</p>
-            ) : (
-              <ul className="space-y-0.5">
-                {history.map((h) => {
-                  const active = isThread && thread!.id === h.id;
-                  const meta = STATUS_META[h.status] ?? STATUS_META.draft;
-                  return (
-                    <li key={h.id}>
-                      <Link
-                        href={`/requests?id=${h.id}`}
-                        aria-current={active ? "true" : undefined}
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {history.map((h) => {
+                const active = isThread && thread!.id === h.id;
+                const meta = STATUS_META[h.status] ?? STATUS_META.draft;
+                return (
+                  <li key={h.id}>
+                    <Link
+                      href={"/requests?id=" + h.id}
+                      aria-current={active ? "true" : undefined}
+                      className={cn(
+                        "block rounded-ctl-lg border px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
+                        active
+                          ? "border-ss-indigo-200 bg-[#f4f5ff]"
+                          : "border-ss-hair hover:border-ss-line hover:bg-ss-page"
+                      )}
+                    >
+                      <span
                         className={cn(
-                          "flex min-h-[40px] items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                          active
-                            ? "bg-primary/10 font-medium text-primary"
-                            : "text-foreground/80 hover:bg-accent hover:text-accent-foreground"
+                          "block truncate text-[12.5px] leading-snug",
+                          active ? "font-semibold text-ss-ink" : "font-medium text-ss-body"
                         )}
                       >
-                        <span className="min-w-0 flex-1 truncate">
-                          {h.title || "Untitled request"}
-                        </span>
+                        {h.title || "Untitled request"}
+                      </span>
+                      <span className="mt-1.5 flex items-center gap-2">
                         <span
                           className={cn(
-                            "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
-                            meta.pill
+                            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase leading-[1.6]",
+                            PILL_TONE[meta.tone]
                           )}
                         >
-                          <span
-                            className={cn("h-1.5 w-1.5 rounded-full", meta.dot)}
-                            aria-hidden="true"
-                          />
+                          <SsDot tone={meta.tone} className="h-1 w-1" />
                           {meta.label}
                         </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
+                        <span className="ml-auto text-[10.5px] font-medium leading-none text-ss-faint">
+                          {new Date(h.updated_at).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </nav>
       </aside>
 
-      {/* Center pane */}
-      <RequestChat
-        key={thread ? thread.id : `${activeProjectId ?? "new"}-${activeCategory}`}
-        changeRequestId={thread ? thread.id : null}
-        chatbotId={activeProjectId}
-        projectName={activeProjectName}
-        greeting={greeting}
-        initialTranscript={initialTranscript}
-        initialProposal={thread ? thread.proposed : null}
-        initialStatus={thread ? thread.status : null}
-        initialCategory={activeCategory}
-        currentSection={currentSection}
-        currentSections={currentSections}
-        hasProjects={projects.length > 0}
-      />
+      {/* ---- Center pane: the conversation and the proposed diff --------- */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-ss-page-alt">
+        <RequestChat
+          key={thread ? thread.id : (activeProjectId ?? "new") + "-" + activeCategory}
+          changeRequestId={thread ? thread.id : null}
+          chatbotId={activeProjectId}
+          projectName={activeProjectName}
+          greeting={greeting}
+          initialTranscript={initialTranscript}
+          initialProposal={thread ? thread.proposed : null}
+          initialStatus={thread ? thread.status : null}
+          initialCategory={activeCategory}
+          currentSection={currentSection}
+          currentSections={currentSections}
+          hasProjects={projects.length > 0}
+        />
+      </div>
     </div>
   );
 }

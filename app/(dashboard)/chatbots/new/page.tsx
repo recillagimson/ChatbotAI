@@ -10,7 +10,7 @@ import {
 import { NewChatbotForm } from "@/components/dashboard/new-chatbot-form";
 
 export default async function NewChatbotPage() {
-  // Effective user — the impersonated client when an admin is "viewing as" them,
+  // Effective user - the impersonated client when an admin is "viewing as" them,
   // so the new chatbot is owned by the client, not the admin.
   const user = await getCurrentUser();
   if (!user) redirect("/login");

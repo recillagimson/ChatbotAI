@@ -13,7 +13,7 @@ export type AccessRow = Pick<Subscription, "status" | "comp_expires_at"> & {
  * Single source of truth for "does this account have access right now."
  * Access = an active/trialing subscription that, if it is a comp grant, has not
  * yet reached its comp_expires_at. Real Stripe subs carry comp_expires_at = null
- * and reduce to the plain status test — behavior is unchanged for paying users.
+ * and reduce to the plain status test - behavior is unchanged for paying users.
  * Comp grants expire at check time (exact to the minute); no scheduled sweep.
  */
 export function hasActiveAccess(

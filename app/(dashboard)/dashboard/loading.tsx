@@ -1,49 +1,48 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Sk,
+  SkCard,
+  SkCardHead,
+  SkNavyPanel,
+  SkPage,
+  SkRows,
+} from "@/components/ss/skeleton";
 
+/** Overview: setup strip, the speed-to-lead hero, then the queue beside inventory. */
 export default function DashboardLoading() {
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
-      <div className="mb-8">
-        <Skeleton className="h-9 w-64 mb-2" />
-        <Skeleton className="h-5 w-80" />
+    <SkPage label="Loading your overview" title="w-36" actions={1}>
+      <Sk className="h-[54px] w-full rounded-panel" tone="on-page" />
+      <SkNavyPanel height="h-[210px]" />
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <SkCard className="p-0">
+          <div className="p-[22px]">
+            <SkCardHead />
+          </div>
+          <SkRows rows={3} />
+        </SkCard>
+        <SkCard className="p-0">
+          <div className="p-[22px]">
+            <SkCardHead width="w-32" />
+          </div>
+          <SkRows rows={2} avatar={false} />
+        </SkCard>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        {[0, 1, 2].map((i) => (
-          <Card key={i}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-4 rounded-full" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-8 w-12 mb-2" />
-              <Skeleton className="h-3 w-28" />
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <SkCard>
+          <SkCardHead />
+          <Sk className="mt-4 h-3 w-full rounded-full" />
+          <div className="mt-4 flex flex-col gap-2.5">
+            <Sk className="h-[12px] w-full" />
+            <Sk className="h-[12px] w-full" />
+            <Sk className="h-[12px] w-2/3" />
+          </div>
+        </SkCard>
+        <SkCard>
+          <SkCardHead width="w-28" />
+          <Sk className="mt-4 h-[52px] w-full rounded-chip" />
+          <Sk className="mt-2.5 h-[52px] w-full rounded-chip" />
+        </SkCard>
       </div>
-
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-6 w-40 mb-2" />
-          <Skeleton className="h-4 w-72" />
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between p-3 rounded-md border"
-            >
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-6 w-14 rounded-full" />
-                <Skeleton className="h-4 w-48" />
-              </div>
-              <Skeleton className="h-8 w-16" />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
+    </SkPage>
   );
 }

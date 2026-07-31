@@ -1,4 +1,4 @@
-# SpeedSettr — Setup Guide
+# SpeedSettr - Setup Guide
 
 This is your **end-to-end checklist** to take the platform from empty folder → live, paying customers.
 
@@ -6,7 +6,7 @@ Go through every section in order. Each one starts with **what you do** and ends
 
 ---
 
-## TL;DR — what you need to do (master checklist)
+## TL;DR - what you need to do (master checklist)
 
 - [Done] **1.** Install Node.js 20+ and run `npm install`
 - [ ] **2.** Create a Supabase project and run the schema
@@ -69,7 +69,7 @@ You'll fill it in as you go through the sections below.
    ```
    NEXT_PUBLIC_SUPABASE_URL=        # "Project URL"
    NEXT_PUBLIC_SUPABASE_ANON_KEY=   # "anon public" key
-   SUPABASE_SERVICE_ROLE_KEY=       # "service_role" key — KEEP SECRET, server-only
+   SUPABASE_SERVICE_ROLE_KEY=       # "service_role" key - KEEP SECRET, server-only
    ```
 
 > The `service_role` key bypasses Row Level Security. It is used by our webhook handlers (ManyChat, Stripe) which run on the server and can't use a logged-in user session. Never expose it on the client.
@@ -129,7 +129,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 
 Keep the `stripe listen` process running whenever you test billing locally.
 
-### 4d. Webhook (production — do this after deploying to Vercel)
+### 4d. Webhook (production - do this after deploying to Vercel)
 1. **Developers → Webhooks → Add endpoint**.
 2. Endpoint URL: `https://yourdomain.com/api/webhooks/stripe` (or your Vercel URL).
 3. Events to send: select these four:
@@ -156,7 +156,7 @@ You said you have a **Pro account**. Here is the exact setup:
 3. Follow the Facebook/Meta flow to authorize your Instagram Business Account. (Your IG must be a Business or Creator account, linked to a Facebook Page. ManyChat will prompt you if it isn't.)
 
 ### 5b. Set the webhook secret
-Credentials are now **per-chatbot**: after you create a chatbot (step 7), the chatbot page shows a unique webhook secret for that bot. Copy it — you'll paste it into the ManyChat External Request header in 5c instead of a `.env` value.
+Credentials are now **per-chatbot**: after you create a chatbot (step 7), the chatbot page shows a unique webhook secret for that bot. Copy it - you'll paste it into the ManyChat External Request header in 5c instead of a `.env` value.
 
 > **One-time global fallback only:** if you are migrating the original single-bot setup and have not yet saved a per-chatbot secret, the old `MANYCHAT_WEBHOOK_SECRET` env var is still honoured as a fallback. New bots do not need it.
 
@@ -165,14 +165,14 @@ Repeat this for each channel you've connected in ManyChat (Instagram, Facebook
 Messenger, WhatsApp, Telegram, TikTok). The only thing that changes per channel is
 the `platform` value (and that channel's username variable).
 
-1. **Automation → New Flow → Start from scratch**. Name it e.g. `AI Reply — Instagram`.
+1. **Automation → New Flow → Start from scratch**. Name it e.g. `AI Reply - Instagram`.
 2. Trigger: **+ → Default Reply** for that channel (fires for any incoming message that doesn't match another trigger).
 3. Add an action: **+ → Actions → External Request**.
    - Method: **POST**
    - URL: `https://www.speedsettr.com/api/webhooks/manychat` (use the production URL; `localhost` is unreachable from ManyChat)
    - Headers (click **Add Header**):
      - Key: `x-manychat-secret`
-     - Value: *(paste the webhook secret shown on the chatbot page — see step 5b)*
+     - Value: *(paste the webhook secret shown on the chatbot page - see step 5b)*
      - Key: `Content-Type`
      - Value: `application/json`
    - Body (Raw / JSON):
@@ -188,15 +188,15 @@ the `platform` value (and that channel's username variable).
      ```
    - Set `platform` to the channel this flow runs on: `instagram`, `messenger` (Facebook), `whatsapp`, `telegram`, or `tiktok`. Use that channel's username variable (e.g. `{{ig_username}}` on Instagram, `{{user_name}}` elsewhere).
 4. **Delivery:**
-   - **Instagram / Facebook / WhatsApp / Telegram:** the reply is **pushed automatically** by the app — no extra step (the External Request returns instantly with `ai_queued`).
+   - **Instagram / Facebook / WhatsApp / Telegram:** the reply is **pushed automatically** by the app - no extra step (the External Request returns instantly with `ai_queued`).
    - **TikTok:** ManyChat has no TikTok sending API yet, so in **Response Mapping** map the JSON field `reply` to a custom field `ai_reply` (text), then add a **Send Message** action that posts `ai_reply`.
 5. **Publish** the flow.
 
-> The `chatbot_id` comes from `/chatbots/[id]` in your dashboard — copy the UUID after creating a chatbot in step 7. The same `chatbot_id` + secret is reused across all of that bot's channel flows.
+> The `chatbot_id` comes from `/chatbots/[id]` in your dashboard - copy the UUID after creating a chatbot in step 7. The same `chatbot_id` + secret is reused across all of that bot's channel flows.
 > Note: TikTok messaging is in beta and unavailable for accounts in the EU/UK.
 
 ### 5d. ManyChat API key (per-chatbot, in-app)
-Each customer enters their ManyChat API key on their chatbot page (**Chatbots → [your bot]**). The app validates the key against ManyChat and stores it encrypted — no `.env` entry needed per customer.
+Each customer enters their ManyChat API key on their chatbot page (**Chatbots → [your bot]**). The app validates the key against ManyChat and stores it encrypted - no `.env` entry needed per customer.
 
 To get the key: ManyChat → **Settings → API → Generate API key**.
 
@@ -263,7 +263,7 @@ Open <http://localhost:3000>. You should see the landing page.
 ### 7b. Import to Vercel
 1. <https://vercel.com> → **Add New → Project** → import your GitHub repo.
 2. Framework preset: **Next.js** (detected automatically).
-3. **Environment Variables**: paste **every** value from `.env.local` (except `NEXT_PUBLIC_APP_URL` — set that to your future production URL like `https://chatpilot.app` or the auto-assigned `https://chatpilot.vercel.app`).
+3. **Environment Variables**: paste **every** value from `.env.local` (except `NEXT_PUBLIC_APP_URL` - set that to your future production URL like `https://chatpilot.app` or the auto-assigned `https://chatpilot.vercel.app`).
 4. Deploy.
 
 ### 7c. After deploy
@@ -274,7 +274,7 @@ Open <http://localhost:3000>. You should see the landing page.
 5. **NEXT_PUBLIC_APP_URL** in Vercel env: update to the Vercel/custom-domain URL. Redeploy.
 
 ### 7d. Custom domain (optional)
-1. Buy a domain (Namecheap, Cloudflare, Porkbun — any).
+1. Buy a domain (Namecheap, Cloudflare, Porkbun - any).
 2. Vercel → your project → **Settings → Domains → Add**. Follow Vercel's DNS instructions.
 3. Once live, update Supabase + Stripe + ManyChat URLs again to the custom domain.
 4. **Switch Stripe out of test mode**: regenerate `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_ID`, and `STRIPE_WEBHOOK_SECRET` in Vercel using **live mode** values.
@@ -290,9 +290,9 @@ You don't have to do anything technical per customer. The flow is:
 4. They open `/settings`, follow the 6-step ManyChat guide (this is shown in the app).
 5. They paste the chatbot UUID into their own ManyChat flow.
 
-**Important:** each customer needs their own ManyChat account to connect their own Instagram. ManyChat is not multi-tenant on your side — only the AI/inbox is. (See "Pro tip" below for a workaround.)
+**Important:** each customer needs their own ManyChat account to connect their own Instagram. ManyChat is not multi-tenant on your side - only the AI/inbox is. (See "Pro tip" below for a workaround.)
 
-> **Pro tip — managed onboarding:** for white-glove service, you can offer to do the ManyChat setup for them. They invite you to their ManyChat workspace (Settings → Team), you build the flow with their chatbot UUID, done. This is a great way to justify $349/mo.
+> **Pro tip - managed onboarding:** for white-glove service, you can offer to do the ManyChat setup for them. They invite you to their ManyChat workspace (Settings → Team), you build the flow with their chatbot UUID, done. This is a great way to justify $349/mo.
 
 ---
 
@@ -300,12 +300,12 @@ You don't have to do anything technical per customer. The flow is:
 
 These are explicit next-step features if you want them later:
 - **Email confirmations** (the schema supports it; just turn the toggle back on in Supabase auth).
-- **Password reset flow** — add `/forgot-password` and `/reset-password` pages using `supabase.auth.resetPasswordForEmail`.
-- **File upload for knowledge base** (PDF/docx) — would need Supabase Storage + a PDF parser. Currently knowledge is paste-text-only.
-- **Embeddings/RAG** — right now we feed *all* knowledge base entries into every reply prompt. Fine for ~50 entries. Past that, switch to vector search (Supabase has `pgvector`).
-- **Analytics dashboard charts** — only counts are shown.
-- **Team seats** — every user is solo.
-- **Direct Meta Graph API integration** (eliminating ManyChat) — requires Meta App Review (2–6 weeks). Skip for v1.
+- **Password reset flow** - add `/forgot-password` and `/reset-password` pages using `supabase.auth.resetPasswordForEmail`.
+- **File upload for knowledge base** (PDF/docx) - would need Supabase Storage + a PDF parser. Currently knowledge is paste-text-only.
+- **Embeddings/RAG** - right now we feed *all* knowledge base entries into every reply prompt. Fine for ~50 entries. Past that, switch to vector search (Supabase has `pgvector`).
+- **Analytics dashboard charts** - only counts are shown.
+- **Team seats** - every user is solo.
+- **Direct Meta Graph API integration** (eliminating ManyChat) - requires Meta App Review (2–6 weeks). Skip for v1.
 
 ---
 
@@ -317,6 +317,6 @@ These are explicit next-step features if you want them later:
 | Webhook returns 401 | The `x-manychat-secret` header doesn't match the chatbot's webhook secret (shown on the chatbot page); falls back to `MANYCHAT_WEBHOOK_SECRET` env var for un-migrated bots |
 | Webhook returns 400 with `bad_request` | Your ManyChat JSON body is missing a field. Check the body shape in section 5c |
 | Stripe checkout 500s | `STRIPE_PRICE_ID` is wrong or you mixed test/live keys |
-| Login works but `/dashboard` redirects to `/login` | Cookies aren't being set — check middleware, restart `npm run dev` |
+| Login works but `/dashboard` redirects to `/login` | Cookies aren't being set - check middleware, restart `npm run dev` |
 | AI reply is generic | You haven't added knowledge base entries for that chatbot |
 | RLS errors on inserts | The current user isn't logged in, or you're querying a chatbot you don't own |

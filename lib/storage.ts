@@ -15,12 +15,12 @@ export function publicAssetUrl(supabase: SupabaseClient, path: string): string {
 }
 
 /**
- * Remove a follow-up asset object from the public bucket. Throws on failure —
+ * Remove a follow-up asset object from the public bucket. Throws on failure -
  * supabase-js remove() reports errors in its return value rather than throwing,
  * so callers relying on try/catch need this check. Removing an already-missing
  * object is NOT an error (retries converge).
- * (Uploads to this bucket happen directly from the browser — see
- * followup-asset-manager.tsx — never through the server, because Vercel's
+ * (Uploads to this bucket happen directly from the browser - see
+ * followup-asset-manager.tsx - never through the server, because Vercel's
  * ~4.5 MB request-body cap is far below ManyChat's 25 MB media cap.)
  */
 export async function removePublicAsset(supabase: SupabaseClient, path: string): Promise<void> {

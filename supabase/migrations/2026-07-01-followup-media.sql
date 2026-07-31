@@ -23,7 +23,7 @@
 -- Apply in the Supabase dashboard SQL editor before deploying the feature.
 
 -- ---------------------------------------------------------------------
--- 1. chatbots — sequence + AI-media settings
+-- 1. chatbots - sequence + AI-media settings
 -- ---------------------------------------------------------------------
 alter table public.chatbots
   add column if not exists auto_followup_steps jsonb not null default '[]'::jsonb,  -- ordered drip steps
@@ -31,7 +31,7 @@ alter table public.chatbots
   add column if not exists ai_media_enabled boolean not null default false;         -- allow [[SEND_ASSET]] directives
 
 -- ---------------------------------------------------------------------
--- 2. conversations — per-contact drip state + confirmation + RN opt-in
+-- 2. conversations - per-contact drip state + confirmation + RN opt-in
 -- ---------------------------------------------------------------------
 alter table public.conversations
   add column if not exists followup_step_index int not null default 0,   -- next drip step to send
@@ -47,7 +47,7 @@ alter table public.conversations add constraint conversations_confirmed_by_check
   check (confirmed_by is null or confirmed_by in ('manual','ai'));
 
 -- ---------------------------------------------------------------------
--- 3. followup_assets — per-chatbot media/link library
+-- 3. followup_assets - per-chatbot media/link library
 -- ---------------------------------------------------------------------
 create table if not exists public.followup_assets (
   id           uuid primary key default uuid_generate_v4(),

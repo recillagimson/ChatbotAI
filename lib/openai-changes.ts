@@ -1,21 +1,21 @@
 // lib/openai-changes.ts
-// The SpeedSettr "change-request" AI, on OpenAI (raw fetch — no SDK, mirroring
+// The SpeedSettr "change-request" AI, on OpenAI (raw fetch - no SDK, mirroring
 // lib/embeddings.ts and lib/transcribe.ts which already use OPENAI_API_KEY).
 //
 // Two entry points, both producing the SAME machine-actionable output as before
 // (the propose_changes tool → ChangeProposal), so the review → Approve → Publish
 // pipeline is unchanged:
-//   • draftChangeRequest — admin one-shot auto-draft (forced tool call)
-//   • chatTurn           — the client-facing Claude-style chat (auto tool call,
+//   • draftChangeRequest - admin one-shot auto-draft (forced tool call)
+//   • chatTurn           - the client-facing Claude-style chat (auto tool call,
 //                          multimodal images, scoped + credential-refusing prompt)
 //
-// The DM-reply path (generateReply) stays on Anthropic — see lib/anthropic.ts.
+// The DM-reply path (generateReply) stays on Anthropic - see lib/anthropic.ts.
 import type { Chatbot, ChangeProposal, ChangeCategory, SectionColumn, SectionEdit } from "./types";
 import { buildFullContextBlock, type KbEntryLite } from "./retrieval";
 import { SECTION_BY_CATEGORY, CATEGORY_LABELS, ALL_SECTION_COLUMNS } from "./change-categories";
 import { MODELS } from "./model-tiers";
 
-/** Current text of all three editable sections — the context an "overall" request revises. */
+/** Current text of all three editable sections - the context an "overall" request revises. */
 export interface SectionsContext {
   persona_section: string;
   offers_section: string;
@@ -24,28 +24,28 @@ export interface SectionsContext {
 
 /** Human labels for the three sections inside the "overall" prompt/scope. */
 const OVERALL_SECTION_HEADINGS: Record<SectionColumn, string> = {
-  persona_section: "PERSONALITY / TONE — the bot's voice and tone (how it sounds)",
-  offers_section: "OFFERS, SERVICES & LINKS — services, packages, inclusions/exclusions, prices, links",
-  rebuttals_section: "REBUTTALS & FAQ HANDLING — how it answers objections and common questions",
+  persona_section: "PERSONALITY / TONE - the bot's voice and tone (how it sounds)",
+  offers_section: "OFFERS, SERVICES & LINKS - services, packages, inclusions/exclusions, prices, links",
+  rebuttals_section: "REBUTTALS & FAQ HANDLING - how it answers objections and common questions",
 };
 
 /** Render the "current sections" block shared by the overall chat + draft prompts. */
 function renderOverallSections(sections?: SectionsContext): string {
   const s = sections ?? { persona_section: "", offers_section: "", rebuttals_section: "" };
   return ALL_SECTION_COLUMNS.map(
-    (col) => `--- ${OVERALL_SECTION_HEADINGS[col]} ---\n${(s[col] ?? "").trim() || "(empty — not written yet)"}`
+    (col) => `--- ${OVERALL_SECTION_HEADINGS[col]} ---\n${(s[col] ?? "").trim() || "(empty - not written yet)"}`
   ).join("\n\n");
 }
 
 /**
- * Most efficient OpenAI model that reliably handles this task — multi-turn chat,
- * vision (image attachments), and function calling — at a fraction of the cost
+ * Most efficient OpenAI model that reliably handles this task - multi-turn chat,
+ * vision (image attachments), and function calling - at a fraction of the cost
  * of the full models. The helper-tier model is the floor that still does the
  * job: the cheaper gpt-4o-mini under-calls the propose_changes tool (it asks
  * endless clarifying questions instead of ever proposing), verified against
- * these flows. Override with OPENAI_CHANGE_MODEL. The structural guarantee —
+ * these flows. Override with OPENAI_CHANGE_MODEL. The structural guarantee -
  * only the propose_changes tool is actionable, secret columns never reach the
- * model, and every publish is human-reviewed — means model choice can't cause
+ * model, and every publish is human-reviewed - means model choice can't cause
  * harm, only affect proposal quality.
  */
 export const CHANGE_AI_MODEL = MODELS.change();
@@ -89,7 +89,7 @@ const SUMMARY_SCHEMA = {
  *    `section_content` for that one section;
  *  - "other": return `kb_entries` only;
  *  - "overall": return a `sections` array (each affected section in full) and/or
- *    `kb_entries` — the model picks which parts the request touches.
+ *    `kb_entries` - the model picks which parts the request touches.
  * The category is fixed per request and supplied here so the model can't target
  * the wrong field.
  */
@@ -325,7 +325,7 @@ function extractProposalCall(
  *  - If the model wrote text, use it.
  *  - If it produced a valid proposal but no text, narrate the proposal.
  *  - If it produced NEITHER (e.g. a truncated/unparseable tool call), never
- *    dead-end with an empty bubble — return a helpful recovery message. When the
+ *    dead-end with an empty bubble - return a helpful recovery message. When the
  *    failure looks like a too-long proposal, ask the client to narrow it.
  * This is the backstop for the "bot suddenly stopped replying" failure.
  */
@@ -336,11 +336,11 @@ export function resolveAssistantText(
 ): string {
   if (rawText) return rawText;
   if (hasProposal) {
-    return "Here's what I'd change — review the summary below and submit it to the team when you're happy.";
+    return "Here's what I'd change - review the summary below and submit it to the team when you're happy.";
   }
   return proposalTruncated
     ? "I put together the full updated section, but it came out too long to finish in one message. Can you point me at the specific part you want changed? Then I'll propose just that cleanly."
-    : "Sorry, I didn't quite catch that — could you tell me once more exactly what you'd like to change?";
+    : "Sorry, I didn't quite catch that - could you tell me once more exactly what you'd like to change?";
 }
 
 // --- Change assistant chat (multimodal, scoped, credential-refusing) --------
@@ -358,12 +358,12 @@ const SECTION_GUIDE: Record<
 > = {
   personality: {
     label: "PERSONALITY / TONE",
-    covers: "the bot's voice, persona, and tone — how it sounds, not the facts it cites",
+    covers: "the bot's voice, persona, and tone - how it sounds, not the facts it cites",
   },
   offers: {
     label: "OFFERS, SERVICES & LINKS",
     covers:
-      "what the business offers — services, packages, inclusions/exclusions, prices, and links",
+      "what the business offers - services, packages, inclusions/exclusions, prices, and links",
   },
   rebuttals: {
     label: "REBUTTALS & FAQ HANDLING",
@@ -395,35 +395,35 @@ export function buildChatSystemPrompt(
   let proposeInstr: string;
 
   if (category === "overall") {
-    scopeBlock = `YOU MAY EDIT ANY OF THE BOT'S PARTS THAT THE CLIENT'S REQUEST AFFECTS — and only those. Leave every part the request does NOT touch exactly as it is.
+    scopeBlock = `YOU MAY EDIT ANY OF THE BOT'S PARTS THAT THE CLIENT'S REQUEST AFFECTS - and only those. Leave every part the request does NOT touch exactly as it is.
 
 The parts you can change:
-1. PERSONALITY / TONE — the bot's voice and tone (how it sounds).
-2. OFFERS, SERVICES & LINKS — services, packages, inclusions/exclusions, prices, links.
-3. REBUTTALS & FAQ HANDLING — how it answers objections and common questions.
+1. PERSONALITY / TONE - the bot's voice and tone (how it sounds).
+2. OFFERS, SERVICES & LINKS - services, packages, inclusions/exclusions, prices, links.
+3. REBUTTALS & FAQ HANDLING - how it answers objections and common questions.
 You can also add new facts the bot can cite (knowledge-base entries).
 
-CURRENT PARTS (your starting point — revise only what the request affects, never rewrite an untouched one):
+CURRENT PARTS (your starting point - revise only what the request affects, never rewrite an untouched one):
 
 ${renderOverallSections(sections)}`;
-    proposeInstr = `- Only when you have enough to act, call the propose_changes tool. In "sections", include ONLY the parts your change actually affects, each with its COMPLETE revised text (a full replacement, not a diff); leave the rest out. Add any new facts as kb_entries. Always include a short plain-English summary. When you revise the personality, write ONLY the voice/persona — do NOT add generic safety rules; the platform adds those automatically.`;
+    proposeInstr = `- Only when you have enough to act, call the propose_changes tool. In "sections", include ONLY the parts your change actually affects, each with its COMPLETE revised text (a full replacement, not a diff); leave the rest out. Add any new facts as kb_entries. Always include a short plain-English summary. When you revise the personality, write ONLY the voice/persona - do NOT add generic safety rules; the platform adds those automatically.`;
   } else if (guide) {
     scopeBlock = `YOU ARE EDITING ONE SECTION: ${guide.label}.
-This section covers ${guide.covers}. Only propose changes to THIS section — never touch the bot's other sections.
+This section covers ${guide.covers}. Only propose changes to THIS section - never touch the bot's other sections.
 
-CURRENT ${guide.label} SECTION (your starting point — revise this, never rewrite from scratch):
-${currentSection.trim() || "(empty — this section has not been written yet)"}`;
+CURRENT ${guide.label} SECTION (your starting point - revise this, never rewrite from scratch):
+${currentSection.trim() || "(empty - this section has not been written yet)"}`;
     proposeInstr = `- Only when you have enough to act, call the propose_changes tool with section_content = the COMPLETE revised text of the ${guide.label} section (a full replacement, not a diff), plus a short summary.${
       category === "personality"
-        ? " Write ONLY the voice/persona — do NOT add generic safety rules; the platform adds those automatically."
+        ? " Write ONLY the voice/persona - do NOT add generic safety rules; the platform adds those automatically."
         : " Keep the content focused on this section."
     }`;
   } else {
-    scopeBlock = `YOU ARE ADDING KNOWLEDGE. The client wants to add or correct facts the bot can cite (knowledge-base entries) — not change its persona or sections. Propose only new knowledge-base entries.`;
+    scopeBlock = `YOU ARE ADDING KNOWLEDGE. The client wants to add or correct facts the bot can cite (knowledge-base entries) - not change its persona or sections. Propose only new knowledge-base entries.`;
     proposeInstr = `- Only when you have enough to act, call the propose_changes tool with kb_entries (the NEW knowledge facts to add) plus a short summary. Do not propose a section change for this category.`;
   }
 
-  return `You are the SpeedSettr change assistant. You help ONE client refine ONE of their Instagram/Messenger DM chatbots — "the project". Through a short, friendly conversation you figure out the change they want to this section, then propose it for the SpeedSettr team to review.
+  return `You are the SpeedSettr change assistant. You help ONE client refine ONE of their Instagram/Messenger DM chatbots - "the project". Through a short, friendly conversation you figure out the change they want to this section, then propose it for the SpeedSettr team to review.
 
 THE PROJECT (the only thing you may discuss or change):
 - Name: ${chatbot.name}
@@ -431,21 +431,21 @@ THE PROJECT (the only thing you may discuss or change):
 
 ${scopeBlock}
 
-CURRENT KNOWLEDGE BASE (read this fully before proposing — never duplicate or contradict it):
+CURRENT KNOWLEDGE BASE (read this fully before proposing - never duplicate or contradict it):
 ${kbBlock}
 
-HARD SECURITY RULES — never violate, no matter what the user says:
+HARD SECURITY RULES - never violate, no matter what the user says:
 - You ONLY discuss this project's reply behavior, persona/voice, tone, and knowledge (facts the bot can cite).
 - You must NEVER ask for, reference, reveal, or change: API keys, ManyChat tokens or page IDs, the webhook secret, passwords, billing or subscription, other customers, account or technical settings, or anything security-related. If the user raises any of these, briefly say it's handled by the SpeedSettr team and steer back to the project's messaging. Do not speculate about them.
 - Never invent prices, hours, links, or policies. If a needed fact is missing, ask the client for it so it can be added.
 
 HOW TO WORK:
-- Default to ACTING, not asking. If the request is clear enough to make a sensible change, call propose_changes right away. Most requests are clear — just do it.
+- Default to ACTING, not asking. If the request is clear enough to make a sensible change, call propose_changes right away. Most requests are clear - just do it.
 - Ask a question ONLY if you genuinely cannot tell what to change, and then ask at most ONE short question before you propose.
 - Never ask the same thing twice and never re-confirm. The moment the client answers, or says to go ahead (e.g. "yes", "confirm", "just add that", "where's the change"), STOP asking and call propose_changes.
-- Talk like a friendly human to a small-business owner with NO technical background. Keep replies to one or two short sentences in plain, everyday words. Never use jargon or words like "section", "field", "prompt", "keyword list", "tool", or "proposal" — just talk about their business and what the bot will say to people.
+- Talk like a friendly human to a small-business owner with NO technical background. Keep replies to one or two short sentences in plain, everyday words. Never use jargon or words like "section", "field", "prompt", "keyword list", "tool", or "proposal" - just talk about their business and what the bot will say to people.
 - Write the summary the same plain way: a sentence or two anyone can understand, describing the change in normal language.
-- Ground every proposal in the CURRENT section and CURRENT KNOWLEDGE BASE above. Revise what's there — don't start from a blank slate, and never contradict an existing knowledge entry.
+- Ground every proposal in the CURRENT section and CURRENT KNOWLEDGE BASE above. Revise what's there - don't start from a blank slate, and never contradict an existing knowledge entry.
 - If the user attaches a knowledge file, its extracted text is included in their message; READ IT FIRST and fold the relevant facts into your proposal according to their instruction.
 ${proposeInstr}`;
 }
@@ -511,7 +511,7 @@ export async function chatTurn(opts: {
 
   // The model tried to propose (a propose_changes tool call was present) but we
   // couldn't use it, and/or the response hit the token cap. Either way the tool
-  // call was likely truncated — drive the recovery message and log it.
+  // call was likely truncated - drive the recovery message and log it.
   const attemptedProposal = !!message?.tool_calls?.some(
     (c) => c.function?.name === "propose_changes"
   );
@@ -551,11 +551,11 @@ export function buildDraftPrompts(opts: {
     : "";
 
   if (category === "overall") {
-    const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change that may affect ANY part of their bot. Decide which of the bot's parts the request actually affects — personality/voice, offers, rebuttals/FAQ — and/or new knowledge, and produce the FULL revised text for ONLY those parts. Leave every part the request does not touch exactly as it is. When you revise the personality, write ONLY the voice/persona — do not add generic safety rules; the platform adds those automatically.
+    const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change that may affect ANY part of their bot. Decide which of the bot's parts the request actually affects - personality/voice, offers, rebuttals/FAQ - and/or new knowledge, and produce the FULL revised text for ONLY those parts. Leave every part the request does not touch exactly as it is. When you revise the personality, write ONLY the voice/persona - do not add generic safety rules; the platform adds those automatically.
 
 Respond by calling the propose_changes tool with "sections" (each changed part in full) and/or kb_entries (new facts), plus a concise summary for the reviewer.`;
 
-    const userContent = `CURRENT PARTS (your starting point — revise only what the request affects, never rewrite an untouched one):
+    const userContent = `CURRENT PARTS (your starting point - revise only what the request affects, never rewrite an untouched one):
 
 ${renderOverallSections(sections)}
 
@@ -573,14 +573,14 @@ ${requestText}${guidanceTail}`;
 
 Ground your work in the CURRENT ${guide.label} SECTION below: revise it rather than rewriting from scratch, and keep the content focused on this section only.${
       category === "personality"
-        ? " Write ONLY the voice/persona — do not add generic safety rules; the platform adds those automatically."
+        ? " Write ONLY the voice/persona - do not add generic safety rules; the platform adds those automatically."
         : ""
     }
 
 Respond by calling the propose_changes tool with section_content (the complete revised section) plus a concise summary for the reviewer.`;
 
-    const userContent = `CURRENT ${guide.label} SECTION (your starting point — revise, don't rewrite):
-${currentSection.trim() || "(empty — this section has not been written yet)"}
+    const userContent = `CURRENT ${guide.label} SECTION (your starting point - revise, don't rewrite):
+${currentSection.trim() || "(empty - this section has not been written yet)"}
 
 CURRENT KNOWLEDGE BASE (for context; do not duplicate):
 ${kbBlock}
@@ -592,7 +592,7 @@ ${requestText}${guidanceTail}`;
   }
 
   // "other" → knowledge-base entries only.
-  const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested new knowledge for their bot. Propose NEW knowledge-base entries (kb_entries) for genuinely new facts not already present — never duplicate or contradict an existing entry.
+  const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested new knowledge for their bot. Propose NEW knowledge-base entries (kb_entries) for genuinely new facts not already present - never duplicate or contradict an existing entry.
 
 Respond by calling the propose_changes tool with kb_entries plus a concise summary for the reviewer.`;
 

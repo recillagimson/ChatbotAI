@@ -15,7 +15,7 @@ export type Platform = "instagram" | "messenger" | "whatsapp" | "telegram" | "ti
 
 /**
  * Outbound media block types ManyChat's Send Content API can push as their own
- * bubble. A follow-up "link" asset is NOT one of these — links go out as text.
+ * bubble. A follow-up "link" asset is NOT one of these - links go out as text.
  */
 export type MediaBlockKind = "image" | "video" | "audio" | "file";
 
@@ -51,7 +51,7 @@ export interface PlatformMeta {
    * Media block kinds this channel accepts via ManyChat's sendContent API.
    * Verified against ManyChat docs: Instagram/WhatsApp accept only `image`
    * (no audio/video/file); Messenger + Telegram accept all four. A voice note
-   * or video therefore only pushes on Messenger/Telegram — on Instagram the
+   * or video therefore only pushes on Messenger/Telegram - on Instagram the
    * step falls back to its text caption (see lib/manychat.ts filtering).
    */
   outboundMedia: MediaBlockKind[];
@@ -91,7 +91,7 @@ export function canPushPlatform(v: unknown): boolean {
 /**
  * Can this platform deliver a given media block kind via ManyChat's sendContent
  * API? e.g. audio/video are Messenger/Telegram-only; Instagram is image-only.
- * A follow-up "link" asset is not a media block — send it as text, not here.
+ * A follow-up "link" asset is not a media block - send it as text, not here.
  */
 export function canSendMediaKind(v: unknown, kind: MediaBlockKind): boolean {
   return isPlatform(v) ? PLATFORM_META[v].outboundMedia.includes(kind) : false;

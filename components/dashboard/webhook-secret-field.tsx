@@ -31,12 +31,12 @@ export function WebhookSecretField({ chatbotId, secret: initialSecret }: Webhook
       if (res.ok) {
         const data = await res.json() as { webhook_secret: string };
         setSecret(data.webhook_secret);
-        setNote("New secret generated — update it in ManyChat now.");
+        setNote("New secret generated - update it in ManyChat now.");
       } else {
         setNote("Failed to regenerate secret. Please try again.");
       }
     } catch {
-      setNote("Network error — please try again.");
+      setNote("Network error - please try again.");
     } finally {
       setRotating(false);
     }

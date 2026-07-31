@@ -41,7 +41,7 @@ export default function OnboardingPage() {
           icon={BookOpen}
           n={3}
           title="Add knowledge"
-          description="Upload your FAQ, hours, policies — anything the AI should know."
+          description="Upload your FAQ, hours, policies - anything the AI should know."
           href="/knowledge-base"
           cta="Add knowledge"
         />

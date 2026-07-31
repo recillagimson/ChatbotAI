@@ -6,7 +6,7 @@ import type { StageConversation } from "@/lib/analytics";
 import { StageConversationList } from "./stage-conversation-list";
 
 interface FunnelStageRowProps {
-  /** Stage key — also used as `?stage=` param value */
+  /** Stage key - also used as `?stage=` param value */
   stageKey: "entry" | "replied" | "link_sent" | "booked";
   label: string;
   count: number | null;
@@ -33,7 +33,7 @@ interface FunnelStageRowProps {
  * Uses inline styles for the gradient steps since they're dynamic.
  */
 const BAR_GRADIENTS = [
-  // entry — darkest brand
+  // entry - darkest brand
   "from-[#1e1b4b] to-[#4338ca]",
   // replied
   "from-[#4338ca] to-[#6366f1]",
@@ -43,7 +43,7 @@ const BAR_GRADIENTS = [
   "from-muted to-muted",
 ] as const;
 
-const MIN_BAR_PCT = 8; // % — ensures zero/tiny counts are still legible
+const MIN_BAR_PCT = 8; // % - ensures zero/tiny counts are still legible
 
 export function FunnelStageRow({
   stageKey,
@@ -96,7 +96,7 @@ export function FunnelStageRow({
           </Link>
         ) : (
           // Stub: not a link
-          <div aria-disabled="true" role="img" aria-label={`${label} — not tracked yet`}>
+          <div aria-disabled="true" role="img" aria-label={`${label} - not tracked yet`}>
             <BarInner
               label={label}
               countDisplay={null}

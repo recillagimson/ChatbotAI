@@ -166,7 +166,7 @@ export default async function AdminClientDetailPage({
       </Link>
 
       <div className="mt-4 lg:grid lg:grid-cols-[300px_1fr] lg:gap-8">
-        {/* Identifier — pinned to the side so it's always clear whose account this is. */}
+        {/* Identifier - pinned to the side so it's always clear whose account this is. */}
         <aside className="mb-8 lg:mb-0 lg:sticky lg:top-8 lg:self-start">
           <Card>
             <CardHeader>

@@ -7,7 +7,7 @@
 -- touch the review-gated sections.
 --
 -- ⚠️ DEPLOY ORDER: apply this migration BEFORE deploying the code. Unlike the
--- column-adds, this widens a CHECK constraint on an existing column — if the new
+-- column-adds, this widens a CHECK constraint on an existing column - if the new
 -- code ships first, a client picking "Overall" would try to insert
 -- category='overall' and hit the OLD constraint (500). Migration first, then deploy.
 --

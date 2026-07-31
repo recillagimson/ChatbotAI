@@ -79,17 +79,17 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
     // Turning the welcome ON for a bot that's already live: every conversation that
     // predates this switch is an EXISTING contact, not a new one. The migration's
     // backfill only covers rows that predate the column, and the gate never runs while
-    // the feature is off — so those rows would still read welcomed_at IS NULL ("brand
+    // the feature is off - so those rows would still read welcomed_at IS NULL ("brand
     // new") and the next "hey" from an ongoing lead would fire the first-contact VM.
     // Resolve them BEFORE flipping the flag, so no webhook can fire a welcome at an
-    // ongoing lead mid-save. If this fails, do NOT enable — leaving the flag off is the
+    // ongoing lead mid-save. If this fails, do NOT enable - leaving the flag off is the
     // safe direction. Idempotent + tenant-scoped (chatbot_id, and RLS scopes to the owner).
     //
     // The SAME hazard reopens when "use my Keyword triggers" is turned ON while the
     // welcome is already live: it widens what counts as a first-contact opener from an
     // exact greeting/keyword to any message CONTAINING a keyword. An ongoing lead whose
     // welcomed_at is still NULL only because they have so far only ever hit an upstream
-    // gate (mute / disqualified / subscribed / human-takeover — all return before the
+    // gate (mute / disqualified / subscribed / human-takeover - all return before the
     // welcome decision) could then get a first-contact VM from an ordinary keyword-bearing
     // message. Run the same backfill on that transition too.
     const welcomeTurningOn = enabled && !chatbot.welcome_enabled;
@@ -164,7 +164,7 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
                 }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="">— pick a flow —</option>
+                <option value="">- pick a flow -</option>
                 {flows.map((f) => (
                   <option key={f.ns} value={f.ns}>
                     {f.name || f.ns}
@@ -179,7 +179,7 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Make this a single voice-note (or video) send in ManyChat — no internal delays.
+              Make this a single voice-note (or video) send in ManyChat - no internal delays.
               SpeedSettr triggers it and records that the greeting was sent.
             </p>
           </div>
@@ -204,10 +204,10 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
               <Label htmlFor="welcome-use-keywords">Also use my Keyword triggers</Label>
               <p className="text-sm text-muted-foreground">
                 When on, a first message that matches any keyword in your{" "}
-                <span className="font-medium">Keywords</span> tab also fires the welcome — so you
+                <span className="font-medium">Keywords</span> tab also fires the welcome - so you
                 don&rsquo;t keep a separate list here. It uses the same matching as the Keywords
                 tab, which looks for a keyword <span className="font-medium">anywhere</span> in the
-                message — so even a longer, detailed first message that mentions a keyword gets the
+                message - so even a longer, detailed first message that mentions a keyword gets the
                 welcome VM instead of an AI reply. If that keyword also has its own first-reply set
                 on the Keywords tab, the welcome VM takes its place for that contact.
               </p>

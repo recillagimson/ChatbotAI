@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  * Auth: the owner of the chatbot. The persona write uses the owner's own RLS
  * client (chatbots "own chatbots" policy already allows it). Flipping the
  * change_request to "applied" uses the service client ONLY because change_requests
- * UPDATE is admin-only by RLS — and ONLY after the owner is fully authorized and
+ * UPDATE is admin-only by RLS - and ONLY after the owner is fully authorized and
  * scoped by user_id. This is not privilege escalation: nothing here a logged-in
  * owner can't already do to their own chatbot.
  */

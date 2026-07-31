@@ -5,7 +5,7 @@ import type { ChangeCategory, SectionColumn } from "./types";
  *
  * Three categories map to one editable prompt-section column on `chatbots`;
  * "other" has no section (it only adds knowledge-base entries); "overall" also
- * has no single column — the AI decides which of the three sections (and/or KB)
+ * has no single column - the AI decides which of the three sections (and/or KB)
  * the request affects and edits each one (see ChangeProposal.sections).
  */
 export const SECTION_BY_CATEGORY = {

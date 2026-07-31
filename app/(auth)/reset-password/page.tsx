@@ -3,17 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { AuthShell, AuthHeading } from "@/components/auth/auth-shell";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+  AuthField,
+  AuthNotice,
+  AuthSubmit,
+} from "@/components/auth/auth-field";
+import { MIN_PASSWORD_LENGTH, scorePassword } from "@/lib/password-strength";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -23,11 +21,13 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
+  const strength = scorePassword(password);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
     if (password !== confirm) {
@@ -56,55 +56,64 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Set a new password</CardTitle>
-        <CardDescription>Choose a new password for your account.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {done ? (
-          <p className="text-sm bg-muted px-3 py-3 rounded">
+    <AuthShell variant="proof">
+      <AuthHeading title="Set a new password">
+        Choose a new password for your account.
+      </AuthHeading>
+
+      {done ? (
+        <div className="mt-6">
+          <AuthNotice tone="success">
             Password updated. Taking you to your dashboard…
-          </p>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">New password</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm">Confirm new password</Label>
-              <Input
-                id="confirm"
-                type="password"
-                required
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-              />
-            </div>
-            {error && (
-              <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded space-y-1">
-                <p>{error}</p>
-                {/session|invalid|expired/i.test(error) && (
-                  <Link href="/forgot-password" className="underline font-medium">
-                    Request a new link
-                  </Link>
-                )}
-              </div>
-            )}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Saving..." : "Update password"}
-            </Button>
-          </form>
-        )}
-      </CardContent>
-    </Card>
+          </AuthNotice>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3.5">
+          <AuthField
+            id="password"
+            label="New password"
+            icon={Lock}
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={MIN_PASSWORD_LENGTH}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            hint={
+              password
+                ? `${strength.label}. ${strength.advice ?? ""}`.trim()
+                : `At least ${MIN_PASSWORD_LENGTH} characters.`
+            }
+          />
+
+          <AuthField
+            id="confirm"
+            label="Confirm new password"
+            icon={Lock}
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={MIN_PASSWORD_LENGTH}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+
+          {error && (
+            <AuthNotice tone="error">
+              <p>{error}</p>
+              {/session|invalid|expired/i.test(error) && (
+                <Link href="/forgot-password" className="font-semibold underline">
+                  Request a new link
+                </Link>
+              )}
+            </AuthNotice>
+          )}
+
+          <AuthSubmit loading={loading} loadingLabel="Saving…" className="mt-1">
+            Update password
+          </AuthSubmit>
+        </form>
+      )}
+    </AuthShell>
   );
 }

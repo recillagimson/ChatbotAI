@@ -90,7 +90,7 @@ export function classifyMedia(contentType: string | null | undefined, url: strin
 const DEFAULT_ALLOWED_SUFFIXES = [
   // Meta's attachment CDN. The whole domain (not just `lookaside.`) is Meta infra:
   // Instagram voice notes come from lookaside.fbsbx.com, but Facebook Messenger
-  // voice notes / documents come from cdn.fbsbx.com — so allow every *.fbsbx.com
+  // voice notes / documents come from cdn.fbsbx.com - so allow every *.fbsbx.com
   // subdomain, else FB audio URLs sit unread in the message text (they don't get
   // fetched/transcribed) while IG audio works.
   ".fbsbx.com",
@@ -133,7 +133,7 @@ const URL_RE = /https?:\/\/[^\s]+/gi;
  * Find media-CDN URLs sitting inside free text. Instagram frequently delivers a
  * photo as a `lookaside.fbsbx.com` URL in the message body rather than a
  * dedicated media field, so we scan the text too. Only allowlisted CDN hosts
- * count as media — an ordinary link the customer typed is left alone.
+ * count as media - an ordinary link the customer typed is left alone.
  */
 export function mediaUrlsInText(text?: string | null): string[] {
   const matches = (text ?? "").match(URL_RE) ?? [];
@@ -141,7 +141,7 @@ export function mediaUrlsInText(text?: string | null): string[] {
 }
 
 /**
- * Remove media-CDN URLs from text (so the AI doesn't see — and comment on — the
+ * Remove media-CDN URLs from text (so the AI doesn't see - and comment on - the
  * raw attachment link), leaving ordinary links intact. Collapses the whitespace
  * left behind.
  */
@@ -206,7 +206,7 @@ const MAX_BYTES = 25 * 1024 * 1024; // Whisper's hard limit; comfortable for ima
 // latency without bound (each describe still has its own 15s timeout). Images past
 // the cap are skipped for description but still sent as vision on the current turn.
 const MAX_DESCRIBE_IMAGES = 4;
-// A non-browser UA — Meta/Supabase REST can 401 browser-like agents (see memory).
+// A non-browser UA - Meta/Supabase REST can 401 browser-like agents (see memory).
 const FETCH_UA = "SpeedSettr-Media/1.0";
 const UNSUPPORTED_NOTE =
   "[Note: the customer sent an attachment that couldn't be read. Politely acknowledge it and ask them to describe it or resend it.]";
@@ -237,7 +237,7 @@ async function fetchMedia(startUrl: string): Promise<{ buffer: Buffer; contentTy
     let url = startUrl;
     // Follow redirects manually and re-validate the host on EVERY hop. Auto
     // redirect-following would let an allowlisted CDN URL 3xx to an internal
-    // address (cloud metadata, RFC1918) and bypass isAllowedMediaHost — SSRF.
+    // address (cloud metadata, RFC1918) and bypass isAllowedMediaHost - SSRF.
     // (DNS rebinding of a real CDN domain is out of scope; the allowlist is the
     // gate at each hop.)
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -289,17 +289,17 @@ async function storeMedia(
 
 /**
  * Download, classify, and turn each inbound attachment into AI-usable inputs.
- * Never throws — any per-item failure degrades to `unsupported` with a note so
+ * Never throws - any per-item failure degrades to `unsupported` with a note so
  * the bot still replies. Off-allowlist hosts are skipped (SSRF guard).
  */
 export async function processInboundMedia(
   items: MediaItem[],
   ctx: { supabase: SupabaseClient; userId: string },
   // describeImages: run the vision-describe call that turns each image into
-  // persistent text. Default ON (push path — describe time is absorbed by the
+  // persistent text. Default ON (push path - describe time is absorbed by the
   // reply-wait window). Pass FALSE on the synchronous RESPONSE path (TikTok /
   // no-API-key channels), which returns the reply in the HTTP body under
-  // ManyChat's ~10s External Request timeout and has no debounce to absorb it —
+  // ManyChat's ~10s External Request timeout and has no debounce to absorb it -
   // there the current turn still carries the raw image as vision, we just don't
   // persist a text description.
   opts: { describeImages?: boolean } = {}
@@ -331,7 +331,7 @@ export async function processInboundMedia(
         const base64 = fetched.buffer.toString("base64");
         out.images.push({ base64, mediaType });
         // Also describe the image to TEXT so its content persists like a voice-note
-        // transcript — into the message row, burst consolidation, history, and the
+        // transcript - into the message row, burst consolidation, history, and the
         // memory summary. Without this, earlier images in a burst (and any image
         // sent on an older turn) are invisible when the bot composes its reply, so
         // it re-asks for what the customer already showed. Best-effort: on any
@@ -362,7 +362,7 @@ export async function processInboundMedia(
         out.textParts.push(UNSUPPORTED_NOTE);
       }
     } catch {
-      // Transcription / parsing failed — still acknowledge gracefully.
+      // Transcription / parsing failed - still acknowledge gracefully.
       out.unsupported = true;
       out.textParts.push(UNSUPPORTED_NOTE);
     }

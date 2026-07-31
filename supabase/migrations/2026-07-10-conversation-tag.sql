@@ -4,12 +4,12 @@
 -- A single tag per DM thread for the inbox filter + badge, auto-set each AI turn
 -- by the tag classifier (lib/conversation-classify.ts) and manually overridable
 -- from the conversation actions. Values:
---   lead        — engaged prospect (default)
---   wants_call  — wants to book a call / appointment / demo
---   needs_human — angry / asked for a human / complex issue (sticky until handled)
---   subscribed  — confirmed customer; coupled to confirmed_at, which silences the bot
+--   lead        - engaged prospect (default)
+--   wants_call  - wants to book a call / appointment / demo
+--   needs_human - angry / asked for a human / complex issue (sticky until handled)
+--   subscribed  - confirmed customer; coupled to confirmed_at, which silences the bot
 -- Fail-open: missing column reads as 'lead' via the app's ?? default.
--- Apply BEFORE deploying the code that reads it. Idempotent — safe to re-run.
+-- Apply BEFORE deploying the code that reads it. Idempotent - safe to re-run.
 --
 -- Apply in the Supabase SQL editor.
 

@@ -17,7 +17,7 @@ import type { Chatbot, FollowupAsset, FollowupLoopMode } from "@/lib/types";
 /**
  * Edit a chatbot's rich-media follow-up drip: an ordered list of steps (each with
  * a delay in hours, an optional asset, and optional text), a loop mode, and the
- * AI-media toggle — PLUS an optional "link follow-up" sequence used instead of the
+ * AI-media toggle - PLUS an optional "link follow-up" sequence used instead of the
  * usual one once the bot has sent the lead a link (empty = the usual runs). Saves
  * directly via the owner's RLS client (same pattern as the other dashboard forms).
  */
@@ -39,7 +39,7 @@ export function FollowupSequenceForm({
   const [linkButtons, setLinkButtons] = useState(chatbot.link_buttons_enabled);
   const [noFollowupFlag, setNoFollowupFlag] = useState(chatbot.followup_flag_enabled);
   const [steps, setSteps] = useState<EditableStep[]>(toEditable(chatbot.auto_followup_steps));
-  // Optional link sequence — NOT seeded with a blank step: empty means "use the
+  // Optional link sequence - NOT seeded with a blank step: empty means "use the
   // usual follow-up" (the fallback), so a bot that never sets it is unaffected.
   const [linkSteps, setLinkSteps] = useState<EditableStep[]>(
     toEditable(chatbot.auto_followup_link_steps, false)
@@ -47,7 +47,7 @@ export function FollowupSequenceForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  // Any edit flips dirty until a successful save — surfaced next to the Save button.
+  // Any edit flips dirty until a successful save - surfaced next to the Save button.
   const [dirty, setDirty] = useState(false);
   // ManyChat flows for the per-step "deliver via flow" picker (Option B). Loaded
   // once; null = loading, [] = none/failed (the picker just doesn't render).
@@ -133,7 +133,7 @@ export function FollowupSequenceForm({
           <p className="text-xs text-muted-foreground">
             Steps run in order after a contact goes quiet. Delays are in hours from the
             previous message (1–22h), and the whole sequence must finish within 24h of
-            their last message — Instagram blocks sends after that unless they opt in to
+            their last message - Instagram blocks sends after that unless they opt in to
             notifications. A voice note or video only sends on Facebook/Telegram; on
             Instagram that step sends its text instead.
           </p>
@@ -166,17 +166,17 @@ export function FollowupSequenceForm({
               }}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
-              <option value="stop">Stop — send nothing more</option>
+              <option value="stop">Stop - send nothing more</option>
               <option value="repeat_last">Let the AI keep following up</option>
               <option value="cycle">Cycle through all steps (recommended)</option>
             </select>
             <p className="text-sm text-muted-foreground">
               {loopMode === "cycle"
-                ? "After the last step it loops back to the first and keeps rotating — an unconfirmed lead gets a different message each time until they convert or the window closes."
+                ? "After the last step it loops back to the first and keeps rotating - an unconfirmed lead gets a different message each time until they convert or the window closes."
                 : loopMode === "repeat_last"
-                  ? "After the last step the AI takes over and writes a fresh, context-aware follow-up from the conversation each time (on the last step's delay) until the lead is confirmed or the 24h window closes — no more repeating the same message."
+                  ? "After the last step the AI takes over and writes a fresh, context-aware follow-up from the conversation each time (on the last step's delay) until the lead is confirmed or the 24h window closes - no more repeating the same message."
                   : "After the last step the drip ends and the lead gets no further follow-ups."}
-              {" "}A reply never restarts the sequence — the lead always picks up at the next step.
+              {" "}A reply never restarts the sequence - the lead always picks up at the next step.
             </p>
           </div>
 
@@ -187,7 +187,7 @@ export function FollowupSequenceForm({
               <p className="mt-1 text-sm text-muted-foreground">
                 A separate sequence used <span className="font-medium">instead of</span> the one above
                 once the bot has sent this contact a link (e.g. a sign-up or booking link). Use it to
-                nudge them about the link — &ldquo;did you get a chance to sign up?&rdquo; — rather than
+                nudge them about the link - &ldquo;did you get a chance to sign up?&rdquo; - rather than
                 the usual message. <span className="font-medium">Leave it empty and the usual
                 follow-up runs</span> as normal. It uses the same &ldquo;after the last step&rdquo;
                 setting above.

@@ -29,7 +29,7 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
   const [, startTransition] = useTransition();
   // Optimistic delete: hide the row immediately, then confirm with the server.
   // Tracking removed ids (rather than a copy of the list) means the next server
-  // refresh — which returns the list already without these rows — just works.
+  // refresh - which returns the list already without these rows - just works.
   const [removed, setRemoved] = useState<Set<string>>(new Set());
 
   // Inline edit state: which entry is being edited + the working draft + status.
@@ -135,7 +135,7 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
                   <CardTitle className="text-base">{e.title}</CardTitle>
                 )}
                 <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="secondary">{e.chatbots?.name ?? "—"}</Badge>
+                  <Badge variant="secondary">{e.chatbots?.name ?? "-"}</Badge>
                   <Badge variant="outline">{e.source_type}</Badge>
                   {e.needs_review && (
                     <Badge variant="destructive">needs review</Badge>

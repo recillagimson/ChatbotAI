@@ -3,7 +3,7 @@
  * drip. Conservative by design: returns true only on a clear conversion signal,
  * so we never stop chasing a warm-but-unclosed lead. Never throws.
  *
- * Paired with the manual "Mark confirmed" inbox action — either sets
+ * Paired with the manual "Mark confirmed" inbox action - either sets
  * conversations.confirmed_at, which excludes the conversation from the cron drip.
  */
 import { openaiChat } from "./openai";

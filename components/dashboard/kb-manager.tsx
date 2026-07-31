@@ -28,7 +28,7 @@ type Entry = {
 /**
  * Owns the single "current chatbot" selection for the whole Knowledge Base page.
  * The add form writes to this chatbot AND the list below shows only this chatbot's
- * files — so switching the selector switches both. Previously the form had its own
+ * files - so switching the selector switches both. Previously the form had its own
  * dropdown while the list showed every chatbot's entries, so changing chatbots never
  * changed the visible files.
  */
@@ -46,7 +46,7 @@ export function KnowledgeBaseManager({
 
   return (
     <>
-      {/* Shared selector — governs both the add form and the list below */}
+      {/* Shared selector - governs both the add form and the list below */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Chatbot</CardTitle>
@@ -87,7 +87,7 @@ export function KnowledgeBaseManager({
         <CardHeader>
           <CardTitle>Add knowledge</CardTitle>
           <CardDescription>
-            Each entry is a chunk of info — a single FAQ, a policy section, a
+            Each entry is a chunk of info - a single FAQ, a policy section, a
             product description, etc.
           </CardDescription>
         </CardHeader>

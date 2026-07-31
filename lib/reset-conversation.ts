@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * The column defaults a reset restores — i.e. fresh-conversation state. Identity
+ * The column defaults a reset restores - i.e. fresh-conversation state. Identity
  * fields (user_id, chatbot_id, contact_*, manychat_subscriber_id, platform) are
  * deliberately NOT listed, so a reset keeps WHO the contact is and only wipes their
  * funnel progress. Single source of truth shared by the webhook RESET_KEYWORD path
@@ -9,15 +9,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  *
  * `bot_off_at` IS cleared: like `user_muted_at` and `status`, it is a funnel-silencing
  * flag (the webhook's bot-off gate fully silences a thread whenever it's set), not an
- * identity field — a "brand-new" contact is never bot-off, and leaving it set would let
+ * identity field - a "brand-new" contact is never bot-off, and leaving it set would let
  * a previously BOT_OFF-tagged thread silently swallow the very welcome/keyword/AI replies
  * the reset exists to re-test. (It mirrors a ManyChat tag, so it may re-sync to "off" on
- * the next tag-change webhook — an accepted, self-healing tradeoff.)
+ * the next tag-change webhook - an accepted, self-healing tradeoff.)
  *
  * The keyword-gate ENGAGEMENT flags are cleared for the same reason: the gate treats a
  * contact as engaged when ANY of `keyword_fired` (matched a keyword), `bot_forced_on_at`
  * (BOT_ON manual override), or `question_engaged_at` (answered as a genuine question) is
- * set — so a true first-contact reset must wipe ALL THREE, else the contact silently
+ * set - so a true first-contact reset must wipe ALL THREE, else the contact silently
  * bypasses the gate on their next message despite reading as "brand new". `bot_forced_on_at`
  * mirrors the BOT_ON tag (same self-healing re-sync tradeoff as bot_off_at);
  * `question_screen_count` resets to 0 so a reset contact can be screened afresh.
@@ -52,18 +52,18 @@ export const FRESH_CONVERSATION_RESET: Record<string, unknown> = {
 /**
  * Wipe a conversation back to true first-contact state: restore
  * {@link FRESH_CONVERSATION_RESET} and delete its transcript. Returns `{ ok:false, error }`
- * on any DB failure — supabase-js resolves errors instead of throwing, so a silent RLS
+ * on any DB failure - supabase-js resolves errors instead of throwing, so a silent RLS
  * deny or transient error would otherwise read as a false success on the exact stuck
  * thread a reset exists to recover. Callers surface the failure honestly.
  *
  * Ordering matters for partial-failure safety: the **reversible** row update runs FIRST,
  * and the **irreversible** transcript delete runs only if it succeeded. So a failure
- * never leaves the transcript deleted while the funnel flags stay stale — the caller
+ * never leaves the transcript deleted while the funnel flags stay stale - the caller
  * simply retries, and the worst case (row reset, delete still pending) self-heals on the
  * next attempt. The error message names which step failed.
  *
  * Authorization is the CALLER's responsibility (the webhook's RESET_KEYWORD match, or the
- * requireSuperadmin gate on the reset route) — this helper does not gate.
+ * requireSuperadmin gate on the reset route) - this helper does not gate.
  */
 export async function resetConversation(
   supabase: SupabaseClient,

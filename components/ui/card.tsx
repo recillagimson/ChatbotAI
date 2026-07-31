@@ -8,7 +8,9 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-lg border bg-card text-card-foreground shadow-sm",
+      // 16px corners and a single hairline, matching the dashboard's [SsCard] -
+      // the two surfaces appear on the same screens, so they must agree.
+      "rounded-card border bg-card text-card-foreground",
       className
     )}
     {...props}
@@ -35,7 +37,7 @@ const CardTitle = React.forwardRef<
   <h3
     ref={ref}
     className={cn(
-      "text-xl font-semibold leading-none tracking-tight",
+      "font-display text-[15px] font-bold leading-tight tracking-tight",
       className
     )}
     {...props}

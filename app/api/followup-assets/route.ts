@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // Metadata-only route. Media BYTES are uploaded directly from the browser to the
-// public followup-assets bucket (owner-folder RLS) — routing them through here
+// public followup-assets bucket (owner-folder RLS) - routing them through here
 // would hit Vercel's ~4.5 MB request-body limit long before ManyChat's 25 MB cap.
 const MEDIA_KINDS = new Set<FollowupAssetKind>(["image", "video", "audio"]);
 // Audio must be a format Messenger/Telegram can actually play (no ogg/webm).
@@ -44,7 +44,7 @@ function mimeAllowed(kind: FollowupAssetKind, mime: string): boolean {
   return mime.startsWith(`${kind}/`);
 }
 
-/** GET /api/followup-assets?chatbot_id=… — list a chatbot's assets (RLS-scoped). */
+/** GET /api/followup-assets?chatbot_id=… - list a chatbot's assets (RLS-scoped). */
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST /api/followup-assets — record an asset's metadata (JSON only).
+ * POST /api/followup-assets - record an asset's metadata (JSON only).
  *  - kind image/video/audio: `storage_path` of an object the client already
  *    uploaded to the followup-assets bucket (must live under the caller's own
  *    {user.id}/ folder), plus its `mime`.
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
   } else if (MEDIA_KINDS.has(kind)) {
     storage_path = String(body.storage_path ?? "");
     mime = String(body.mime ?? "");
-    // The object must live under the caller's OWN folder — same guard as the
+    // The object must live under the caller's OWN folder - same guard as the
     // request-uploads paths elsewhere. (Bucket RLS already enforces this on
     // write; this stops metadata rows pointing at someone else's objects.)
     if (!storage_path.startsWith(`${user.id}/`)) {
@@ -141,13 +141,13 @@ export async function POST(request: NextRequest) {
       });
       if (!head.ok) {
         return NextResponse.json(
-          { error: "Uploaded file not found — try the upload again." },
+          { error: "Uploaded file not found - try the upload again." },
           { status: 400 }
         );
       }
     } catch {
       return NextResponse.json(
-        { error: "Could not verify the uploaded file — try again." },
+        { error: "Could not verify the uploaded file - try again." },
         { status: 400 }
       );
     }
@@ -187,8 +187,8 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * DELETE /api/followup-assets?id=… — remove an asset. The storage object goes
- * FIRST: if that fails we keep the row and report the error (retry converges —
+ * DELETE /api/followup-assets?id=… - remove an asset. The storage object goes
+ * FIRST: if that fails we keep the row and report the error (retry converges -
  * removing an already-gone object succeeds), so no orphaned public files.
  */
 export async function DELETE(request: NextRequest) {
@@ -213,7 +213,7 @@ export async function DELETE(request: NextRequest) {
     } catch (err) {
       console.error("[followup-assets] storage remove failed", asset.storage_path, err);
       return NextResponse.json(
-        { error: "Could not delete the file — try again." },
+        { error: "Could not delete the file - try again." },
         { status: 500 }
       );
     }

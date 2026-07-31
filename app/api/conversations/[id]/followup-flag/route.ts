@@ -16,7 +16,7 @@ export async function POST(
 ) {
   const { id } = await params;
 
-  const user = await getCurrentUser(); // impersonation-aware (admin view-as) — gotcha #7
+  const user = await getCurrentUser(); // impersonation-aware (admin view-as) - gotcha #7
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

@@ -1,42 +1,54 @@
 import { redirect } from "next/navigation";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { getImpersonation } from "@/lib/impersonation";
-import { Badge } from "@/components/ui/badge";
-import { BillingButtons } from "@/components/dashboard/billing-buttons";
-import { reconcileFromCheckoutSession } from "@/lib/billing";
-import { hasActiveAccess, isComp } from "@/lib/access";
+import Link from "next/link";
 import {
-  CheckCircle2,
   CalendarClock,
+  Check,
+  CheckCircle2,
+  CreditCard,
+  Info,
+  PiggyBank,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { getImpersonation } from "@/lib/impersonation";
+import { getWorkspace } from "@/lib/workspace";
+import { BillingButtons } from "@/components/dashboard/billing-buttons";
+import { reconcileFromCheckoutSession } from "@/lib/billing";
+import { hasActiveAccess, isComp } from "@/lib/access";
+import { PLAN_FEATURES, PLAN_NAME, PLAN_TAGLINE, PRICING } from "@/lib/pricing";
+import { money, num, shortDate } from "@/lib/format";
+import { PageBody, PageHeader, PageShell, Callout } from "@/components/ss/page";
+import { SsCard, SsCardHead, SsIconTile } from "@/components/ss/card";
+import { SsStatus } from "@/components/ss/controls";
+import { NavyPanel, PanelEyebrow } from "@/components/ss/panel";
 
-const FEATURES = [
-  "Unlimited AI replies on Instagram, Facebook, WhatsApp, Telegram & TikTok",
-  "Custom knowledge base & training",
-  "Conversation inbox with manual takeover",
-  "Multiple chatbots & connected accounts",
-  "Human-like reply pacing & auto follow-ups",
-  "Priority email support",
-];
+export const dynamic = "force-dynamic";
 
-// Map a Stripe status to a human label + badge style.
-function statusBadge(status: string | null | undefined) {
+/** Map a Stripe status to a human label + tone. */
+function statusOf(status: string | null | undefined) {
   switch (status) {
     case "active":
-      return { label: "Active", variant: "success" as const };
+      return { label: "Active", tone: "green" as const };
     case "trialing":
-      return { label: "Trial", variant: "success" as const };
+      return { label: "Trial", tone: "green" as const };
     case "past_due":
-      return { label: "Past due", variant: "warning" as const };
+      return { label: "Past due", tone: "amber" as const };
     case "canceled":
-      return { label: "Canceled", variant: "secondary" as const };
+      return { label: "Canceled", tone: "neutral" as const };
     default:
-      return { label: "Not subscribed", variant: "secondary" as const };
+      return { label: "Not subscribed", tone: "neutral" as const };
   }
 }
 
+/**
+ * Billing - what you pay, when it leaves your account, and what it covers.
+ *
+ * The design's three-across summary strip answers the only questions anyone
+ * opens this page for, before any of the plan detail. The yearly pitch is a navy
+ * panel doing the maths out loud rather than a "save 10%" badge, because the
+ * number that persuades is the annual total, not the percentage.
+ */
 export default async function BillingPage({
   searchParams,
 }: {
@@ -60,11 +72,20 @@ export default async function BillingPage({
     }
   }
 
-  const { data: subscription } = await supabase
-    .from("subscriptions")
-    .select("*")
+  const [{ data: subscription }, workspace] = await Promise.all([
+    supabase.from("subscriptions").select("*").eq("user_id", user!.id).maybeSingle(),
+    getWorkspace(null),
+  ]);
+
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const { count: repliesThisMonth } = await supabase
+    .from("usage_log")
+    .select("id", { count: "exact", head: true })
     .eq("user_id", user!.id)
-    .maybeSingle();
+    .eq("event_type", "ai_reply")
+    .gte("created_at", monthStart.toISOString());
 
   const active = hasActiveAccess(subscription);
   const comp = isComp(subscription) && active;
@@ -72,174 +93,309 @@ export default async function BillingPage({
     ? new Date(subscription.comp_expires_at)
     : null;
   const hasCustomer = !!subscription?.stripe_customer_id;
-  // Badge reflects real access, not the raw Stripe status: a comp that has
-  // lapsed still has status='trialing' (no cron sweep), so key off `comp`/`active`
-  // to avoid showing a green "Trial" badge to a user who no longer has access.
-  const badge = isComp(subscription)
+  // Never offer a fresh checkout to someone whose access is already on. A comp
+  // or manually-granted account has no Stripe customer, so it would otherwise
+  // fall through to the "new subscriber" buttons and could be charged for a
+  // second subscription on top of access it already has.
+  const offerCheckout = hasCustomer || !active;
+  // The chip reflects real access, not the raw Stripe status: a comp that has
+  // lapsed still reads status='trialing' (there's no cron sweep), so key off
+  // `comp`/`active` rather than showing a green badge to someone locked out.
+  const chip = isComp(subscription)
     ? comp
-      ? { label: "Comp access", variant: "success" as const }
-      : { label: "Expired", variant: "secondary" as const }
-    : statusBadge(subscription?.status);
+      ? { label: "Comp access", tone: "green" as const }
+      : { label: "Expired", tone: "neutral" as const }
+    : statusOf(subscription?.status);
   const renews = subscription?.current_period_end
     ? new Date(subscription.current_period_end)
     : null;
   const canceling = subscription?.cancel_at_period_end;
 
+  const daysToRenewal = renews
+    ? Math.max(0, Math.ceil((renews.getTime() - Date.now()) / 86_400_000))
+    : null;
+
+  const channelsConnected = new Set(
+    (workspace?.bots ?? []).flatMap((b) => b.platforms)
+  ).size;
+
   return (
-    <div className="p-4 sm:p-8 max-w-3xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-display font-semibold tracking-tight">Billing</h1>
-        <p className="text-muted-foreground mt-1">
-          Manage your subscription and payment method.
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Billing"
+        description="One subscription covers every chatbot in this workspace."
+        actions={
+          <SsStatus tone={chip.tone}>{chip.label}</SsStatus>
+        }
+      />
 
-      {/* Comp-access banner: shown to a client whose access was granted by an
-          admin (no Stripe subscription). Replaces the misleading "Subscribe"-only
-          framing with their real granted state + expiry. */}
-      {comp && compUntil && (
-        <div
-          role="status"
-          className="mb-6 flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3"
-        >
-          <Sparkles className="h-5 w-5 text-green-600 mt-0.5 shrink-0" aria-hidden />
-          <div className="text-sm text-green-800">
-            <p className="font-semibold">Comp access — active</p>
-            <p>
-              Your account has full access through{" "}
-              <span className="font-medium">
-                {compUntil.toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+      <PageBody center maxWidth={940}>
+        {/* ---- Return-from-Stripe + comp banners ----------------------- */}
+        {comp && compUntil && (
+          <Callout
+            tone="indigo"
+            icon={<Sparkles className="h-[18px] w-[18px] text-ss-indigo-600" aria-hidden="true" />}
+            title="Comp access - active"
+          >
+            Your account has full access through{" "}
+            <strong className="font-semibold text-ss-ink">
+              {shortDate(compUntil)}
+            </strong>
+            , courtesy of the SpeedSettr team. Subscribe any time to continue
+            after it ends.
+          </Callout>
+        )}
+        {status === "success" && (
+          <Callout
+            tone="plain"
+            icon={<CheckCircle2 className="h-[18px] w-[18px] text-ss-green" aria-hidden="true" />}
+            title="You're all set."
+          >
+            Your subscription is active. Welcome aboard.
+          </Callout>
+        )}
+        {status === "cancelled" && !active && (
+          <Callout
+            tone="amber"
+            icon={<CalendarClock className="h-[18px] w-[18px] text-ss-amber" aria-hidden="true" />}
+            title="Checkout canceled."
+          >
+            No charge was made. You can subscribe whenever you&apos;re ready.
+          </Callout>
+        )}
+
+        {/* ---- The three questions ------------------------------------- */}
+        <SsCard className="grid overflow-hidden md:grid-cols-3">
+          <div className="px-[22px] py-5">
+            <div className="ss-eyebrow tracking-[0.12em] text-ss-muted">
+              Current plan
+            </div>
+            <div className="mt-2.5 flex items-center gap-2.5">
+              <span className="font-display text-lg font-bold leading-none text-ss-ink">
+                {PLAN_NAME}
               </span>
-              , courtesy of the SpeedSettr team. Subscribe anytime to continue after it ends.
-            </p>
+              <SsStatus tone={chip.tone}>{chip.label}</SsStatus>
+            </div>
+            <div className="mt-2 text-[12px] leading-none text-ss-muted">
+              Monthly · unlimited replies
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* Return-from-Stripe banners */}
-      {status === "success" && (
-        <div
-          role="status"
-          className="mb-6 flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3"
-        >
-          <CheckCircle2
-            className="h-5 w-5 text-green-600 mt-0.5 shrink-0"
-            aria-hidden
-          />
-          <div className="text-sm text-green-800">
-            <p className="font-semibold">You&apos;re all set.</p>
-            <p>Your subscription is active. Welcome aboard!</p>
-          </div>
-        </div>
-      )}
-      {status === "cancelled" && !active && (
-        <div
-          role="status"
-          className="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3"
-        >
-          <CalendarClock
-            className="h-5 w-5 text-amber-600 mt-0.5 shrink-0"
-            aria-hidden
-          />
-          <div className="text-sm text-amber-800">
-            <p className="font-semibold">Checkout canceled.</p>
-            <p>No charge was made. You can subscribe whenever you&apos;re ready.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Plan card */}
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-        {/* Brand accent bar signals this is the active/premium plan */}
-        <div className="h-1.5 w-full bg-primary" aria-hidden />
-
-        <div className="p-6 sm:p-8">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
-                <Sparkles className="h-5 w-5" aria-hidden />
+          <div className="border-t border-ss-hair px-[22px] py-5 md:border-l md:border-t-0">
+            <div className="ss-eyebrow tracking-[0.12em] text-ss-muted">
+              {canceling ? "Access ends" : "Next payment"}
+            </div>
+            <div className="mt-2.5 flex items-baseline gap-2">
+              <span className="ss-num text-lg leading-none text-ss-ink">
+                {renews ? money(PRICING.monthly, true) : "-"}
               </span>
-              <div>
-                <h2 className="text-xl font-semibold leading-tight">
-                  Professional
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Everything you need to automate your DMs.
-                </p>
+              <span className="text-[12px] font-medium leading-none text-ss-muted">
+                {renews ? `on ${shortDate(renews)}` : "no active subscription"}
+              </span>
+            </div>
+            <div className="mt-2 text-[12px] leading-none text-ss-muted">
+              {daysToRenewal != null
+                ? `in ${daysToRenewal} day${daysToRenewal === 1 ? "" : "s"} · ${canceling ? "then it stops" : "charged automatically"}`
+                : "subscribe to start your plan"}
+            </div>
+          </div>
+
+          <div className="border-t border-ss-hair px-[22px] py-5 md:border-l md:border-t-0">
+            <div className="ss-eyebrow tracking-[0.12em] text-ss-muted">
+              Payment method
+            </div>
+            <div className="mt-2.5 flex items-center gap-2.5">
+              <CreditCard className="h-5 w-5 shrink-0 text-ss-muted" aria-hidden="true" />
+              <span className="text-[13px] font-semibold leading-none text-ss-ink">
+                {hasCustomer ? "On file with Stripe" : "None yet"}
+              </span>
+            </div>
+            <div className="mt-2 text-[12px] leading-none text-ss-muted">
+              {hasCustomer
+                ? "Update it in the billing portal below"
+                : "Added at checkout"}
+            </div>
+          </div>
+        </SsCard>
+
+        {/* ---- Plan + yearly ------------------------------------------- */}
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start">
+          <SsCard className="overflow-hidden shadow-ss-plan">
+            <div
+              className="h-[5px] bg-[linear-gradient(90deg,#6366f1,#a5b4fc)]"
+              aria-hidden="true"
+            />
+            <div className="p-[22px]">
+              <div className="flex flex-wrap items-start gap-3">
+                <SsIconTile tone="indigo" size={38}>
+                  <Sparkles className="h-5 w-5" aria-hidden="true" />
+                </SsIconTile>
+                <div className="min-w-0">
+                  <div className="font-display text-[17px] font-bold leading-tight text-ss-ink">
+                    {PLAN_NAME}
+                  </div>
+                  <p className="mt-1.5 text-[12px] leading-none text-ss-muted">
+                    {PLAN_TAGLINE}
+                  </p>
+                </div>
+                <div className="ml-auto text-right">
+                  <div className="ss-num text-[26px] leading-none text-ss-ink">
+                    {money(PRICING.monthly)}
+                  </div>
+                  <div className="mt-1.5 text-[11.5px] font-medium leading-none text-ss-muted">
+                    per month
+                  </div>
+                </div>
+              </div>
+
+              <div className="my-5 h-px bg-ss-hair" aria-hidden="true" />
+
+              <div className="ss-eyebrow tracking-[0.08em] text-ss-muted">
+                What you&apos;re using right now
+              </div>
+              <div className="mt-3.5 grid gap-3.5 sm:grid-cols-3">
+                <Usage
+                  value={num(workspace?.counts.chatbots ?? 0)}
+                  label="chatbots"
+                  note="unlimited"
+                />
+                <Usage
+                  value={num(repliesThisMonth ?? 0)}
+                  label="AI replies this month"
+                  note="unlimited"
+                />
+                <Usage
+                  value={`${channelsConnected} of 5`}
+                  label="channels connected"
+                  note="through ManyChat"
+                />
+              </div>
+
+              <div className="my-5 h-px bg-ss-hair" aria-hidden="true" />
+
+              <div className="ss-eyebrow tracking-[0.08em] text-ss-muted">
+                {active ? "Included" : "What you'll get"}
+              </div>
+              <ul className="mt-3.5 grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
+                {PLAN_FEATURES.map((f) => (
+                  <li key={f} className="flex gap-2.5 text-[12.5px] leading-snug text-ss-ink">
+                    <Check className="mt-px h-4 w-4 shrink-0 text-ss-green" aria-hidden="true" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-6">
+                {offerCheckout ? (
+                  <BillingButtons hasSubscription={hasCustomer} />
+                ) : (
+                  <p className="text-[12.5px] leading-relaxed text-ss-muted">
+                    Your access is already active and isn&apos;t billed through
+                    Stripe, so there&apos;s nothing to buy here. Ask the team on{" "}
+                    <Link href="/feedback" className="font-semibold text-ss-indigo-600 underline">
+                      Feedback
+                    </Link>{" "}
+                    to change it.
+                  </p>
+                )}
               </div>
             </div>
-            <Badge variant={badge.variant}>{badge.label}</Badge>
-          </div>
+          </SsCard>
 
-          {/* Price */}
-          <div className="mt-6">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-4xl font-display font-semibold tracking-tight tabular-nums">
-                $997
-              </span>
-              <span className="text-muted-foreground">/ month</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Cancel anytime. No setup fees. Save 10% on yearly billing.
-            </p>
-          </div>
-
-          {/* Renewal / cancellation strip (only when there's a billing period) */}
-          {renews && (
-            <div className="mt-5 flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
-              <CalendarClock
-                className="h-4 w-4 text-muted-foreground shrink-0"
-                aria-hidden
-              />
-              <span className="text-muted-foreground">
-                {canceling ? "Your plan ends on " : "Renews on "}
-                <span className="font-medium text-foreground">
-                  {renews.toLocaleDateString(undefined, {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
+          <div className="flex flex-col gap-4">
+            <NavyPanel className="px-[22px] py-5">
+              <PanelEyebrow
+                icon={<PiggyBank className="h-3.5 w-3.5 text-ss-mint" />}
+              >
+                Switch to yearly
+              </PanelEyebrow>
+              <div className="mt-3.5 flex items-baseline gap-2">
+                <span className="ss-num text-[32px] leading-none text-white">
+                  {money(PRICING.annualPerMonth)}
                 </span>
-              </span>
-            </div>
-          )}
+                <span className="text-[13px] font-medium leading-none text-ss-nav-text">
+                  /mo
+                </span>
+              </div>
+              <p className="mt-2.5 text-[12.5px] leading-relaxed text-ss-nav-text">
+                Billed {money(PRICING.annualTotal)} once a year instead of{" "}
+                {money(PRICING.monthly * 12)} monthly.
+              </p>
+              <div className="mt-3.5 rounded-chip border border-ss-mint/30 bg-ss-mint/15 px-3.5 py-3">
+                <div className="font-display text-[13px] font-bold leading-none text-ss-mint">
+                  You keep {money(PRICING.annualSavings)} a year
+                </div>
+                <p className="mt-1.5 text-[11.5px] leading-snug text-ss-mint-text">
+                  Same features. Switching mid-cycle prorates what you&apos;ve
+                  already paid.
+                </p>
+              </div>
+              <div className="mt-4">
+                {offerCheckout ? (
+                  <BillingButtons hasSubscription={hasCustomer} annual />
+                ) : (
+                  <p className="text-[12px] leading-relaxed text-ss-nav-text">
+                    Not billed through Stripe, so this can&apos;t be switched
+                    from here.
+                  </p>
+                )}
+              </div>
+            </NavyPanel>
 
-          <div className="my-6 h-px bg-border" />
-
-          {/* Features */}
-          <p className="text-sm font-medium mb-3">
-            {active ? "Included in your plan" : "What you'll get"}
-          </p>
-          <ul className="grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
-            {FEATURES.map((feature) => (
-              <li key={feature} className="flex items-start gap-2 text-sm">
-                <CheckCircle2
-                  className="h-5 w-5 text-green-600 mt-0.5 shrink-0"
-                  aria-hidden
-                />
-                <span className="text-muted-foreground">{feature}</span>
-              </li>
-            ))}
-          </ul>
-
-          {/* CTA */}
-          <div className="mt-7">
-            <BillingButtons hasSubscription={hasCustomer} />
+            <SsCard className="p-5">
+              <SsCardHead title="Billed to" />
+              <div className="mt-3 flex flex-col gap-1.5 text-[12.5px] leading-relaxed text-ss-body">
+                <span className="font-semibold text-ss-ink">
+                  {workspace?.fullName ?? "-"}
+                </span>
+                <span>{workspace?.email ?? user?.email ?? "-"}</span>
+              </div>
+              <p className="mt-3.5 border-t border-ss-hair pt-3 text-[11.5px] leading-relaxed text-ss-muted">
+                Edit your name on{" "}
+                <a href="/settings" className="font-semibold text-ss-indigo-600">
+                  Settings
+                </a>
+                . Invoices and tax details live in the Stripe billing portal.
+              </p>
+            </SsCard>
           </div>
         </div>
-      </div>
 
-      {/* Trust line */}
-      <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-        <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />
-        <span>
-          Payments are securely processed by Stripe. We never store your card
-          details.
-        </span>
+        {/* ---- Cancellation + trust ------------------------------------ */}
+        <Callout
+          tone="plain"
+          icon={<Info className="h-[18px] w-[18px] text-ss-muted" aria-hidden="true" />}
+        >
+          Cancelling stops future charges and keeps your bots running until
+          {renews ? ` ${shortDate(renews)}` : " the end of the period"}. Manage or
+          cancel it any time from the billing portal.
+        </Callout>
+
+        <div className="flex items-center justify-center gap-2 text-[11.5px] leading-none text-ss-muted">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-ss-green" aria-hidden="true" />
+          Payments processed by Stripe - card details never touch SpeedSettr.
+        </div>
+      </PageBody>
+    </PageShell>
+  );
+}
+
+function Usage({
+  value,
+  label,
+  note,
+}: {
+  value: string;
+  label: string;
+  note: string;
+}) {
+  return (
+    <div className="rounded-chip bg-ss-soft px-3.5 py-3">
+      <div className="ss-num text-xl leading-none text-ss-ink">{value}</div>
+      <div className="mt-1.5 text-[11.5px] leading-snug text-ss-muted">
+        {label}
+        <br />
+        {note}
       </div>
     </div>
   );

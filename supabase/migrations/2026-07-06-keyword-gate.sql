@@ -3,7 +3,7 @@
 -- ===========================================================================
 -- Per-chatbot toggle: when ON, the AI answers ONLY DMs that match a configured
 -- keyword group (chatbots.keyword_triggers) and silently ignores everything
--- else — for personal/private accounts that don't want the bot replying to
+-- else - for personal/private accounts that don't want the bot replying to
 -- unrelated people. Enforced in the webhook (gate 6-gate) via firstMatchingGroup.
 -- Default false so existing bots are unaffected. The webhook READ is fail-open
 -- (missing column → gate off, normal replies), BUT the dashboard keyword-triggers

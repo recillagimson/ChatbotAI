@@ -1,5 +1,5 @@
 /**
- * SpeedSettr support contacts — the people a customer can call/text for help.
+ * SpeedSettr support contacts - the people a customer can call/text for help.
  * Single source of truth shared by the dashboard home "Need help?" card and the
  * sidebar Help button so the two can never drift. `tel` is E.164 for the tel:
  * href (dials/texts on mobile); `phone` is the human-readable display.

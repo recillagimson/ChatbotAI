@@ -77,12 +77,12 @@ export function EventsList({ events }: { events: EventRow[] }) {
                       </Badge>
                     </td>
                     <td className="py-2 pr-4 text-muted-foreground">
-                      {ev.chatbots?.name ?? "—"}
+                      {ev.chatbots?.name ?? "-"}
                     </td>
                     <td className="py-2 pr-4 text-right tabular-nums text-muted-foreground">
                       {ev.tokens_used !== null && ev.tokens_used > 0
                         ? ev.tokens_used.toLocaleString()
-                        : "—"}
+                        : "-"}
                     </td>
                     <td className="py-2 text-right text-muted-foreground">
                       <time dateTime={ev.created_at}>

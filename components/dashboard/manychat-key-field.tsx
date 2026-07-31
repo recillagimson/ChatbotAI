@@ -50,7 +50,7 @@ export function ManychatKeyField({ chatbotId, configured }: ManychatKeyFieldProp
         setMessage({ ok: false, text: detail ? `${error} (${detail})` : error });
       }
     } catch {
-      setMessage({ ok: false, text: "Network error — please try again." });
+      setMessage({ ok: false, text: "Network error - please try again." });
     } finally {
       setSaving(false);
     }
@@ -72,7 +72,7 @@ export function ManychatKeyField({ chatbotId, configured }: ManychatKeyFieldProp
         setMessage({ ok: false, text: data.error ?? "Failed to remove key." });
       }
     } catch {
-      setMessage({ ok: false, text: "Network error — please try again." });
+      setMessage({ ok: false, text: "Network error - please try again." });
     } finally {
       setRemoving(false);
     }
@@ -91,7 +91,7 @@ export function ManychatKeyField({ chatbotId, configured }: ManychatKeyFieldProp
         {isConfigured ? (
           <span className="text-green-600 font-medium">● Connected</span>
         ) : (
-          <span className="text-muted-foreground">○ Not connected — using the global key</span>
+          <span className="text-muted-foreground">○ Not connected - using the global key</span>
         )}
       </div>
 

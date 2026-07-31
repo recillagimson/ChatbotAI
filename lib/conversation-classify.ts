@@ -1,6 +1,6 @@
 /**
  * Best-effort AI classification of a DM lead's latest message into a conversation
- * tag, and — for a deferred start ("Wednesday", "in a week") — the start date.
+ * tag, and - for a deferred start ("Wednesday", "in a week") - the start date.
  *
  * A `subscribed` result both tags the thread AND (via the caller) sets
  * conversations.confirmed_at, which stops the follow-up drip and silences the bot.
@@ -18,7 +18,7 @@ const CLASSIFY_MODEL = MODELS.classifier();
 /**
  * A `starting_later` start date must be near-term and in the future. A resolved
  * date further out than this is almost certainly a misread of a *duration* (e.g.
- * "I've had this 2 years" → a date ~2 years out), not a real deferred start — so
+ * "I've had this 2 years" → a date ~2 years out), not a real deferred start - so
  * we fall back to `lead` and keep the follow-up drip running.
  */
 export const START_HORIZON_DAYS = 400;
@@ -33,9 +33,9 @@ function daysBetween(a: string, b: string): number {
 
 export interface ClassifyResult {
   tag: ConversationTag;
-  /** ISO date (YYYY-MM-DD) the lead wants to start — only when tag = starting_later. */
+  /** ISO date (YYYY-MM-DD) the lead wants to start - only when tag = starting_later. */
   startOn: string | null;
-  /** The human phrase the lead used ("Wednesday", "next month") — starting_later only. */
+  /** The human phrase the lead used ("Wednesday", "next month") - starting_later only. */
   startNote: string | null;
 }
 
@@ -46,7 +46,7 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * malformed/junk input yields the safe default `{ tag: "lead", … }`.
  *
  * `starting_later` is only honoured when the model produced a CONCRETE, resolved
- * ISO start date — a vague deferral ("later", "soon", "after payday") carries no
+ * ISO start date - a vague deferral ("later", "soon", "after payday") carries no
  * date and stays a plain `lead` so the follow-up drip keeps running. When `today`
  * is supplied, a resolved date in the past or absurdly far out (a duration like
  * "2 years" misread as a start date, beyond START_HORIZON_DAYS) is likewise
@@ -101,11 +101,11 @@ export async function classifyConversation(opts: {
       model: CLASSIFY_MODEL,
       system:
         "You classify a sales/DM lead's LATEST message into exactly one tag:\n" +
-        "- subscribed     = the lead states or clearly indicates they have ALREADY COMPLETED payment or enrollment (a done action) — e.g. 'just paid', 'payment went through', 'I'm in, just signed up/joined', 'done, subscribed'. A promise, agreement, or intent is NOT enough: a bare 'yes'/'ok'/'sure'/'let's do it'/'I'll do it'/'send me the link' — especially right after the assistant sent a payment/checkout link or asked them to sign up — is INTENT to buy, so tag it 'lead', not 'subscribed'. When unsure, choose 'lead'.\n" +
+        "- subscribed     = the lead states or clearly indicates they have ALREADY COMPLETED payment or enrollment (a done action) - e.g. 'just paid', 'payment went through', 'I'm in, just signed up/joined', 'done, subscribed'. A promise, agreement, or intent is NOT enough: a bare 'yes'/'ok'/'sure'/'let's do it'/'I'll do it'/'send me the link' - especially right after the assistant sent a payment/checkout link or asked them to sign up - is INTENT to buy, so tag it 'lead', not 'subscribed'. When unsure, choose 'lead'.\n" +
         "- needs_human    = they are angry or frustrated, explicitly ask for a human/real person, or raise a complex issue the bot can't resolve.\n" +
         "- starting_later = the lead clearly wants to START/BEGIN the service or program, AND names a CONCRETE near-term date or day (e.g. 'tomorrow', 'Friday', 'next Monday', 'the 15th', 'next week', 'first of the month'). Use this ONLY when both are true.\n" +
-        "  * A vague deferral with NO concrete date is NOT starting_later — 'later', 'soon', 'maybe', 'someday', 'when I'm ready', 'after I sort things out', 'after payday' all stay 'lead'.\n" +
-        "  * Never treat a PAST time or a DURATION as a start date — 'I've had this for 2 years', 'haven't paid much mind in a while', 'recently', 'a couple years' describe how long something has been going on, NOT when they'll start. Tag 'lead'.\n" +
+        "  * A vague deferral with NO concrete date is NOT starting_later - 'later', 'soon', 'maybe', 'someday', 'when I'm ready', 'after I sort things out', 'after payday' all stay 'lead'.\n" +
+        "  * Never treat a PAST time or a DURATION as a start date - 'I've had this for 2 years', 'haven't paid much mind in a while', 'recently', 'a couple years' describe how long something has been going on, NOT when they'll start. Tag 'lead'.\n" +
         "- wants_call     = they want to book or schedule a call, appointment, or demo (NOT a start date).\n" +
         "- lead           = anything else (interested, asking questions, negotiating price, vague positivity, a vague 'later' with no date).\n" +
         `Today is ${opts.today}. For starting_later ONLY, resolve their concrete date to a future YYYY-MM-DD; if they gave no concrete date, use tag 'lead'.\n` +

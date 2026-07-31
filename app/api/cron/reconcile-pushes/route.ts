@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const LOOKBACK_DAYS = 7; // widest send window (IG HUMAN_AGENT) — older rows can't deliver anyway
+const LOOKBACK_DAYS = 7; // widest send window (IG HUMAN_AGENT) - older rows can't deliver anyway
 const MAX_ATTEMPTS = 5; // give up after this many reconcile retries
 const BATCH = 100;
 
@@ -21,7 +21,7 @@ function bump(map: Record<string, number>, key: string) {
 /**
  * Reconcile genuinely-dropped ManyChat pushes: retry messages a send-path threw on
  * (delivery_status='failed') that are STILL deliverable. Safety rules:
- *  - only SINGLE-bubble messages are retried — a multi-bubble reply may have had
+ *  - only SINGLE-bubble messages are retried - a multi-bubble reply may have had
  *    some bubbles delivered before the failure, so re-sending would duplicate; those
  *    are marked 'abandoned' (surfaced, not resent).
  *  - only inside the channel's send window (24h, or 7d for a human_agent reply via

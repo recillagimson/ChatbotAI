@@ -2,43 +2,43 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, ArrowRight } from "lucide-react";
+import { ArrowRight, Calculator, CheckCircle2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PRICING } from "@/lib/pricing";
+import { PLAN_FEATURES, PLAN_NAME, PRICING } from "@/lib/pricing";
 
-const FEATURES = [
-  "Unlimited AI replies on Instagram, Facebook, WhatsApp, Telegram & TikTok",
-  "Trained on your business, voice & FAQ",
-  "Conversation inbox with manual takeover",
-  "Human-like reply pacing & auto follow-ups",
-  "Multiple chatbots & connected accounts",
-  "Priority support",
-];
+/**
+ * The single plan, on a light card.
+ *
+ * The feature list is `PLAN_FEATURES` from lib/pricing - the same array the
+ * Billing screen renders. Marketing and billing quoting different inclusions is
+ * the classic way a pricing page starts lying, so there is only one list.
+ */
 
-const MONTHLY = PRICING.monthly;
-const ANNUAL_PER_MONTH = PRICING.annualPerMonth; // 10% off
-const ANNUAL_TOTAL = PRICING.annualTotal; // 897 × 12, matches the Stripe annual price
-const ANNUAL_SAVINGS = PRICING.annualSavings; // vs paying monthly for a year
+/** An illustrative unit cost, not a measured one - see the note it renders in. */
+const EXAMPLE_VOLUME = 2000;
 
 export function PricingPlans() {
   const [annual, setAnnual] = useState(true);
 
+  const perMonth = annual ? PRICING.annualPerMonth : PRICING.monthly;
+  const centsEach = Math.round((PRICING.monthly / EXAMPLE_VOLUME) * 100);
+
   return (
-    <div className="mx-auto max-w-md">
-      {/* Billing-cycle toggle */}
-      <div className="mb-8 flex justify-center">
+    <>
+      {/* Billing cycle */}
+      <div className="flex justify-center">
         <div
           role="group"
           aria-label="Billing cycle"
-          className="inline-flex items-center rounded-full border border-white/15 bg-white/5 p-1 text-sm"
+          className="flex rounded-full border border-[#ebe9f7] bg-[#f4f3fb] p-1"
         >
           <button
             type="button"
             aria-pressed={!annual}
             onClick={() => setAnnual(false)}
             className={cn(
-              "rounded-full px-4 py-1.5 font-medium transition-colors",
-              !annual ? "bg-white text-[#1e1b4b]" : "text-white/60 hover:text-white"
+              "rounded-full px-[18px] py-2.5 text-[13px] font-semibold leading-none transition-colors",
+              annual ? "text-[#5c5f80] hover:text-ss-navy" : "bg-ss-navy text-white"
             )}
           >
             Monthly
@@ -48,86 +48,116 @@ export function PricingPlans() {
             aria-pressed={annual}
             onClick={() => setAnnual(true)}
             className={cn(
-              "flex items-center gap-2 rounded-full px-4 py-1.5 font-medium transition-colors",
-              annual ? "bg-white text-[#1e1b4b]" : "text-white/60 hover:text-white"
+              "flex items-center gap-2 rounded-full px-[18px] py-2.5 text-[13px] font-semibold leading-none transition-colors",
+              annual ? "bg-ss-navy text-white" : "text-[#5c5f80] hover:text-ss-navy"
             )}
           >
             Yearly
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                annual ? "bg-[#6366f1] text-white" : "bg-white/10 text-white/70"
-              )}
-            >
-              Save 10%
+            <span className="rounded-md bg-[#34d399] px-1.5 py-0.5 text-[9.5px] font-bold leading-[1.5] text-[#053f2e]">
+              SAVE {PRICING.discountPct}%
             </span>
           </button>
         </div>
       </div>
 
       {/* Plan card */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-white/[0.04] p-8 shadow-2xl">
-        {/* glow */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#6366f1]/40 blur-3xl"
-        />
+      <div className="mt-[30px] flex justify-center">
+        <div className="w-full max-w-[820px] overflow-hidden rounded-[24px] border border-[#e4e0f7] bg-white shadow-[0_40px_80px_-50px_rgba(30,27,75,.5)]">
+          <div className="h-1.5 bg-[linear-gradient(90deg,#7c22c4,#5355cb,#818cf8)]" />
 
-        <div className="relative">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c7d2fe]">
-              Professional
-            </span>
-            <span className="rounded-full bg-[#6366f1] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
-              All-inclusive
-            </span>
-          </div>
-
-          <div className="mt-6 flex items-end gap-2">
-            <span className="font-display text-6xl font-semibold leading-none tabular-nums">
-              ${annual ? ANNUAL_PER_MONTH : MONTHLY}
-            </span>
-            <span className="pb-2 text-white/60">/ month</span>
-          </div>
-
-          <p className="mt-2 h-5 text-sm text-white/60">
-            {annual ? (
-              <>
-                Billed annually at{" "}
-                <span className="font-medium text-white">
-                  ${ANNUAL_TOTAL.toLocaleString()}
-                </span>{" "}
-                and save ${ANNUAL_SAVINGS.toLocaleString()}/yr
-              </>
-            ) : (
-              "Billed monthly. Switch to yearly to save 10%."
-            )}
-          </p>
-
-          <Link
-            href="/signup"
-            className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#6366f1] font-semibold text-white transition-transform hover:scale-[1.02] hover:bg-[#818cf8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-          >
-            Start now
-            <ArrowRight className="h-4 w-4" aria-hidden />
-          </Link>
-
-          <ul className="mt-8 space-y-3">
-            {FEATURES.map((f) => (
-              <li key={f} className="flex items-start gap-3 text-sm text-white/80">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#6366f1]/20">
-                  <Check className="h-3 w-3 text-[#c7d2fe]" aria-hidden />
+          <div className="flex flex-col md:flex-row">
+            {/* Price */}
+            {/* Centred, because the inclusions column is always the taller of
+                the two and a top-aligned price leaves a hole under the CTA. */}
+            <div className="border-b border-[#f2f1fa] p-8 md:flex md:w-[340px] md:shrink-0 md:flex-col md:justify-center md:border-b-0 md:border-r">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-[#f4ebff]">
+                  <Sparkles className="h-[19px] w-[19px] text-[#7c22c4]" aria-hidden />
                 </span>
-                {f}
-              </li>
-            ))}
-          </ul>
+                <div>
+                  <div className="font-display text-[17px] font-bold leading-none text-ss-navy">
+                    {PLAN_NAME}
+                  </div>
+                  <div className="mt-1 text-[11.5px] leading-none text-[#8b8ea8]">
+                    All-inclusive
+                  </div>
+                </div>
+              </div>
 
-          <p className="mt-6 text-center text-xs text-white/45">
-            Cancel anytime. No setup fees.
-          </p>
+              <div className="mt-6 flex items-baseline gap-2">
+                <span className="font-display text-[48px] font-bold leading-none tracking-[-0.03em] text-ss-navy tabular-nums">
+                  ${perMonth}
+                </span>
+                <span className="text-sm font-medium text-[#8b8ea8]">/ month</span>
+              </div>
+
+              {/* Fixed height so switching cycles doesn't shift the button. */}
+              <p className="mt-2.5 min-h-[38px] text-[12.5px] leading-[1.5] text-[#8b8ea8]">
+                {annual ? (
+                  <>
+                    Billed annually at{" "}
+                    <span className="font-semibold text-ss-navy">
+                      ${PRICING.annualTotal.toLocaleString()}
+                    </span>{" "}
+                    - you keep ${PRICING.annualSavings.toLocaleString()} a year.
+                  </>
+                ) : (
+                  <>
+                    Billed monthly. Switch to yearly any time and save{" "}
+                    {PRICING.discountPct}%.
+                  </>
+                )}
+              </p>
+
+              <Link
+                href="/signup"
+                className="mt-[22px] flex items-center justify-center gap-2 rounded-chip bg-[linear-gradient(120deg,#7c22c4,#5355cb)] p-[15px] text-sm font-bold leading-none text-white shadow-[0_16px_32px_-16px_rgba(124,34,196,.95)] transition-transform hover:scale-[1.02]"
+              >
+                Get started
+                <ArrowRight className="h-[18px] w-[18px]" aria-hidden />
+              </Link>
+              <p className="mt-3.5 text-center text-[11.5px] leading-[1.5] text-[#a3a5bd]">
+                No card to create your account · cancel any time
+              </p>
+            </div>
+
+            {/* Inclusions */}
+            <div className="min-w-0 flex-1 p-8">
+              <div className="text-[11px] font-bold uppercase leading-none tracking-[0.1em] text-[#8b8ea8]">
+                Everything included
+              </div>
+
+              <ul className="mt-[18px] grid gap-x-6 gap-y-3.5 sm:grid-cols-2">
+                {PLAN_FEATURES.map((f) => (
+                  <li
+                    key={f}
+                    className="flex gap-2.5 text-[13.5px] leading-[1.5] text-ss-navy"
+                  >
+                    <CheckCircle2
+                      className="h-[17px] w-[17px] shrink-0 text-[#059669]"
+                      aria-hidden
+                    />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-[22px] flex items-center gap-3 rounded-[13px] border border-[#ece9f9] bg-[#faf9ff] px-4 py-3.5">
+                <Calculator className="h-[18px] w-[18px] shrink-0 text-[#7c22c4]" aria-hidden />
+                <p className="text-[12.5px] leading-[1.55] text-[#5c5f80]">
+                  One closed deal a month usually covers it. As an example, at{" "}
+                  {EXAMPLE_VOLUME.toLocaleString()} conversations a month that
+                  works out to{" "}
+                  <strong className="font-semibold text-ss-navy">
+                    about {centsEach}¢ per conversation answered
+                  </strong>
+                  .
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

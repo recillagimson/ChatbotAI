@@ -6,12 +6,12 @@
  * resume word ("resume", "resumemessage", "unmute"). The webhook (gate 6-mute)
  * tracks this on conversations.user_muted_at, independent of the owner's
  * human-takeover (status='ai_paused'). These are platform-wide control words
- * (universal, like SMS STOP/START) — NOT a tenant literal, so gotcha #12 is
+ * (universal, like SMS STOP/START) - NOT a tenant literal, so gotcha #12 is
  * satisfied.
  *
  * Matching is WHOLE-MESSAGE ONLY (after lowercasing + stripping surrounding
  * punctuation/emoji): "stop", "STOP!", "🛑 stop 🛑" mute; but an embedded word
- * ("I can't stop thinking about it", "stopmessage please") does NOT — this
+ * ("I can't stop thinking about it", "stopmessage please") does NOT - this
  * avoids false opt-outs mid-conversation while accepting the natural phrasings
  * real contacts type.
  *
@@ -42,7 +42,7 @@ const RESUME_PHRASES = new Set([
   "unmute",
 ]);
 
-// Generic, platform-wide (no tenant literal). No em/en dashes — sanitize is
+// Generic, platform-wide (no tenant literal). No em/en dashes - sanitize is
 // outbound-only, so keeping the source clean avoids a needless rewrite on send.
 export const STOP_CONFIRMATION =
   "Got it, I'll hold off on messages from here. Whenever you want them back on, just reply resume.";

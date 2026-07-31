@@ -25,7 +25,7 @@ export const EMBEDDING_DIM = 1536;
 export const CHUNK_TARGET_CHARS = Number(process.env.CHUNK_TARGET_CHARS ?? 3_600);
 export const CHUNK_OVERLAP_CHARS = Number(process.env.CHUNK_OVERLAP_CHARS ?? 400);
 
-/** Reply-time embed timeout — exceed it → fall back to full-context. */
+/** Reply-time embed timeout - exceed it → fall back to full-context. */
 export const EMBED_TIMEOUT_MS = Number(process.env.EMBED_TIMEOUT_MS ?? 2_000);
 
 /** OpenAI per-request input cap (texts). We stay well under 2048. */

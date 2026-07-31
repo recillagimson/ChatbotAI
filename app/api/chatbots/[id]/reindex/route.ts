@@ -40,7 +40,7 @@ export async function POST(
 
   // Re-index with the service client (indexEntry writes kb_chunks, RLS-exempt).
   // indexEntry is idempotent (deletes old chunks, re-embeds). A no-op when
-  // embeddings are disabled (no OPENAI_API_KEY) — the DM path reads KB live anyway.
+  // embeddings are disabled (no OPENAI_API_KEY) - the DM path reads KB live anyway.
   const svc = createServiceClient();
   let indexed = 0;
   let chunks = 0;

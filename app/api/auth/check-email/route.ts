@@ -8,8 +8,8 @@ export const runtime = "nodejs";
  *
  * RLS blocks the anon/browser client from reading other users' profiles, so
  * this runs server-side with the service-role key. Every signup writes a
- * `profiles` row (email NOT NULL) via the `handle_new_user` trigger — including
- * unconfirmed signups — so `profiles` is the source of truth. This replaces the
+ * `profiles` row (email NOT NULL) via the `handle_new_user` trigger - including
+ * unconfirmed signups - so `profiles` is the source of truth. This replaces the
  * fragile `signUp().identities` heuristic, which only flags duplicates under
  * specific email-confirmation settings.
  *
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createServiceClient();
     // Supabase stores auth emails lowercased and the trigger copies that, so an
-    // exact (lowercased) match is correct — and avoids ilike treating "_" in an
+    // exact (lowercased) match is correct - and avoids ilike treating "_" in an
     // email local-part as a wildcard.
     const { count, error } = await supabase
       .from("profiles")

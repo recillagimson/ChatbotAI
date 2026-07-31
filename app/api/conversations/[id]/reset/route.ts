@@ -6,7 +6,7 @@ import { resetConversation } from "@/lib/reset-conversation";
 export const runtime = "nodejs";
 
 /**
- * ADMIN-ONLY: reset a conversation to brand-new state from the inbox — the same wipe
+ * ADMIN-ONLY: reset a conversation to brand-new state from the inbox - the same wipe
  * the RESET_KEYWORD webhook word performs (delete the transcript + restore
  * fresh-conversation defaults), so the welcome VM, keyword triggers, and follow-ups
  * can be re-tested without touching ManyChat. Gated on the REAL superadmin (never the

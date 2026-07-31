@@ -1,4 +1,4 @@
-// lib/model-tiers.ts — single source of truth for OpenAI chat-model selection.
+// lib/model-tiers.ts - single source of truth for OpenAI chat-model selection.
 // INVARIANT: this file must import NOTHING from lib/* or app code (reads only
 // process.env). Importing app code here would create an import cycle
 // (see lib/memory.ts:13-14 for the hand-maintained cycle boundary this respects).

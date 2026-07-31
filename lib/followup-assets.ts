@@ -1,5 +1,5 @@
 /**
- * Follow-up asset library helpers — shared by the cron drip engine, the webhook
+ * Follow-up asset library helpers - shared by the cron drip engine, the webhook
  * AI-media path, and the system-prompt builder.
  *
  * A FollowupAsset is a reusable media (image/video/audio) or link asset with a
@@ -83,7 +83,7 @@ export function nextAssetKeys(base: string, count: number, existing: string[]): 
 /**
  * Normalized asset keys for a follow-up step: prefers the new `asset_keys` array,
  * falls back to the legacy single `asset_key`. Trims, lowercases, de-dupes, drops
- * empties. Pure/deterministic — the single back-compat read used by the editor,
+ * empties. Pure/deterministic - the single back-compat read used by the editor,
  * resolveSteps, the cron, and the page's usedKeys, so old single-asset steps (saved
  * before multi-asset) keep working.
  */

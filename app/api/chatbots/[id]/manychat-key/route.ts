@@ -11,7 +11,7 @@ export const runtime = "nodejs";
  * The plaintext key and its ciphertext are NEVER returned to the client.
  *
  * DELETE /api/chatbots/[id]/manychat-key
- * Clear the stored API key (sets column to NULL — not ""), reverting the
+ * Clear the stored API key (sets column to NULL - not ""), reverting the
  * chatbot to the env-level fallback. NULL, not empty string, keeps the
  * resolver's hard-fail correct.
  */
@@ -28,14 +28,14 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  // Parse body — reject empty / missing key immediately
+  // Parse body - reject empty / missing key immediately
   const body = await request.json().catch(() => null);
   const apiKey = typeof body?.apiKey === "string" ? body.apiKey.trim() : "";
   if (!apiKey) {
     return NextResponse.json({ error: "API key is required." }, { status: 400 });
   }
 
-  // Ownership check — RLS also enforces this; the explicit filter gives a clean 404
+  // Ownership check - RLS also enforces this; the explicit filter gives a clean 404
   const supabase = await createClient();
   const { data: chatbot, error: ownershipError } = await supabase
     .from("chatbots")
@@ -58,7 +58,7 @@ export async function PUT(
     );
   }
 
-  // Encrypt — guard so a missing master key gives a clear server error
+  // Encrypt - guard so a missing master key gives a clear server error
   let enc: string;
   try {
     enc = encryptSecret(apiKey);
@@ -69,7 +69,7 @@ export async function PUT(
     );
   }
 
-  // Store — key and ciphertext never leave the server
+  // Store - key and ciphertext never leave the server
   const { error } = await supabase
     .from("chatbots")
     .update({ manychat_api_key_enc: enc })
@@ -107,7 +107,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
   }
 
-  // Clear — NULL (not "") so the resolver treats it as "not set"
+  // Clear - NULL (not "") so the resolver treats it as "not set"
   const { error } = await supabase
     .from("chatbots")
     .update({ manychat_api_key_enc: null })

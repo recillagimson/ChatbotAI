@@ -7,7 +7,7 @@
  * Condition-exit on it. Fired from the webhook (auto-tag transitions) and the manual
  * inbox route.
  *
- * BEST-EFFORT: syncNoFollowupFlag never throws — a sync failure must not affect a
+ * BEST-EFFORT: syncNoFollowupFlag never throws - a sync failure must not affect a
  * reply, a follow-up, a tag write, or an inbox action.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";

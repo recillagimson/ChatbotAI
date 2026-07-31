@@ -3,7 +3,7 @@
 -- ===========================================================================
 -- reply_debounce_seconds overrides the global REPLY_DEBOUNCE_MS env per chatbot:
 -- the quiet period (in SECONDS) the webhook waits for the lead to stop sending
--- before it answers, so a rapid burst — and a photo sent alongside its caption —
+-- before it answers, so a rapid burst - and a photo sent alongside its caption -
 -- collapses into ONE consolidated reply. The timer effectively resets each time
 -- the lead sends another message (single-flight claim on conversations.reply_claimed_for).
 --

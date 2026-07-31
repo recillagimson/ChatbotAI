@@ -1,5 +1,5 @@
 // lib/lead-facts.ts
-// Durable "known facts" memory for the DM bot — the robust fix for the bot
+// Durable "known facts" memory for the DM bot - the robust fix for the bot
 // re-asking things the lead already answered (a credit score they typed, a goal
 // they named, a screenshot they sent). Two layers already existed (verbatim window
 // + rolling prose summary), but prose can drift or negate, and evidence sent as an
@@ -23,7 +23,7 @@ import { MODELS } from "./model-tiers";
 /** Feature flag. Default ON; set LEAD_FACTS_ENABLED=false to disable the extraction
  *  (skips the background call + leaves the block empty) without a redeploy of logic. */
 export const LEAD_FACTS_ENABLED: boolean = process.env.LEAD_FACTS_ENABLED !== "false";
-/** Cheap background model — same default chain as the memory summarizer. */
+/** Cheap background model - same default chain as the memory summarizer. */
 export const LEAD_FACTS_MODEL = MODELS.leadFacts();
 /** Hard caps so an over-eager model can't bloat the block. */
 export const LEAD_FACTS_MAX_LINES = 14;
@@ -91,11 +91,11 @@ export function buildFactsPrompt(
     `customer) has stated or shown about themselves and what they want, from an ` +
     `Instagram/Messenger DM with a business. This list is fed back to the assistant so ` +
     `it NEVER re-asks something the lead already answered. Include only facts the LEAD ` +
-    `actually provided: answers to the business's qualifying questions — their ` +
+    `actually provided: answers to the business's qualifying questions - their ` +
     `situation, any numbers/scores/amounts they gave, the goals/products/outcomes they ` +
-    `want, timeline, budget, constraints — plus any decision or commitment they made. ` +
+    `want, timeline, budget, constraints - plus any decision or commitment they made. ` +
     `Content the lead sent as a photo, voice note, or document appears labelled ` +
-    `"[Image]:", "[Voice message]:", or "[Attached document]:" — treat what it says as ` +
+    `"[Image]:", "[Voice message]:", or "[Attached document]:" - treat what it says as ` +
     `provided by the lead. Do NOT include the business's own questions or statements, ` +
     `greetings, small talk, or anything the lead did not actually say or show. Update ` +
     `the existing list: KEEP every fact that is still true, ADD new ones, and only ` +
@@ -120,9 +120,9 @@ export function renderKnownFactsBlock(facts: string | null | undefined): string 
   const f = (facts ?? "").trim();
   if (!f) return "";
   return (
-    `WHAT THIS LEAD HAS ALREADY TOLD YOU (established from this chat — treat as known. ` +
+    `WHAT THIS LEAD HAS ALREADY TOLD YOU (established from this chat - treat as known. ` +
     `NEVER ask for any of these again; reference them instead. If you catch yourself ` +
-    `about to ask for something here, you already have it — use it and move forward. ` +
+    `about to ask for something here, you already have it - use it and move forward. ` +
     `Re-asking makes the lead feel unheard.)\n${f}`
   );
 }
@@ -131,7 +131,7 @@ export function renderKnownFactsBlock(facts: string | null | undefined): string 
 
 /**
  * Produce the next known-facts list from the previous one + recent messages. Cheap,
- * single call. Never throws — on any failure returns the previous facts unchanged so
+ * single call. Never throws - on any failure returns the previous facts unchanged so
  * nothing is lost.
  */
 export async function updateKnownFacts(
@@ -160,7 +160,7 @@ export async function updateKnownFacts(
 
 /**
  * Refresh a conversation's known-facts list from its recent history. Runs in the
- * background after a reply; best-effort — any failure is logged and swallowed (never
+ * background after a reply; best-effort - any failure is logged and swallowed (never
  * affects delivery). Uses the recent verbatim window (a fact can still be in-window),
  * merged with the stored list, so nothing is dropped as the chat scrolls.
  */

@@ -22,7 +22,7 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             );
           } catch {
-            // called from a Server Component; ignored — middleware refreshes session
+            // called from a Server Component; ignored - middleware refreshes session
           }
         },
       },
@@ -43,10 +43,10 @@ export async function createClient() {
  * Tradeoff: local verification trusts a valid, unexpired token, so a session
  * revoked elsewhere stays usable until the token expires (~1h). The actual data
  * boundary is Postgres RLS (which verifies every query server-side), so this is
- * the sanctioned default — but don't use these claims as a hard revocation gate.
+ * the sanctioned default - but don't use these claims as a hard revocation gate.
  *
  * NOTE: this is the REAL authenticated user (the actual JWT). Use it for
- * authorization decisions (e.g. requireSuperadmin, the /admin gate) — NOT
+ * authorization decisions (e.g. requireSuperadmin, the /admin gate) - NOT
  * `getCurrentUser`, which may be an impersonated client (see below).
  */
 export const getRealUser = cache(async () => {
@@ -63,8 +63,8 @@ export const getRealUser = cache(async () => {
 /**
  * The EFFECTIVE acting user for data scoping. Normally the real user, but when a
  * superadmin is impersonating a client ("View as client"), this returns the
- * client's identity so the entire client dashboard — which scopes every query by
- * this id — transparently shows/acts on the client's account. Authorization
+ * client's identity so the entire client dashboard - which scopes every query by
+ * this id - transparently shows/acts on the client's account. Authorization
  * gates must NOT use this; use `getRealUser`. See lib/impersonation.ts.
  */
 export const getCurrentUser = cache(async () => {
@@ -73,7 +73,7 @@ export const getCurrentUser = cache(async () => {
   return getRealUser();
 });
 
-/** Service-role client — bypasses RLS. Use only in server routes (webhooks, admin). */
+/** Service-role client - bypasses RLS. Use only in server routes (webhooks, admin). */
 export function createServiceClient() {
   return createServiceClientBase(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

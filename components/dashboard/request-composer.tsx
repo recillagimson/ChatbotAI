@@ -100,7 +100,7 @@ export function RequestComposer({
       return;
     }
     if (incoming.length < all.length) {
-      setError("Some files were skipped — only images and PDF/DOCX/TXT/MD/CSV are supported.");
+      setError("Some files were skipped - only images and PDF/DOCX/TXT/MD/CSV are supported.");
     }
     setFiles((prev) => {
       const combined = [...prev, ...incoming];
@@ -142,7 +142,7 @@ export function RequestComposer({
       setSeconds(0);
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
     } catch (err) {
-      // Permission denied / unavailable — stop any tracks, surface a message.
+      // Permission denied / unavailable - stop any tracks, surface a message.
       stream?.getTracks().forEach((t) => t.stop());
       setError(
         err instanceof DOMException && err.name === "NotAllowedError"

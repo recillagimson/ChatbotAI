@@ -11,7 +11,7 @@ import { SectionField } from "@/components/dashboard/section-field";
 /**
  * New-chatbot form. `ownerId` is the EFFECTIVE user id resolved on the server
  * (the impersonated client when an admin is "viewing as" them, otherwise the
- * real user) — we insert with it instead of the browser session id so a chatbot
+ * real user) - we insert with it instead of the browser session id so a chatbot
  * created while impersonating belongs to the client, not the admin.
  */
 export function NewChatbotForm({ ownerId }: { ownerId: string }) {

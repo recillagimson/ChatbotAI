@@ -4,7 +4,7 @@
  * When a lead sends several messages in quick succession, each webhook run
  * persists its message, claims the conversation (overwriting any older claim
  * on conversations.reply_claimed_for), then sleeps out the debounce window.
- * On waking, only the run whose claim survived answers — and it answers the
+ * On waking, only the run whose claim survived answers - and it answers the
  * whole unanswered burst in ONE consolidated reply. The claim/release
  * choreography lives in app/api/webhooks/manychat/route.ts; the decision
  * logic here is pure and covered by scripts/test-debounce.ts.
@@ -24,7 +24,7 @@ export const MAX_DEBOUNCE_SECONDS = 120;
 
 /** Clamp a per-chatbot reply-wait (seconds) into the safe range and floor to a
  *  whole second. Non-finite (NaN / null / undefined) → MIN (0). NOTE: a MISSING
- *  column should fall back to REPLY_DEBOUNCE_MS at the call site — this clamps a
+ *  column should fall back to REPLY_DEBOUNCE_MS at the call site - this clamps a
  *  value that is actually present, it does not decide the fallback. */
 export function clampDebounceSeconds(seconds: number | null | undefined): number {
   const n = Number(seconds);
@@ -51,7 +51,7 @@ export function remainingDebounceMs(
 /**
  * Split a created_at-DESC message window into the unanswered burst and prior
  * history. burst = the leading run of role==='user' rows (every user message
- * since the last assistant/human_agent reply — including rows whose own run
+ * since the last assistant/human_agent reply - including rows whose own run
  * never generated, e.g. rate-limited ones); prior = everything older. Both
  * are returned in CHRONOLOGICAL order. An empty burst means someone (human
  * agent or a canned path) already answered during the debounce sleep.
@@ -68,7 +68,7 @@ export function splitBurst<T extends BurstRow>(rowsDesc: T[]): { burst: T[]; pri
 /**
  * Join a burst into one effective user message, one message per line. The row
  * whose id === currentId uses currentEffective (the in-memory composeUserMessage
- * output — fresher than the DB row if this run's media backfill failed); other
+ * output - fresher than the DB row if this run's media backfill failed); other
  * rows use their stored content (backfilled with transcripts/doc text by their
  * own runs, or the provisional attachment label if that backfill is still in
  * flight). Consecutive identical lines collapse so a triple-tap of "yes" reads

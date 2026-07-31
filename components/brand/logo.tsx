@@ -2,7 +2,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * SpeedSettr logo — the original full-color brand artwork (icon + wordmark +
+ * SpeedSettr logo - the original full-color brand artwork (icon + wordmark +
  * tagline), background-removed + optimized to WebP (see public/brand/).
  *
  * The color lockup's "SPEED" is deep navy, which would vanish on dark surfaces,

@@ -5,9 +5,9 @@ export type KbEntryLite = { title: string; content: string };
 
 const SEP = "\n\n---\n\n";
 const NO_KB =
-  "(No knowledge base entries yet — answer only based on the business description and politely defer if asked something you cannot confirm.)";
+  "(No knowledge base entries yet - answer only based on the business description and politely defer if asked something you cannot confirm.)";
 
-/** True when a KB block carries NO real knowledge — either blank (retrieval matched
+/** True when a KB block carries NO real knowledge - either blank (retrieval matched
  *  nothing above the floor) or the NO_KB sentinel (the bot has no entries at all).
  *  Lets callers (e.g. the trainer diagnostics) honestly tell an owner "the model
  *  got no knowledge base for this message" instead of inferring it from char count
@@ -82,7 +82,7 @@ export function buildFullContextBlock(entries: KbEntryLite[]): string {
   }
   let block = parts.join(SEP);
   if (truncated) {
-    block += `${SEP}…(knowledge base truncated — some entries were omitted to stay within limits)`;
+    block += `${SEP}…(knowledge base truncated - some entries were omitted to stay within limits)`;
   }
   return block;
 }

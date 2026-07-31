@@ -119,7 +119,7 @@ export type FollowupLoopMode = "stop" | "repeat_last" | "cycle";
 /** One step in a chatbot's auto follow-up drip sequence. */
 export interface FollowupStep {
   delay_hours: number;         // hours after the previous send (or the contact's last message for step 1)
-  asset_key?: string | null;   // LEGACY single key — still read for steps saved before multi-asset
+  asset_key?: string | null;   // LEGACY single key - still read for steps saved before multi-asset
   asset_keys?: string[];       // keys of FollowupAssets to send in this step (supersedes asset_key)
   text?: string | null;        // caption / message body; supports {{name}}. Always sent when present.
   ai_generate?: boolean;       // when true, the AI writes this step's message from the conversation; `text` (if any) is guidance for the AI. Ignored when a flow fires.
@@ -183,7 +183,7 @@ export interface Conversation {
   rn_topic_id: string | null;
   reply_claimed_for: string | null;  // inbound message id of the newest AI-bound run (debounce single-flight claim)
   keyword_fired: string[];           // ids of keyword groups whose first reply this contact already received
-  is_lead: boolean;                  // PARKED: column kept but no longer written/read (is_leads tagging disabled — see CLAUDE.md #19)
+  is_lead: boolean;                  // PARKED: column kept but no longer written/read (is_leads tagging disabled - see CLAUDE.md #19)
   extraction_attempts: number;       // prompt-extraction detections on this thread (red "Flagged" badge when > 0)
   flagged_at: string | null;         // when the newest extraction attempt was detected
   user_muted_at: string | null;      // lead self-paused the AI via "stopmessage" (null = not muted); independent of status
@@ -229,7 +229,7 @@ export type ChangeCategory = "personality" | "offers" | "rebuttals" | "other" | 
 /** A prompt-section column that a proposal can revise. */
 export type SectionColumn = "persona_section" | "offers_section" | "rebuttals_section";
 
-/** One section's full revised text — the unit of an "overall" multi-section edit. */
+/** One section's full revised text - the unit of an "overall" multi-section edit. */
 export interface SectionEdit {
   section: SectionColumn;
   section_content: string; // FULL revised text for that section (a replacement, not a diff)
@@ -239,7 +239,7 @@ export interface ChangeProposal {
   section?: SectionColumn;                          // column the section_content targets (single-section categories)
   section_content?: string;                        // FULL revised text for the targeted section
   sections?: SectionEdit[];                         // "overall" only: every section the request affects, each in full
-  system_prompt?: string;                          // LEGACY — still honored for old rows; omitted/empty = no change
+  system_prompt?: string;                          // LEGACY - still honored for old rows; omitted/empty = no change
   kb_entries?: { title: string; content: string }[]; // NEW kb entries to add (may be omitted/empty)
   summary: string;                                 // plain-English "what changed and why" for the team
 }

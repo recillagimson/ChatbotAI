@@ -2,8 +2,8 @@ import { normalize } from "./keyword-triggers";
 
 /**
  * Universal, admin-set reset control word (the RESET_KEYWORD env var). WHOLE-MESSAGE
- * match only: the message must BE the keyword — after normalize (lowercase + collapsed
- * whitespace) and stripping surrounding punctuation/emoji — not merely contain it. So
+ * match only: the message must BE the keyword - after normalize (lowercase + collapsed
+ * whitespace) and stripping surrounding punctuation/emoji - not merely contain it. So
  * "resetnow99" / "RESETNOW99!" / "🔄 resetnow99 🔄" reset, but "can you reset my score"
  * does NOT. A blank/undefined keyword means the feature is OFF -> always false. Pure +
  * synchronous. Mirrors detectUserControl in lib/user-controls.ts. Covered by

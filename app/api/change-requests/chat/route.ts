@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
   const supabase = await createClient();
 
-  // Ownership + SAFE chatbot context (NEVER select * — that leaks secret columns).
+  // Ownership + SAFE chatbot context (NEVER select * - that leaks secret columns).
   const { data: chatbot } = await supabase
     .from("chatbots")
     .select(
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
   const sectionCol = sectionColumnFor(effectiveCategory);
   const currentSection = sectionCol ? ((chatbot as Chatbot)[sectionCol] ?? "") : "";
 
-  // "overall" isn't scoped to one section — it may revise any of the three, so the
+  // "overall" isn't scoped to one section - it may revise any of the three, so the
   // assistant needs the live text of all of them.
   const sectionsCtx: SectionsContext | undefined =
     effectiveCategory === "overall"
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
           ? text.slice(0, MAX_DOC_CHARS) + (text.length > MAX_DOC_CHARS ? "\n…(truncated)" : "")
           : "(no readable text found in this file)";
       } catch {
-        block = "(could not read this file — it may be scanned, encrypted, or an unsupported format)";
+        block = "(could not read this file - it may be scanned, encrypted, or an unsupported format)";
       }
       content += `\n\n--- Attached knowledge file: ${f.name} ---\n${block}`;
     }

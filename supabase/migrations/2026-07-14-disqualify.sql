@@ -3,11 +3,11 @@
 -- ===========================================================================
 -- Two new conversation tags that make the bot go fully silent AND pause the
 -- follow-up drip, set by a pre-reply AI screen (lib/conversation-screen.ts):
---   disqualified — abusive toward the bot, or a clear rejection of the service
---   bot          — the counterparty is itself an automated bot / spam
+--   disqualified - abusive toward the bot, or a clear rejection of the service
+--   bot          - the counterparty is itself an automated bot / spam
 -- Both are owner-only-reopen (auto-classification never moves them back). No new
--- columns — only the tag CHECK is widened. Apply BEFORE deploying the code that
--- can write these tags. Idempotent — safe to re-run.
+-- columns - only the tag CHECK is widened. Apply BEFORE deploying the code that
+-- can write these tags. Idempotent - safe to re-run.
 --
 -- Apply in the Supabase SQL editor.
 

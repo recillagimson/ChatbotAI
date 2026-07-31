@@ -8,14 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 /**
- * PhasesFunnel — HONEST STUB (with one real anchor stat)
+ * PhasesFunnel - HONEST STUB (with one real anchor stat)
  *
  * Recreates setty.ai's branching "Conversation phases" section as a clearly
  * muted placeholder. No per-phase counts are tracked. The only real number
  * shown is avgMsgsPerConvo which anchors the card so it isn't pure vapor.
  *
  * Visual design: muted, dashed-border phase nodes in a branching layout,
- * with explicit opacity reduction and "—" placeholders everywhere a count
+ * with explicit opacity reduction and "-" placeholders everywhere a count
  * would appear. The "not instrumented yet" badge in the header signals stub
  * status immediately.
  */
@@ -48,7 +48,7 @@ function PhaseNode({ label }: { label: string }) {
         "border border-dashed border-muted-foreground/25",
         "bg-muted/10 opacity-60 min-w-[90px]"
       )}
-      aria-label={`${label} — placeholder, not tracked`}
+      aria-label={`${label} - placeholder, not tracked`}
     >
       <span className="text-xs font-medium text-muted-foreground/70 text-center leading-tight">
         {label}
@@ -57,7 +57,7 @@ function PhaseNode({ label }: { label: string }) {
         className="text-lg font-display font-semibold tabular-nums text-muted-foreground/30"
         aria-hidden="true"
       >
-        —
+        -
       </span>
     </div>
   );
@@ -86,10 +86,10 @@ export function PhasesFunnel({
         </CardHeader>
 
         <CardContent>
-          {/* Branching phase diagram — muted placeholder nodes */}
+          {/* Branching phase diagram - muted placeholder nodes */}
           <div
             className="flex flex-col items-center gap-5 py-4 mb-6"
-            aria-label="Placeholder conversation phase diagram — no data tracked yet"
+            aria-label="Placeholder conversation phase diagram - no data tracked yet"
             role="img"
           >
             {PHASE_ROWS.map((row, rowIdx) => (
@@ -100,7 +100,7 @@ export function PhasesFunnel({
               </div>
             ))}
 
-            {/* Connector hint — subtle vertical dots between rows */}
+            {/* Connector hint - subtle vertical dots between rows */}
             <p className="text-[10px] text-muted-foreground/40 text-center mt-1 italic">
               Phase nodes above are illustrative placeholders
             </p>
@@ -113,7 +113,7 @@ export function PhasesFunnel({
             they progress.
           </p>
 
-          {/* Anchor stat — the ONE real number */}
+          {/* Anchor stat - the ONE real number */}
           <div className="flex items-baseline gap-2 border-t border-border/40 pt-4">
             <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
               Avg messages / conversation

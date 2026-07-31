@@ -15,16 +15,16 @@ type WelcomeRow = Pick<Conversation, "id" | "manychat_subscriber_id"> & {
 /**
  * ADMIN-ONLY test affordance: fire this conversation's Welcome VM flow right now,
  * bypassing the `shouldSendWelcome` gate (welcomed_at / opener / keyword-gate checks)
- * so any thread can exercise the real ManyChat welcome delivery — the SAME
+ * so any thread can exercise the real ManyChat welcome delivery - the SAME
  * `sendManychatFlow` the webhook triggers on a first-contact greeting. Mirrors the
  * "Send follow-up now" tool. Gated on the REAL superadmin (never the impersonated
  * client); operates cross-tenant via the service client. Never throws to the client.
  *
- * Deliberately IGNORES `welcome_enabled` (an admin override — the only requirement is a
+ * Deliberately IGNORES `welcome_enabled` (an admin override - the only requirement is a
  * configured welcome flow) and IGNORES `welcomed_at` for the send decision, so the
  * button is re-clickable to re-test. But to avoid a double-VM with a concurrent genuine
  * first-contact webhook, it CLAIMS `welcomed_at` the same atomic way the webhook does
- * BEFORE sending, and reverts the claim if the send fails — so a real lead is never left
+ * BEFORE sending, and reverts the claim if the send fails - so a real lead is never left
  * marked "welcomed" without actually receiving the VM.
  */
 export async function POST(
@@ -72,7 +72,7 @@ export async function POST(
   // Claim welcomed_at atomically BEFORE sending, the same way the webhook's welcome gate
   // does, so a concurrent genuine first-contact inbound can't ALSO auto-fire the VM
   // (double send). Claim won → this is the first welcome; claim lost → already welcomed
-  // (or a concurrent claim), so this is a deliberate admin RE-send — send anyway and
+  // (or a concurrent claim), so this is a deliberate admin RE-send - send anyway and
   // leave welcomed_at as-is.
   const { data: claimed, error: claimErr } = await supabase
     .from("conversations")
@@ -81,7 +81,7 @@ export async function POST(
     .is("welcomed_at", null)
     .select("id");
   if (claimErr) {
-    // A DB error here is NOT a lost claim — surface it rather than risk a double-send.
+    // A DB error here is NOT a lost claim - surface it rather than risk a double-send.
     console.error("[send-welcome] welcome claim failed", id, claimErr);
     return NextResponse.json({ ok: false, reason: "claim_failed" }, { status: 502 });
   }
@@ -108,7 +108,7 @@ export async function POST(
   }
 
   // Record the send in the transcript so it's visible in the inbox. Best-effort, but log
-  // failures (never silently swallow — a missing record is worth seeing in logs).
+  // failures (never silently swallow - a missing record is worth seeing in logs).
   const { error: msgErr } = await supabase.from("messages").insert({
     conversation_id: id,
     role: "assistant",

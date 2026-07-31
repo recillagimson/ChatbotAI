@@ -10,7 +10,7 @@ import {
 
 /**
  * Date filter for the Conversations inbox: quick presets (All / Last day / 7 / 30)
- * plus a custom from–to range. URL-driven like the platform tabs — a preset clears
+ * plus a custom from–to range. URL-driven like the platform tabs - a preset clears
  * any custom dates and vice-versa, other filters are preserved, and any change
  * resets to page 1 (all handled by buildConversationsHref).
  */

@@ -25,7 +25,7 @@ export function DiffView({
     <div>
       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {label} — what changed
+          {label} - what changed
         </p>
         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1">
@@ -42,7 +42,7 @@ export function DiffView({
       <div className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md border px-3 py-2 text-xs leading-relaxed">
         {!before?.trim() && (
           <span className="mb-1 block text-[11px] font-medium text-green-700">
-            New — this is all new content.
+            New - this is all new content.
           </span>
         )}
         {ops.map((op, i) =>

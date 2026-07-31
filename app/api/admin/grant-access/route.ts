@@ -16,13 +16,13 @@ const Body = z.object({
 });
 
 /**
- * POST /api/admin/grant-access — superadmin comp-access control.
+ * POST /api/admin/grant-access - superadmin comp-access control.
  * grant : set status='trialing', comp_expires_at = now + duration (fresh).
  * extend: comp_expires_at = max(now, current expiry) + duration.
  * revoke: status='canceled', comp_expires_at = now (access ends immediately).
  *
  * Superadmin-only (requireSuperadmin resolves the REAL admin, not an
- * impersonated client). Writes via the service role — the sanctioned pattern
+ * impersonated client). Writes via the service role - the sanctioned pattern
  * for an authorized cross-user privileged write (RLS blocks a normal client from
  * writing another user's subscription row). Refuses to comp over a live paid
  * Stripe subscription.
@@ -47,12 +47,12 @@ export async function POST(request: NextRequest) {
 
   // Safety rail (applies to ALL actions): never touch a REAL Stripe subscription
   // row. That means a row with a Stripe subscription id, no comp, in a status
-  // Stripe actively manages — active/trialing (paying) or past_due (dunning; the
+  // Stripe actively manages - active/trialing (paying) or past_due (dunning; the
   // customer may still recover). grant/extend would clobber the real sub; revoke
   // would mutate it until Stripe re-syncs. Canceled/incomplete rows carry a
   // Stripe id too but are dead, so they stay comp-eligible (win back a churned
   // customer). The admin UI never offers these on a live sub (it shows a
-  // read-only "Active paid subscription" card) — this guards direct API calls.
+  // read-only "Active paid subscription" card) - this guards direct API calls.
   const liveStripeSub =
     !!existing?.stripe_subscription_id &&
     !existing?.comp_expires_at &&

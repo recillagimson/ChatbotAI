@@ -6,9 +6,9 @@
 
 /**
  * Max separate bubbles per reply. Beyond this, the overflow tail is merged into
- * the last bubble — keeps the reply intact while avoiding spam-flagging on IG.
- * Env-overridable (`MAX_BUBBLES`) so the owner can cap reply length — e.g. lower it
- * so every bubble of a paced 15–30s trickle fits a tighter function budget — without
+ * the last bubble - keeps the reply intact while avoiding spam-flagging on IG.
+ * Env-overridable (`MAX_BUBBLES`) so the owner can cap reply length - e.g. lower it
+ * so every bubble of a paced 15–30s trickle fits a tighter function budget - without
  * a code change. Falls back to 6 when unset/invalid; a value < 1 is floored to 1.
  */
 export const MAX_BUBBLES = (() => {

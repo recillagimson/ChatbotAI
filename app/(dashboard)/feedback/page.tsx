@@ -1,12 +1,23 @@
+import { Phone } from "lucide-react";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { signAttachment } from "@/lib/storage";
+import { SUPPORT_CONTACTS, SUPPORT_HOURS } from "@/lib/support-contacts";
 import { FeedbackPageForm } from "@/components/dashboard/feedback-page-form";
 import { FeedbackHistory } from "@/components/dashboard/feedback-history";
-import { SupportContactsCard } from "@/components/dashboard/support-contacts-card";
+import { PageBody, PageHeader, PageShell } from "@/components/ss/page";
+import { SsCard, SsCardHead } from "@/components/ss/card";
+import { NavyPanel } from "@/components/ss/panel";
 import type { Attachment, Feedback } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Feedback - the form, the humans, and what you already sent.
+ *
+ * The design puts the two phone numbers directly beside the form rather than
+ * below it: most of what people write here is urgent, and a number they can tap
+ * now beats a message answered later.
+ */
 export default async function FeedbackPage() {
   const supabase = await createClient();
   const user = await getCurrentUser();
@@ -40,30 +51,57 @@ export default async function FeedbackPage() {
   );
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-display font-semibold tracking-tight">
-          Feedback
-        </h1>
-        <p className="text-muted-foreground">
-          Tell the SpeedSettr team what&apos;s working or what to fix.
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Feedback"
+        description="Tell the SpeedSettr team what's working or what to fix."
+      />
 
-      <div className="mb-10">
-        <FeedbackPageForm chatbots={chatbots ?? []} />
-      </div>
+      <PageBody>
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] xl:items-start">
+          <SsCard className="p-[22px]">
+            <FeedbackPageForm chatbots={chatbots ?? []} />
+          </SsCard>
 
-      <div className="mb-10">
-        <SupportContactsCard />
-      </div>
+          <div className="flex flex-col gap-5">
+            <NavyPanel streaks={false} className="p-[22px]">
+              <div className="font-display text-[15px] font-bold leading-tight text-white">
+                Need help now?
+              </div>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-ss-nav-text">
+                Call or text the team directly - {SUPPORT_HOURS}.
+              </p>
+              <div className="mt-4 flex flex-col gap-2.5">
+                {SUPPORT_CONTACTS.map((c) => (
+                  <a
+                    key={c.tel}
+                    href={`tel:${c.tel}`}
+                    className="flex items-center gap-2.5 rounded-chip border border-white/10 bg-white/[.07] px-3.5 py-3 transition-colors hover:bg-white/[.12]"
+                  >
+                    <Phone
+                      className="h-[17px] w-[17px] shrink-0 text-ss-indigo-300"
+                      aria-hidden="true"
+                    />
+                    <span className="text-[13px] font-semibold leading-none text-white">
+                      @{c.name}
+                    </span>
+                    <span className="ml-auto text-[12.5px] font-semibold leading-none tabular-nums text-ss-indigo-300">
+                      {c.phone}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </NavyPanel>
 
-      <section>
-        <h2 className="mb-4 text-xl font-display font-semibold tracking-tight">
-          Your feedback
-        </h2>
-        <FeedbackHistory items={items} />
-      </section>
-    </div>
+            <SsCard className="p-[22px]">
+              <SsCardHead title="Your feedback" />
+              <div className="mt-4">
+                <FeedbackHistory items={items} />
+              </div>
+            </SsCard>
+          </div>
+        </div>
+      </PageBody>
+    </PageShell>
   );
 }

@@ -35,7 +35,7 @@ function shortDate(iso: string): string {
 
 /**
  * Expandable list of conversations within a funnel stage.
- * Fully server-rendered — pagination via Link href.
+ * Fully server-rendered - pagination via Link href.
  */
 export function StageConversationList({
   rows,

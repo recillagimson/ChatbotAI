@@ -10,7 +10,7 @@ export const runtime = "nodejs";
  * (matching the DB default's encode(gen_random_bytes(24),'hex') format),
  * persists it, and returns it to the owner so they can copy it into ManyChat.
  *
- * This is the only method that returns a secret value — intentionally, because
+ * This is the only method that returns a secret value - intentionally, because
  * the owner must copy the new secret into ManyChat immediately after rotation.
  */
 
@@ -26,7 +26,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  // Ownership check — RLS also enforces this; the explicit filter gives a clean 404
+  // Ownership check - RLS also enforces this; the explicit filter gives a clean 404
   const supabase = await createClient();
   const { data: chatbot, error: ownershipError } = await supabase
     .from("chatbots")
@@ -53,6 +53,6 @@ export async function POST(
     return NextResponse.json({ error: "Failed to rotate the webhook secret." }, { status: 500 });
   }
 
-  // Return the new secret — the owner must copy it into ManyChat
+  // Return the new secret - the owner must copy it into ManyChat
   return NextResponse.json({ ok: true, webhook_secret: webhookSecret });
 }

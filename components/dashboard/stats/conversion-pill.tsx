@@ -15,7 +15,7 @@ function pillTone(pct: number | null): "good" | "mid" | "bad" | "muted" {
 }
 
 const toneStyles: Record<"good" | "mid" | "bad" | "muted", string> = {
-  // bg + text — ≥4.5:1 contrast on white card surfaces
+  // bg + text - ≥4.5:1 contrast on white card surfaces
   good: "bg-conv-good/15 text-conv-good border border-conv-good/30",
   mid: "bg-conv-mid/15 text-conv-mid border border-conv-mid/30",
   bad: "bg-conv-bad/15 text-conv-bad border border-conv-bad/30",
@@ -31,11 +31,11 @@ const toneLabel: Record<"good" | "mid" | "bad" | "muted", string> = {
 
 /**
  * Conversion pill rendered between two funnel stages.
- * Carries BOTH the color/icon AND the text percentage — never color alone.
+ * Carries BOTH the color/icon AND the text percentage - never color alone.
  */
 export function ConversionPill({ pct }: ConversionPillProps) {
   const tone = pillTone(pct);
-  const display = pct === null ? "—" : `${pct.toFixed(1)}%`;
+  const display = pct === null ? "-" : `${pct.toFixed(1)}%`;
 
   return (
     <div className="flex items-center justify-center py-0.5" aria-label={`Conversion rate: ${display} (${toneLabel[tone]})`}>

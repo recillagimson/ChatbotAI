@@ -1,4 +1,4 @@
-/** Transcribe an audio file via OpenAI Whisper (raw fetch — no SDK; reuses OPENAI_API_KEY). */
+/** Transcribe an audio file via OpenAI Whisper (raw fetch - no SDK; reuses OPENAI_API_KEY). */
 export async function transcribeAudio(file: File | Blob, filename = "audio.webm"): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not set");

@@ -1,7 +1,7 @@
 /**
- * Conversation QUALITY tag — an owner-set rating of how a DM thread went, kept
+ * Conversation QUALITY tag - an owner-set rating of how a DM thread went, kept
  * SEPARATE from and ORTHOGONAL to the funnel `tag` (lib/conversation-tags.ts). A
- * thread can be both e.g. `subscribed` AND `good`. Manual only — the AI classifier
+ * thread can be both e.g. `subscribed` AND `good`. Manual only - the AI classifier
  * never sets it. Null = unrated (the default). Pure and dependency-free so it's safe
  * in both server (pages) and client (inbox actions) bundles.
  */

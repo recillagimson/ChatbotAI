@@ -65,7 +65,7 @@ function toEditable(groups: KeywordGroup[]): EditableGroup[] {
  * (and optional exclude) keyword pills, a canned first reply (text + optional
  * saved asset), and an on-repeat behavior. The webhook sends the first reply the
  * first time a contact's DM matches, then runs on_repeat on later matches. Saves
- * directly via the owner's RLS client — same pattern as the other dashboard forms.
+ * directly via the owner's RLS client - same pattern as the other dashboard forms.
  */
 export function KeywordTriggersForm({
   chatbot,
@@ -197,7 +197,7 @@ export function KeywordTriggersForm({
       <p className="text-sm text-muted-foreground">
         When a lead&apos;s DM contains a keyword, the bot sends your canned reply the first
         time only. If they say it again later, it does what you choose below (hand to the AI,
-        send a different message, or steer the AI) — so a returning lead never gets the same
+        send a different message, or steer the AI) - so a returning lead never gets the same
         pitch twice.
       </p>
 
@@ -243,7 +243,7 @@ export function KeywordTriggersForm({
               When on, if a new contact skips your keywords and instead opens with a real
               question about your business, the bot answers it and starts the conversation
               (using AI to tell a genuine inquiry from a greeting, a friend, or spam). Only
-              affects first contact — once someone is in a conversation, nothing changes.
+              affects first contact - once someone is in a conversation, nothing changes.
               This relaxes the &ldquo;private account&rdquo; silence above, so leave it off if you
               want the bot to stay fully silent to everyone without a keyword.
             </p>
@@ -265,7 +265,7 @@ export function KeywordTriggersForm({
           />
         </label>
         <p className="text-xs text-muted-foreground">
-          When on, a keyword only triggers if it&apos;s the whole message — &quot;credit&quot; starts the
+          When on, a keyword only triggers if it&apos;s the whole message - &quot;credit&quot; starts the
           chat, but &quot;i have a problem with my credit&quot; does not. When off, a keyword matches
           anywhere in the message.
         </p>
@@ -301,7 +301,7 @@ export function KeywordTriggersForm({
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor={`kw-exc-${i}`}>Exclude keywords (optional — block a match)</Label>
+            <Label htmlFor={`kw-exc-${i}`}>Exclude keywords (optional - block a match)</Label>
             <KeywordInput
               id={`kw-exc-${i}`}
               value={g.exclude}
@@ -359,7 +359,7 @@ export function KeywordTriggersForm({
                 </select>
                 {g.first_reply_asset_key && !knownKeys.has(g.first_reply_asset_key) && (
                   <p className="text-xs text-destructive">
-                    The asset &quot;{g.first_reply_asset_key}&quot; no longer exists — the first reply
+                    The asset &quot;{g.first_reply_asset_key}&quot; no longer exists - the first reply
                     will send text only. Pick another asset or set it to text only.
                   </p>
                 )}
@@ -374,7 +374,7 @@ export function KeywordTriggersForm({
 
           {g.first_reply_mode === "ai" && (
             <p className="rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
-              The AI answers their message using this chatbot&apos;s prompts and knowledge base — no
+              The AI answers their message using this chatbot&apos;s prompts and knowledge base - no
               canned message. Set what happens on later matches below.
             </p>
           )}
@@ -387,7 +387,7 @@ export function KeywordTriggersForm({
                 rows={2}
                 value={g.first_reply_instruction}
                 onChange={(e) => patch(i, { first_reply_instruction: e.target.value })}
-                placeholder="They came in on the 63 post — answer their question and point them to the community."
+                placeholder="They came in on the 63 post - answer their question and point them to the community."
               />
               <p className="text-xs text-muted-foreground">
                 Added to the AI&apos;s instructions for that first reply only.
@@ -417,7 +417,7 @@ export function KeywordTriggersForm({
                 rows={2}
                 value={g.repeat_text}
                 onChange={(e) => patch(i, { repeat_text: e.target.value })}
-                placeholder="You're already in — want me to point you to the next step?"
+                placeholder="You're already in - want me to point you to the next step?"
               />
               <p className="text-xs text-muted-foreground">
                 Leave blank to just hand them to the AI instead.
@@ -433,7 +433,7 @@ export function KeywordTriggersForm({
                 rows={2}
                 value={g.instruction}
                 onChange={(e) => patch(i, { instruction: e.target.value })}
-                placeholder="They already got the intro — skip it and route them to funding."
+                placeholder="They already got the intro - skip it and route them to funding."
               />
               <p className="text-xs text-muted-foreground">
                 Added to the AI&apos;s instructions for that one reply only.

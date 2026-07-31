@@ -1,5 +1,5 @@
 /**
- * @deprecated DEAD CODE — superseded by followup-sequence-form.tsx (the
+ * @deprecated DEAD CODE - superseded by followup-sequence-form.tsx (the
  * step-based rich-media drip). No longer imported anywhere; kept only until the
  * next cleanup pass. Do not wire this back in: it edits the legacy day-scale
  * auto_followup_days/repeat/max fields that the engine now treats as a fallback.
@@ -136,7 +136,7 @@ export function ChatbotSettingsForm({ chatbot }: { chatbot: Chatbot }) {
             <Textarea
               id="fu-template"
               rows={3}
-              placeholder="Hey {{name}}! Just checking in — did you still have questions? Happy to help 😊"
+              placeholder="Hey {{name}}! Just checking in - did you still have questions? Happy to help 😊"
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
             />

@@ -1,37 +1,49 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Sk, SkCard, SkCardHead, SkPage } from "@/components/ss/skeleton";
 
+/** Knowledge base: the coverage meter, the add box, then the entries. */
 export default function KnowledgeBaseLoading() {
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="mb-8">
-        <Skeleton className="h-9 w-64 mb-2" />
-        <Skeleton className="h-5 w-full max-w-lg" />
-      </div>
+    <SkPage label="Loading the knowledge base" title="w-48" actions={0}>
+      <SkCard className="px-[22px] py-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div>
+            <Sk className="h-[11px] w-20" />
+            <Sk className="mt-2.5 h-[18px] w-40" />
+          </div>
+          <div className="flex gap-1.5">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <Sk key={i} className="h-[7px] w-[52px] rounded-full" />
+            ))}
+          </div>
+          <Sk className="ml-auto h-[12px] w-28" />
+        </div>
+      </SkCard>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <Skeleton className="h-6 w-40 mb-2" />
-          <Skeleton className="h-4 w-80" />
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-10 w-32" />
-        </CardContent>
-      </Card>
+      <SkCard>
+        <SkCardHead />
+        <Sk className="mt-4 h-[42px] w-full rounded-ctl-lg" />
+        <Sk className="mt-3.5 h-[38px] w-32 rounded-ctl-lg" />
+      </SkCard>
 
-      <div className="space-y-3">
-        {[0, 1, 2].map((i) => (
-          <Card key={i}>
-            <CardContent className="py-4">
-              <Skeleton className="h-5 w-48 mb-2" />
-              <Skeleton className="h-4 w-full mb-1" />
-              <Skeleton className="h-4 w-3/4" />
-            </CardContent>
-          </Card>
+      <SkCard>
+        <SkCardHead width="w-36" />
+        <Sk className="mt-4 h-[120px] w-full rounded-ctl-lg" />
+        <Sk className="mt-3.5 h-[40px] w-36 rounded-ctl-lg" />
+      </SkCard>
+
+      <div className="flex flex-col gap-2.5">
+        {[0, 1, 2, 3].map((i) => (
+          <SkCard key={i} className="px-5 py-4">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <Sk className="h-[13px] w-56" />
+                <Sk className="mt-2.5 h-[11px] w-32" />
+              </div>
+              <Sk className="h-[32px] w-20 rounded-ctl-lg" />
+            </div>
+          </SkCard>
         ))}
       </div>
-    </div>
+    </SkPage>
   );
 }

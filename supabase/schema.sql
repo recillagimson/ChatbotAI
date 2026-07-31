@@ -1,5 +1,5 @@
 -- =====================================================================
--- SpeedSettr — Supabase schema
+-- SpeedSettr - Supabase schema
 -- Run this in the Supabase SQL Editor (one shot is fine; idempotent-ish).
 -- =====================================================================
 
@@ -210,7 +210,7 @@ begin
 end $$;
 
 -- =====================================================================
--- Row Level Security — users only see their own rows
+-- Row Level Security - users only see their own rows
 -- =====================================================================
 alter table public.profiles       enable row level security;
 alter table public.subscriptions  enable row level security;
@@ -401,7 +401,7 @@ create index if not exists feedback_status_idx on public.feedback(status, create
 alter table public.change_requests enable row level security;
 alter table public.feedback        enable row level security;
 
--- 5. RLS — change_requests
+-- 5. RLS - change_requests
 drop policy if exists "cr owner insert" on public.change_requests;
 create policy "cr owner insert" on public.change_requests for insert
   with check (
@@ -417,7 +417,7 @@ drop policy if exists "cr admin update" on public.change_requests;
 create policy "cr admin update" on public.change_requests for update
   using (public.is_superadmin()) with check (public.is_superadmin());
 
--- 6. RLS — feedback
+-- 6. RLS - feedback
 drop policy if exists "fb owner insert" on public.feedback;
 create policy "fb owner insert" on public.feedback for insert
   with check (auth.uid() = user_id);
@@ -732,11 +732,11 @@ create index if not exists change_requests_category_idx
 -- alter table public.chatbots drop column if exists persona_section, drop column if exists offers_section, drop column if exists rebuttals_section;
 
 -- ===========================================================================
--- Admin "View as client" impersonation — superadmin storage write
+-- Admin "View as client" impersonation - superadmin storage write
 -- ===========================================================================
 -- While a superadmin is "viewing as" a client, uploads (KB upload, request-chat
 -- attachments) are written under the CLIENT's {user_id}/ folder, but the admin's
--- real auth.uid() is the admin — so the owner-only "own upload write" INSERT
+-- real auth.uid() is the admin - so the owner-only "own upload write" INSERT
 -- policy would reject it. Mirror the existing "admin upload read" with a
 -- superadmin INSERT (and UPDATE, for upserts) policy so impersonated uploads
 -- land under the client's folder. (No new columns; RLS only.)
@@ -885,7 +885,7 @@ alter table public.conversations
 -- Per-chatbot reply-wait window (2026-07-20)
 -- reply_debounce_seconds overrides the REPLY_DEBOUNCE_MS env per chatbot: the
 -- quiet period (SECONDS) the webhook waits for the lead to finish before it
--- answers, so a burst — and a photo sent with its caption — coalesces into ONE
+-- answers, so a burst - and a photo sent with its caption - coalesces into ONE
 -- reply. Default 60. App clamps 0..120s (clampDebounceSeconds); 0 = answer
 -- immediately but keep single-flight (never double-reply). Read is fail-open
 -- (missing column → REPLY_DEBOUNCE_MS env). NOTE: 60s+ needs Vercel Pro (maxDuration 300).
@@ -980,7 +980,7 @@ alter table public.conversations
 -- Softens the keyword gate: when keyword_gate_answer_questions is on, a keyword-gated
 -- bot answers a never-engaged stranger who OPENS with a genuine business question
 -- (two-stage screen in the webhook) instead of silencing them, and marks them engaged
--- via question_engaged_at (a SEPARATE sticky flag from keyword_fired — keyword semantics
+-- via question_engaged_at (a SEPARATE sticky flag from keyword_fired - keyword semantics
 -- and the follow-up cron are unaffected). question_screen_count caps the paid relevance
 -- screens per contact. OFF by default.
 alter table public.chatbots
@@ -998,7 +998,7 @@ alter table public.conversations
 -- Lead tagging via webhook (2026-07-07)
 -- ===========================================================================
 -- `is_leads: 1` on the ManyChat webhook silently tags a contact as an engaged
--- lead (no reply) — an IG commenter routed here by a ManyChat keyword. is_lead is
+-- lead (no reply) - an IG commenter routed here by a ManyChat keyword. is_lead is
 -- treated as "engaged" by the keyword gate (webhook 6-gate) so the lead's LATER
 -- DMs get bot replies. The bot doesn't proactively reach out (keyword_fired stays
 -- empty → the gated follow-up cron skips it). Fail-open: missing column = not a lead.
@@ -1065,7 +1065,7 @@ alter table public.chatbots
 
 -- welcomed_at is created + backfilled together, inside one guard, so the backfill
 -- happens ONLY when the column is first added. Every conversation that predates this
--- column is an EXISTING contact, not a new one — mark it resolved so it can never be
+-- column is an EXISTING contact, not a new one - mark it resolved so it can never be
 -- mistaken for a brand-new contact. (A plain unconditional backfill would wrongly
 -- resolve genuinely-new contacts if the migration were ever re-run.)
 -- NOTE: this covers only rows predating the column. This migration runs at deploy while
@@ -1136,7 +1136,7 @@ create trigger messages_mark_link_sent
 -- alter table public.conversations drop column if exists link_sent_at;
 -- alter table public.chatbots drop column if exists auto_followup_link_steps;
 
--- Known facts (2026-07-22-known-facts.sql) — durable compact list of what the LEAD
+-- Known facts (2026-07-22-known-facts.sql) - durable compact list of what the LEAD
 -- has already stated/shown (answers to qualifying questions); injected into the
 -- system prompt with a hard "never re-ask these" rule so the bot stops re-asking.
 alter table public.conversations
@@ -1144,7 +1144,7 @@ alter table public.conversations
 -- Teardown:
 -- alter table public.conversations drop column if exists known_facts;
 
--- Conversation quality tag (2026-07-22-quality-tag.sql) — a SEPARATE, owner-set
+-- Conversation quality tag (2026-07-22-quality-tag.sql) - a SEPARATE, owner-set
 -- quality rating, ORTHOGONAL to the funnel `tag`. Manual only. Null = unrated.
 alter table public.conversations
   add column if not exists quality_tag text;

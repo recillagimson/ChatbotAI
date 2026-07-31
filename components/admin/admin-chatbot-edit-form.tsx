@@ -11,8 +11,8 @@ import { SectionField } from "@/components/dashboard/section-field";
 
 /**
  * Admin editor for a client's chatbot. Mirrors the client's prompts view (the
- * three sections, same order/labels) but — unlike the client, who can only edit
- * Personality — the admin can edit ALL THREE sections (Personality, Offers,
+ * three sections, same order/labels) but - unlike the client, who can only edit
+ * Personality - the admin can edit ALL THREE sections (Personality, Offers,
  * Rebuttals). Saves directly to the live bot via the superadmin "admin all
  * chatbots" RLS overlay (browser createClient), no approval step.
  */
@@ -84,7 +84,7 @@ export function AdminChatbotEditForm({
     <form onSubmit={handleSubmit} className="space-y-6">
       <p className="text-xs text-muted-foreground">
         You&apos;re editing this on the client&apos;s behalf. Changes save directly
-        to the live bot — no review needed.
+        to the live bot - no review needed.
       </p>
 
       <div className="flex items-center justify-between rounded-md border p-3">
@@ -132,7 +132,7 @@ export function AdminChatbotEditForm({
         />
       </div>
 
-      {/* Three sections — same order/labels as the client prompts view, all editable. */}
+      {/* Three sections - same order/labels as the client prompts view, all editable. */}
       <SectionField
         id={`edit-persona-${chatbot.id}`}
         label="Personality / Tone"
@@ -142,7 +142,7 @@ export function AdminChatbotEditForm({
           setSaved(false);
         }}
         rows={10}
-        placeholder="Who the bot is and how it sounds — its name, voice, tone, and personality."
+        placeholder="Who the bot is and how it sounds - its name, voice, tone, and personality."
         helper="The bot's voice and identity. Safety rules and the knowledge base are added automatically."
       />
       <SectionField
@@ -154,8 +154,8 @@ export function AdminChatbotEditForm({
           setSaved(false);
         }}
         rows={8}
-        placeholder="What the business offers — services, packages, inclusions/exclusions, prices, and links."
-        helper="Clients can't edit this directly — only the team can."
+        placeholder="What the business offers - services, packages, inclusions/exclusions, prices, and links."
+        helper="Clients can't edit this directly - only the team can."
       />
       <SectionField
         id={`edit-rebuttals-${chatbot.id}`}
@@ -167,7 +167,7 @@ export function AdminChatbotEditForm({
         }}
         rows={8}
         placeholder="How the bot handles objections and frequently-asked questions."
-        helper="Clients can't edit this directly — only the team can."
+        helper="Clients can't edit this directly - only the team can."
       />
 
       {error && (

@@ -9,6 +9,26 @@
  *   STRIPE_PRICE_ID         → monthly price
  *   STRIPE_PRICE_ID_ANNUAL  → annual price
  */
+/** Display name of the single plan. The dashboard shows it on Billing, in the
+ *  sidebar plan card, and in the invoice description column. */
+export const PLAN_NAME = "Professional";
+
+/** One-line plan promise, shown under the name on the Billing card. */
+export const PLAN_TAGLINE = "Everything you need to automate your DMs.";
+
+/** What the plan includes - the Billing screen's checklist, and the same list
+ *  the public pricing card renders, so the two can never quote different
+ *  inclusions. */
+export const PLAN_FEATURES: string[] = [
+  "Unlimited AI replies on Instagram, Facebook, WhatsApp, Telegram & TikTok",
+  "Unlimited chatbots & connected accounts",
+  "Knowledge base & bot training",
+  "Conversation inbox with manual takeover",
+  "Human-like reply pacing & auto follow-ups",
+  "Statistics & funnel tracking",
+  "Priority support by phone & email",
+];
+
 export const PRICING = {
   monthly: 997,
   annualPerMonth: 897, // 10% off 997 (rounded)
