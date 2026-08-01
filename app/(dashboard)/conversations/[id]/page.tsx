@@ -48,7 +48,7 @@ export default async function ConversationDetailPage({
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("*, chatbots(name)")
+    .select("*, chatbots(name, keep_replies_when_tagged)")
     .eq("id", id)
     .eq("user_id", user!.id)
     .single();
@@ -85,6 +85,12 @@ export default async function ConversationDetailPage({
   const tag = tagOf(conversation.tag);
   const quality = qualityOf(conversation.quality_tag);
   const urgent = tag === "needs_human";
+  const cbRel = conversation.chatbots as
+    | { keep_replies_when_tagged?: boolean }
+    | { keep_replies_when_tagged?: boolean }[]
+    | null;
+  const keepRepliesWhenTagged =
+    (Array.isArray(cbRel) ? cbRel[0] : cbRel)?.keep_replies_when_tagged === true;
 
   return (
     <div className="flex h-full min-h-0 bg-ss-page">
@@ -194,7 +200,7 @@ export default async function ConversationDetailPage({
 
         <ConversationReplyBox
           conversationId={conversation.id}
-          botSilent={botReplySilenced(conversation)}
+          botSilent={botReplySilenced(conversation, keepRepliesWhenTagged)}
         />
       </div>
     </div>

@@ -13,6 +13,10 @@
  * so surfacing a manual composer there would risk the owner AND the bot both
  * answering the same message.
  *
+ * The optional `keepRepliesWhenTagged` (per-chatbot) skips the classifier-tag
+ * silencers (subscribed/disqualified/bot); the three explicit off-switches
+ * (ai_paused, bot_off_at, user_muted_at) always win regardless.
+ *
  * Pure + dependency-free so it's safe in both server (pages, routes) and client
  * (inbox composer) bundles. Unit-tested in scripts/test-conversation-silence.ts.
  */
@@ -24,13 +28,15 @@ export interface ConversationSilenceInput {
   tag?: string | null;
 }
 
-export function botReplySilenced(c: ConversationSilenceInput): boolean {
-  return (
-    c.status === "ai_paused" ||
-    !!c.confirmed_at ||
-    !!c.bot_off_at ||
-    !!c.user_muted_at ||
-    c.tag === "disqualified" ||
-    c.tag === "bot"
-  );
+export function botReplySilenced(
+  c: ConversationSilenceInput,
+  keepRepliesWhenTagged = false
+): boolean {
+  // Explicit off-switches — never overridable by keep_replies_when_tagged:
+  if (c.status === "ai_paused") return true; // human takeover
+  if (c.user_muted_at) return true;          // lead opt-out (consent)
+  if (c.bot_off_at) return true;             // explicit BOT_OFF tag
+  // Classifier-tag silencers — skipped when the bot opts to keep replying:
+  if (keepRepliesWhenTagged) return false;
+  return !!c.confirmed_at || c.tag === "disqualified" || c.tag === "bot";
 }

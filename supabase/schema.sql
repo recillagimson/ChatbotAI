@@ -766,7 +766,8 @@ alter table public.chatbots
   add column if not exists auto_followup_loop_last boolean not null default false,  -- legacy; superseded by auto_followup_loop_mode (see 2026-07-07-followup-loop-mode.sql)
   add column if not exists auto_followup_loop_mode text not null default 'stop',    -- after last step: stop | repeat last | cycle through all
   add column if not exists ai_media_enabled boolean not null default false,         -- allow [[SEND_ASSET]] directives from the live AI
-  add column if not exists link_buttons_enabled boolean not null default false;     -- Messenger-only: render links as tappable URL buttons (see 2026-07-23-link-buttons-per-chatbot.sql)
+  add column if not exists link_buttons_enabled boolean not null default false,      -- Messenger-only: render links as tappable URL buttons (see 2026-07-23-link-buttons-per-chatbot.sql)
+  add column if not exists keep_replies_when_tagged boolean not null default false;  -- classifier tags (subscribed/disqualified/bot) don't silence the reactive reply (see 2026-07-31-keep-replies-when-tagged.sql)
 
 -- Named drop/re-add so a re-run picks up constraint changes (an inline check on
 -- `add column if not exists` is silently skipped once the column exists).

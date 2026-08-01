@@ -656,6 +656,11 @@ export async function POST(request: NextRequest) {
     return manychatReply("", { ai_skipped: true, reason: "human_takeover" });
   }
 
+  // When this bot opts to keep replying through classifier tags, the 6-subscribed,
+  // 6-disqualified, and step-7b silencers are skipped (BOT_OFF / takeover / opt-out
+  // still win). Fail-safe: a missing column reads false.
+  const keepRepliesWhenTagged = chatbot.keep_replies_when_tagged === true;
+
   // 6-subscribed. A confirmed customer/subscriber gets NO automated messages - the
   // bot goes fully silent (a teammate handles them from here). Mirrors human-
   // takeover, and sits above the keyword/mute/trivial/AI paths so a customer never
@@ -664,7 +669,7 @@ export async function POST(request: NextRequest) {
   // silenced - confirmed_at is null when that message reaches here; 9a sets it
   // afterward, so a final reply lands and only the NEXT message is silenced. The
   // follow-up cron already excludes confirmed_at, so the drip is stopped too.
-  if (existing?.confirmed_at) {
+  if (existing?.confirmed_at && !keepRepliesWhenTagged) {
     return manychatReply("", { ai_skipped: true, reason: "subscribed_stopped" });
   }
 
@@ -682,7 +687,7 @@ export async function POST(request: NextRequest) {
   // by the pre-reply screen (step 7b below). The owner reopens by changing the
   // tag in the inbox; this gate reads existing.tag, so replies resume the moment
   // it changes.
-  if (existing?.tag === "disqualified" || existing?.tag === "bot") {
+  if ((existing?.tag === "disqualified" || existing?.tag === "bot") && !keepRepliesWhenTagged) {
     return manychatReply("", { ai_skipped: true, reason: "disqualified_stopped" });
   }
 
@@ -1262,11 +1267,15 @@ export async function POST(request: NextRequest) {
           // otherwise the bot keeps replying to abuse with nothing in the logs (gotcha #15).
           console.error("[manychat-webhook] disqualify tag write failed", tagErr);
         }
-        await releaseClaim(); // mirror the stand-down path (single-flight CAS release)
-        // Disqualified/bot blocks follow-ups - mirror to ManyChat (already in the
-        // after() background window, so await it; never throws).
+        // Disqualified/bot blocks follow-ups regardless (drip unchanged) - mirror to
+        // ManyChat (already in the after() background window, so await it; never throws).
         await syncNoFollowupFlag(supabase, conversationId!);
-        return null; // no reply pushed; the step-9a classifier is never reached
+        if (!keepRepliesWhenTagged) {
+          await releaseClaim(); // mirror the stand-down path (single-flight CAS release)
+          return null; // no reply pushed; the step-9a classifier is never reached
+        }
+        // keep_replies_when_tagged: thread is tagged (visibility) + drip blocked,
+        // but we DO NOT stand down - fall through and reply as normal.
       }
     }
 

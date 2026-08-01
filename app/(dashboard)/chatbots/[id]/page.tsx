@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { FollowupSequenceForm } from "@/components/dashboard/followup-sequence-form";
+import { KeepRepliesToggle } from "@/components/dashboard/keep-replies-toggle";
 import { WelcomeForm } from "@/components/dashboard/welcome-form";
 import { KeywordTriggersForm } from "@/components/dashboard/keyword-triggers-form";
 import { FollowupAssetManager } from "@/components/dashboard/followup-asset-manager";
@@ -321,6 +322,11 @@ async function ChatbotTabPanel({ id, tab }: { id: string; tab: ChatbotTabKey }) 
                 />
               </div>
             </NavyPanel>
+
+            <KeepRepliesToggle
+              chatbotId={chatbot.id}
+              initial={chatbot.keep_replies_when_tagged}
+            />
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
               {/* Channels */}
