@@ -151,7 +151,7 @@ export default function LandingPage() {
                     IG · FB · WA · TG · TikTok
                   </span>
                   <span className="hidden text-xs font-medium leading-none text-[#b6b4dd] sm:inline">
-                    Instagram · Facebook · WhatsApp · Telegram · TikTok
+                    Instagram · Facebook · TikTok
                   </span>
                 </div>
 
