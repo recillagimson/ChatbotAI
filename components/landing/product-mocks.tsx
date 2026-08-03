@@ -93,15 +93,15 @@ export function KnowledgeMock() {
 
 const WAITING = [
   {
-    initial: "B",
-    name: "Bernardo",
+    initial: "D",
+    name: "Derek",
     reason: "asked for a call · 23m",
     reasonClass: "text-[#fca5b5]",
     primary: true,
   },
   {
     initial: "M",
-    name: "Mildred",
+    name: "Megan",
     reason: "payment question · 2h",
     reasonClass: "text-[#fbbf24]",
     primary: false,

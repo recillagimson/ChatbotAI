@@ -42,6 +42,16 @@ export const metadata: Metadata = {
     url: "https://www.speedsettr.com",
     siteName: "SpeedSettr",
     type: "website",
+    locale: "en_US",
+  },
+  // The artwork itself comes from app/opengraph-image.tsx + app/twitter-image.tsx
+  // (Next injects the absolute URLs). This only picks the big-image card format -
+  // without it X renders a small square thumbnail instead.
+  twitter: {
+    card: "summary_large_image",
+    title: "SpeedSettr | AI replies for your Instagram, Facebook & TikTok DMs",
+    description:
+      "Your AI teammate answers every DM in seconds, trained on your business, in your voice.",
   },
 };
 

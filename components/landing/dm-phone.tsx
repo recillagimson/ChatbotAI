@@ -48,46 +48,46 @@ const PLATFORMS: Platform[] = [
   {
     id: "messenger",
     name: "Messenger",
-    handle: "Bloom & Co.",
+    handle: "Coastline Realty Group",
     header: "from-[#0084ff] to-[#a033ff]",
     ring: "ring-[#0084ff]/40",
     icon: MessengerIcon,
-    lead: { name: "Ana R.", initials: "AR", avatar: "from-[#f472b6] to-[#c026d3]" },
+    lead: { name: "Ashley M.", initials: "AM", avatar: "from-[#f472b6] to-[#c026d3]" },
     messages: [
-      { from: "lead", text: "Hi! Are you open today?" },
-      { from: "bot", text: "Yes, we're open until 8PM today! 😊 Anything I can help you find?" },
-      { from: "lead", text: "Do you deliver to Cebu?" },
-      { from: "bot", text: "We do! 2–3 days via J&T 🚚 Want me to send the order link?" },
+      { from: "lead", text: "Hi! Is the 3-bed on Maple still available?" },
+      { from: "bot", text: "It is! 🏡 Showings are open Thu–Sat. Want me to grab you a time?" },
+      { from: "lead", text: "Saturday morning if possible" },
+      { from: "bot", text: "Saturday 10:30AM works 👍 What's the best email for the confirmation?" },
     ],
   },
   {
     id: "instagram",
     name: "Instagram",
-    handle: "bloomandco.ph",
+    handle: "jordanlee.coaching",
     header: "from-[#f9ce34] via-[#ee2a7b] to-[#6228d7]",
     ring: "ring-[#ee2a7b]/40",
     icon: Instagram,
-    lead: { name: "Miguel S.", initials: "MS", avatar: "from-[#38bdf8] to-[#4f46e5]" },
+    lead: { name: "Marcus T.", initials: "MT", avatar: "from-[#38bdf8] to-[#4f46e5]" },
     messages: [
-      { from: "lead", text: "How much is the starter package?" },
-      { from: "bot", text: "It's ₱1,499 and includes setup + support 💸 Want the checkout link?" },
-      { from: "lead", text: "yes pls" },
-      { from: "bot", text: "Sent! 🔗 Message me once you're done and I'll confirm your slot." },
+      { from: "lead", text: "How much is your 1:1 coaching?" },
+      { from: "bot", text: "The 12-week program is $2,400, or 3 payments of $850 💸 Want the breakdown?" },
+      { from: "lead", text: "yes please" },
+      { from: "bot", text: "Sent! 🔗 Book a free 15-min fit call in there and I'll hold your spot." },
     ],
   },
   {
     id: "tiktok",
     name: "TikTok",
-    handle: "@bloomandco",
+    handle: "@coachdanafit",
     header: "from-[#25f4ee] to-[#fe2c55]",
     ring: "ring-[#25f4ee]/40",
     icon: TikTokIcon,
-    lead: { name: "Jia L.", initials: "JL", avatar: "from-[#34d399] to-[#0ea5e9]" },
+    lead: { name: "Jenna L.", initials: "JL", avatar: "from-[#34d399] to-[#0ea5e9]" },
     messages: [
-      { from: "lead", text: "Is this still available?" },
-      { from: "bot", text: "Yes, still in stock 🖤 What size are you looking for?" },
-      { from: "lead", text: "medium" },
-      { from: "bot", text: "Medium's available! Want me to reserve one under your name?" },
+      { from: "lead", text: "Do you take clients in Texas?" },
+      { from: "bot", text: "Yep, coaching's fully online, so any state works 🙌 What's your goal right now?" },
+      { from: "lead", text: "drop 20 lbs before June" },
+      { from: "bot", text: "Very doable in 12 weeks 💪 Want me to send the plan and pricing?" },
     ],
   },
 ];
@@ -169,7 +169,7 @@ export function DmPhone() {
           </span>
           <div className="leading-tight">
             <div className="text-[11px] font-semibold text-white">Replied in 4s</div>
-            <div className="text-[10px] text-white/50">while you slept</div>
+            <div className="text-[10px] text-white/50">while you were sleeping</div>
           </div>
         </div>
       </div>
