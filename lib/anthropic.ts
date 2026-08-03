@@ -142,7 +142,10 @@ export function buildSystemPrompt(
   // The webhook (lib/ai-media.ts) parses the directive out and delivers the asset.
   const catalog = mediaCatalog?.trim();
   const mediaBlock = catalog
-    ? `SENDABLE MEDIA - you may attach ONE of these saved assets to your reply by writing, on its OWN line, exactly: [[SEND_ASSET: key]] (use the exact key shown). Send one only when it genuinely helps (they asked for proof, a demo, pricing, or a link). Never invent a key that isn't listed, and keep your normal text reply too - the asset is delivered alongside it.\nAVAILABLE ASSETS:\n${catalog}`
+    ? `SENDABLE MEDIA - you may attach saved assets to your reply by writing each one on its OWN line, exactly: [[SEND_ASSET: key]] (use the exact key shown). Send them when it genuinely helps - they asked for proof, a demo, pricing or a link, OR this chatbot's own instructions tell you to send one at this point in the conversation. Never invent a key that isn't listed, and keep your normal text reply too - assets are delivered alongside it.
+NUMBERED SETS: keys that are identical except for a trailing number (for example name_1, name_2, name_3) are multiple files for the SAME thing. When that thing comes up, send the WHOLE set together - emit every key in it. The exception is when an asset's own description says to send them one at a time, separately, or to rotate between them: the description always wins, so follow it instead.
+AVAILABLE ASSETS:
+${catalog}`
     : "";
 
   // Scheduled start - the lead said they'll begin on a future date. Remember it

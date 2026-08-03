@@ -1332,18 +1332,47 @@ export async function POST(request: NextRequest) {
     }
 
     // 8a. AI-triggered media: pull [[SEND_ASSET: key]] directives out of the reply
-    // and resolve them to library assets. Capped per reply: one asset is the norm,
-    // three is plenty - a reply spamming the whole library is never desirable, and
-    // the cap keeps a single sendContent call far under ManyChat's 10-message limit.
-    const MAX_AI_ASSETS = 3;
+    // and resolve them to library assets. Capped per reply so one turn can never
+    // spam the whole library, and so this sendContent call stays well under
+    // ManyChat's 10-message limit (the media push carries no caption bubbles -
+    // the text was already delivered on the paced text path - so the cap IS the
+    // message count). The default allows a full "numbered set" (name_1..name_N,
+    // several files for the same thing, which the model is told to send together)
+    // without truncating it mid-set, which would silently drop proof. Raise via
+    // env only if a bot genuinely registers larger sets.
+    const MAX_AI_ASSETS = Math.max(
+      1,
+      Math.min(10, Number(process.env.MAX_AI_ASSETS) || 6)
+    );
     const assets: OutboundAsset[] = [];
     const assetRows: { content: string; media_url: string; media_type: string | null }[] = [];
     if (chatbot.ai_media_enabled) {
       const parsed = parseAssetDirectives(replyText);
       if (parsed.assetKeys.length) {
+        // Never truncate silently: a dropped key looks identical to a bot that
+        // "didn't send the picture", which is expensive to diagnose from an inbox.
+        if (parsed.assetKeys.length > MAX_AI_ASSETS) {
+          console.warn(
+            "[manychat-webhook] asset cap hit - dropping keys",
+            parsed.assetKeys.slice(MAX_AI_ASSETS),
+            `(cap=${MAX_AI_ASSETS}, set MAX_AI_ASSETS to raise)`
+          );
+        }
         for (const key of parsed.assetKeys.slice(0, MAX_AI_ASSETS)) {
           const asset = resolveAssetByKey(assetLib, key);
-          if (!asset?.url) continue;
+          // An unregistered / URL-less key resolves to nothing. Log it: this is
+          // the single most common cause of "the bot isn't sending its images",
+          // and it is otherwise completely invisible (see the numbered-key
+          // gotcha - bulk upload names files name_1/name_2, so a prompt written
+          // against the bare `name` matches nothing).
+          if (!asset?.url) {
+            console.warn(
+              "[manychat-webhook] SEND_ASSET key not found in library",
+              key,
+              `(chatbot=${chatbot.id})`
+            );
+            continue;
+          }
           assets.push({ kind: asset.kind, url: asset.url });
           // media_type stays a real MIME (or null) - the inbox renderer matches
           // on startsWith("image/"|"audio/"|"video/").
