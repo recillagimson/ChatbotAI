@@ -16,10 +16,27 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { openaiChat } from "./openai";
 import { MODELS } from "./model-tiers";
 
+// Token cut (2026-08-03): trimmed HISTORY_TURNS from 20 to 10 - the verbatim
+// window is the single biggest per-reply token cost after the KB, and 10 recent
+// messages (~5 exchanges) is ample immediate context; everything older is carried
+// by the rolling memory summary + known_facts.
+//
+// SUMMARY_TRIGGER_TURNS is HISTORY_TURNS + 1 on purpose. The summary covers only
+// messages OLDER than the verbatim window and isn't written until a conversation
+// reaches this count, so any offset ABOVE HISTORY_TURNS opens a transient window
+// [HISTORY_TURNS+1 .. SUMMARY_TRIGGER_TURNS-1] where the oldest out-of-window turns
+// are neither shown verbatim nor yet summarized. Keeping the offset at +1 makes
+// that window empty (the summary engages the moment the verbatim window overflows).
+// A trigger AT or BELOW HISTORY_TURNS is also gap-free - refreshConversationMemory's
+// `window.length < HISTORY_TURNS` guard prevents a premature summary - but +1 is the
+// smallest value that avoids the gap AND skips needless summary work on short chats.
+// Both env-overridable.
 /** Recent messages sent to the model verbatim on every reply. */
-export const HISTORY_TURNS = Number(process.env.HISTORY_TURNS ?? 20);
-/** Below this many messages, the window holds everything - no summary needed. */
-export const SUMMARY_TRIGGER_TURNS = Number(process.env.SUMMARY_TRIGGER_TURNS ?? 24);
+export const HISTORY_TURNS = Number(process.env.HISTORY_TURNS ?? 10);
+/** Below this many messages the verbatim window still holds enough that no summary
+ *  is needed. Kept at HISTORY_TURNS + 1 so the summary engages as soon as the
+ *  window overflows (see note above). */
+export const SUMMARY_TRIGGER_TURNS = Number(process.env.SUMMARY_TRIGGER_TURNS ?? 11);
 /** Soft word budget for the running summary. */
 export const SUMMARY_MAX_WORDS = 220;
 /** Model for the (cheap, background) summarizer. */

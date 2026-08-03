@@ -56,3 +56,30 @@ export const MODELS = {
   vision: () => resolveModel("helper", "OPENAI_VISION_MODEL", "OPENAI_DM_MODEL"),
   change: () => resolveModel("helper", "OPENAI_CHANGE_MODEL"),
 } as const;
+
+// --- Per-chatbot reactive-reply model override (admin-only) -----------------
+// The allowlist the admin dropdown offers AND the server validates against - one
+// source of truth so the two can never drift. Members MUST be OpenAI chat models
+// (the DM reply path runs on OpenAI by default; the override only affects that
+// path). Keep every entry compatible with lib/openai.ts's request shape - all
+// gpt-5.x + gpt-4.1-mini use max_completion_tokens (already handled there).
+export const ALLOWED_REPLY_MODELS = [
+  "gpt-5.4-mini",
+  "gpt-5.4-nano",
+  "gpt-5.6-terra",
+  "gpt-4.1-mini",
+] as const;
+
+export type AllowedReplyModel = (typeof ALLOWED_REPLY_MODELS)[number];
+
+/**
+ * Resolve the reactive-reply model for one chatbot. A valid per-bot override
+ * (in ALLOWED_REPLY_MODELS) wins; anything else - null, blank, or an unknown
+ * string left in the DB - falls back to the reply-tier default MODELS.reply().
+ * Never throws; the fallback makes a bad column value safe.
+ */
+export function resolveReplyModel(chatbotModel?: string | null): string {
+  const v = chatbotModel?.trim();
+  if (v && (ALLOWED_REPLY_MODELS as readonly string[]).includes(v)) return v;
+  return MODELS.reply();
+}

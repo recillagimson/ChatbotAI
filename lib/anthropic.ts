@@ -5,7 +5,7 @@ import { openaiChat, type OpenAIChatMessage } from "./openai";
 import { HISTORY_TURNS } from "./memory";
 import { renderKnownFactsBlock } from "./lead-facts";
 import { HUMANIZER_STYLE } from "./humanizer";
-import { MODELS } from "./model-tiers";
+import { MODELS, resolveReplyModel } from "./model-tiers";
 
 let _anthropic: Anthropic | null = null;
 
@@ -34,7 +34,6 @@ export const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 // OPENAI_API_KEY for the change-request AI + embeddings, so this needs no new
 // key. Set AI_PROVIDER=anthropic to use Claude instead (needs ANTHROPIC_API_KEY).
 export const DM_AI_PROVIDER = (process.env.AI_PROVIDER || "openai").toLowerCase();
-export const OPENAI_DM_MODEL = MODELS.reply();
 
 // Shared by the DM-reply path (below) and the change-request AI (lib/openai-changes.ts).
 export const TONE_GUIDES: Record<Chatbot["tone"], string> = {
@@ -254,6 +253,10 @@ export async function generateReply(opts: {
   // Durable list of what the lead already told/showed (conversations.known_facts);
   // injected with a hard "never re-ask these" rule so the bot stops re-asking.
   knownFacts?: string | null;
+  // When true, ignore the per-chatbot reply_model override and use the reply-tier
+  // default (MODELS.reply()). The override is a REACTIVE-reply lever only; the
+  // follow-up drip (generateFollowupText) sets this so it never inherits it.
+  ignoreReplyModel?: boolean;
 }) {
   // Continuing conversation if there's any prior history - drives the
   // continuity directive so the bot doesn't restart the intro or re-ask.
@@ -297,8 +300,15 @@ export async function generateReply(opts: {
         }
       : { role: "user", content: opts.userMessage };
 
+    // Per-chatbot reply-model override (admin-only) wins over the reply-tier
+    // default; an unset/invalid column value falls back to MODELS.reply().
+    // Follow-ups pass ignoreReplyModel so the drip keeps the tier default (the
+    // override is a reactive-reply lever only).
+    const replyModel = opts.ignoreReplyModel
+      ? MODELS.reply()
+      : resolveReplyModel(opts.chatbot.reply_model);
     const { text, tokensUsed } = await openaiChat({
-      model: OPENAI_DM_MODEL,
+      model: replyModel,
       system: systemText,
       messages: [...trimmed, currentTurn],
       maxTokens: 400,
@@ -418,6 +428,8 @@ export async function generateFollowupText(opts: {
       userMessage,
       memorySummary: opts.memorySummary ?? null,
       knownFacts: opts.knownFacts ?? null,
+      // The reply_model override is reactive-only; keep follow-ups on the tier default.
+      ignoreReplyModel: true,
     });
     const clean = text.trim();
     return clean ? { text: clean, tokensUsed } : null;

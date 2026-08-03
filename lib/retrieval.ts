@@ -90,15 +90,20 @@ export function buildFullContextBlock(entries: KbEntryLite[]): string {
 /**
  * Pick reply mode. Hysteresis: engage retrieval above RETRIEVAL_CUTOVER, but
  * once active stay in retrieval until size drops back below KB_CHAR_BUDGET.
- * Safety: no key or any unindexed entry → full-context.
+ * Safety: no key or any unindexed entry → full-context (this always wins, so
+ * forceRetrieval on an un-reindexed bot still serves full-context — never an
+ * empty KB). forceRetrieval (admin per-bot flag) then engages retrieval
+ * regardless of size, to cut per-reply tokens on small-but-heavily-used KBs.
  */
 export function decideMode(opts: {
   size: number;
   hasUnindexed: boolean;
   embeddingsEnabled: boolean;
   currentlyActive: boolean;
+  forceRetrieval?: boolean;
 }): "full" | "retrieval" {
   if (!opts.embeddingsEnabled || opts.hasUnindexed) return "full";
+  if (opts.forceRetrieval) return "retrieval";
   if (opts.currentlyActive) return opts.size > KB_CHAR_BUDGET ? "retrieval" : "full";
   return opts.size > RETRIEVAL_CUTOVER ? "retrieval" : "full";
 }
@@ -182,7 +187,7 @@ export interface KbBlockResult {
  */
 export async function buildKbBlock(opts: {
   supabase: SupabaseClient;
-  chatbot: Pick<Chatbot, "id" | "retrieval_active">;
+  chatbot: Pick<Chatbot, "id" | "retrieval_active" | "force_retrieval">;
   history: Pick<Message, "role" | "content">[];
   userMessage: string;
 }): Promise<KbBlockResult> {
@@ -206,6 +211,7 @@ export async function buildKbBlock(opts: {
     hasUnindexed,
     embeddingsEnabled: isEmbeddingsEnabled(),
     currentlyActive: chatbot.retrieval_active,
+    forceRetrieval: chatbot.force_retrieval,
   });
 
   // Persist the hysteresis flag only when it flips.
@@ -237,7 +243,14 @@ export async function buildKbBlock(opts: {
       similarity: number;
     }[];
     if (hits.length === 0) {
-      // Nothing relevant cleared the floor → empty block → model defers.
+      // Nothing cleared the similarity floor. For a genuinely large KB (retrieval
+      // engaged by size) an empty block → the model defers, as intended. But when
+      // retrieval was FORCED by the admin flag on a normal/small KB, deferring
+      // would drop knowledge the bot actually has (a vague query can miss every
+      // chunk), so fall back to full-context instead of returning nothing.
+      if (chatbot.force_retrieval) {
+        return { block: buildFullContextBlock(entries), mode: "fallback", chunks: 0, topSimilarity: null };
+      }
       return { block: "", mode: "retrieval", chunks: 0, topSimilarity: null };
     }
     const titleById = new Map(entries.map((e) => [e.id, e.title]));

@@ -12,6 +12,7 @@ import {
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { FollowupSequenceForm } from "@/components/dashboard/followup-sequence-form";
 import { KeepRepliesToggle } from "@/components/dashboard/keep-replies-toggle";
+import { ModelControls } from "@/components/dashboard/model-controls";
 import { WelcomeForm } from "@/components/dashboard/welcome-form";
 import { KeywordTriggersForm } from "@/components/dashboard/keyword-triggers-form";
 import { FollowupAssetManager } from "@/components/dashboard/followup-asset-manager";
@@ -244,10 +245,13 @@ async function ChatbotTabPanel({ id, tab }: { id: string; tab: ChatbotTabKey }) 
     assets = (followupAssets ?? []) as FollowupAsset[];
   }
 
-  // Admins may edit Offers & Rebuttals directly on the Prompt tab (own bots AND
-  // while viewing a client - requireSuperadmin keys off the REAL user, not the
-  // impersonated one). Only checked on the Prompt tab to avoid the extra query.
-  const canEditSections = tab === "prompt" ? !!(await requireSuperadmin()) : false;
+  // Superadmin surfaces: Offers & Rebuttals editing on the Prompt tab, and the
+  // per-bot model/cost controls on the Overview tab. requireSuperadmin keys off
+  // the REAL user (not the impersonated one), so it holds while viewing a client.
+  // Checked only on the two tabs that need it to avoid the extra query elsewhere.
+  const isSuperadmin =
+    tab === "prompt" || tab === "overview" ? !!(await requireSuperadmin()) : false;
+  const canEditSections = tab === "prompt" && isSuperadmin;
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const webhookUrl = `${appUrl}/api/webhooks/manychat`;
@@ -327,6 +331,14 @@ async function ChatbotTabPanel({ id, tab }: { id: string; tab: ChatbotTabKey }) 
               chatbotId={chatbot.id}
               initial={chatbot.keep_replies_when_tagged}
             />
+
+            {isSuperadmin && (
+              <ModelControls
+                chatbotId={chatbot.id}
+                initialReplyModel={chatbot.reply_model}
+                initialForceRetrieval={chatbot.force_retrieval}
+              />
+            )}
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
               {/* Channels */}

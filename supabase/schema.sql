@@ -767,7 +767,36 @@ alter table public.chatbots
   add column if not exists auto_followup_loop_mode text not null default 'stop',    -- after last step: stop | repeat last | cycle through all
   add column if not exists ai_media_enabled boolean not null default false,         -- allow [[SEND_ASSET]] directives from the live AI
   add column if not exists link_buttons_enabled boolean not null default false,      -- Messenger-only: render links as tappable URL buttons (see 2026-07-23-link-buttons-per-chatbot.sql)
-  add column if not exists keep_replies_when_tagged boolean not null default false;  -- classifier tags (subscribed/disqualified/bot) don't silence the reactive reply (see 2026-07-31-keep-replies-when-tagged.sql)
+  add column if not exists keep_replies_when_tagged boolean not null default false,  -- classifier tags (subscribed/disqualified/bot) don't silence the reactive reply (see 2026-07-31-keep-replies-when-tagged.sql)
+  add column if not exists reply_model text,                                          -- admin-only per-bot reactive-reply model override; null/invalid = MODELS.reply() default (see 2026-08-03-admin-model-controls.sql)
+  add column if not exists force_retrieval boolean not null default false;            -- admin-only: force KB vector retrieval regardless of size (needs an indexed KB); see 2026-08-03-admin-model-controls.sql
+
+-- Data-layer guard: reply_model + force_retrieval are admin-only (the UI hides
+-- them, but the "own chatbots" RLS policy alone would let an owner set them via
+-- devtools). Allows superadmins + service-role writes; blocks authenticated
+-- non-admins from changing these two columns. See 2026-08-03-admin-model-controls.sql.
+create or replace function public.guard_admin_only_chatbot_cols()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (new.reply_model is distinct from old.reply_model
+      or new.force_retrieval is distinct from old.force_retrieval)
+     and auth.uid() is not null
+     and not public.is_superadmin() then
+    raise exception 'reply_model and force_retrieval are admin-only'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists guard_admin_only_chatbot_cols on public.chatbots;
+create trigger guard_admin_only_chatbot_cols
+  before update on public.chatbots
+  for each row execute function public.guard_admin_only_chatbot_cols();
 
 -- Named drop/re-add so a re-run picks up constraint changes (an inline check on
 -- `add column if not exists` is silently skipped once the column exists).
