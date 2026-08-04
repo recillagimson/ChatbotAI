@@ -32,6 +32,7 @@ const STOP_PHRASES = new Set([
   "stop messaging me",
   "stop texting",
   "stop texting me",
+  "message stop",     // reversed word order (leads guess it; separators normalized below)
   "unsubscribe",
 ]);
 const RESUME_PHRASES = new Set([
@@ -57,10 +58,19 @@ export const RESUME_CONFIRMATION =
  */
 export function detectUserControl(text: string): "stop" | "resume" | null {
   const n = typeof text === "string" ? normalize(text) : "";
-  // Strip leading/trailing non-alphanumerics (punctuation, emoji, spaces) so
-  // "stop!", "🛑 stop 🛑" still match, but keep internal words intact so an
-  // embedded control word inside a sentence does not.
-  const phrase = n.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+  // 1) Strip leading/trailing non-alphanumerics (punctuation, emoji, spaces) so
+  //    "stop!", "🛑 stop 🛑" still match, but keep internal words intact so an
+  //    embedded control word inside a sentence does not.
+  // 2) Treat internal underscores/hyphens as word separators, so a keyword-style
+  //    "stop_message" / "stop-message" matches the same phrase as "stop message".
+  //    Leads copy the ManyChat keyword name verbatim (separators and all), and a
+  //    consent opt-out must not fail on a separator mismatch. Whole-message match
+  //    is preserved: "stop_message please" still normalizes to a 3-word non-phrase.
+  const phrase = n
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!phrase) return null;
   if (STOP_PHRASES.has(phrase)) return "stop";
   if (RESUME_PHRASES.has(phrase)) return "resume";
