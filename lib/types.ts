@@ -187,7 +187,8 @@ export interface Conversation {
   reply_claimed_for: string | null;  // inbound message id of the newest AI-bound run (debounce single-flight claim)
   keyword_fired: string[];           // ids of keyword groups whose first reply this contact already received
   is_lead: boolean;                  // PARKED: column kept but no longer written/read (is_leads tagging disabled - see CLAUDE.md #19)
-  extraction_attempts: number;       // prompt-extraction detections on this thread (red "Flagged" badge when > 0)
+  extraction_attempts: number;       // prompt-extraction detections on this thread, all tiers (red "Flagged" badge when > 0)
+  extraction_hard_attempts: number;  // HARD (blatant) attempts only; graceful stand-down fires on >= threshold of these
   flagged_at: string | null;         // when the newest extraction attempt was detected
   user_muted_at: string | null;      // lead self-paused the AI via "stopmessage" (null = not muted); independent of status
   bot_off_at: string | null;         // ManyChat BOT_OFF tag sync (null = bot on); fully silences the bot for this subscriber

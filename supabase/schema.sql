@@ -957,7 +957,11 @@ alter table public.conversations
 -- this migration.
 alter table public.conversations
   add column if not exists extraction_attempts int not null default 0,
-  add column if not exists flagged_at timestamptz;
+  add column if not exists flagged_at timestamptz,
+  -- HARD (blatant) attempts only; the graceful stand-down fires on >= threshold of
+  -- these (not all-tier extraction_attempts) so a curious SOFT probe never counts
+  -- toward a pause. See 2026-08-05-extraction-hard-attempts.sql.
+  add column if not exists extraction_hard_attempts int not null default 0;
 
 -- Teardown:
 -- alter table public.conversations drop column if exists extraction_attempts;

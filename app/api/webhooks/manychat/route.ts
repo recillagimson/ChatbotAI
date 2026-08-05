@@ -31,6 +31,7 @@ import {
   detectExtractionAttempt,
   pickDeflection,
   EXTRACTION_REINFORCEMENT,
+  EXTRACTION_STANDDOWN_MESSAGE,
   AUTO_PAUSE_ON_EXTRACTION,
   EXTRACTION_PAUSE_THRESHOLD,
   type ExtractionResult,
@@ -579,9 +580,11 @@ export async function POST(request: NextRequest) {
   // "resumemessage"), nor business/safety states (subscribed confirmed_at,
   // disqualified/flagged) - so BOT_ON never re-engages a converted customer, a detected
   // bot, or someone who opted out; those gates (6-subscribed/6-disqualified) sit above
-  // 6-gate and still silence. (status→active would also clear a hypothetical extraction
-  // auto-pause, dormant today since AUTO_PAUSE_ON_EXTRACTION is false - give that its own
-  // marker if it's ever enabled.) reply_claimed_for is left untouched so a concurrent
+  // 6-gate and still silence. (status→active DOES clear an extraction auto-pause - now
+  // ON by default, EXTRACTION_AUTO_STANDDOWN - which is intended: BOT_ON is an explicit
+  // owner override to hand a paused thread back to the bot. The pause carries its own
+  // marker, conversations.extraction_hard_attempts, so it stays distinguishable from a
+  // manual takeover in the inbox/stats.) reply_claimed_for is left untouched so a concurrent
   // in-flight burst reply's single-flight claim isn't dropped. Runs before the
   // empty-message ack. Fail-open: a DB error is logged, still acked.
   if (conversationId && isTruthyFlag(body.bot_on)) {
@@ -982,12 +985,23 @@ export async function POST(request: NextRequest) {
     const priorAttempts =
       typeof existing?.extraction_attempts === "number" ? existing.extraction_attempts : 0;
     const newAttempts = priorAttempts + 1;
+    const priorHard =
+      typeof existing?.extraction_hard_attempts === "number" ? existing.extraction_hard_attempts : 0;
+    const newHard = priorHard + (extraction.level === "hard" ? 1 : 0);
     const flagUpdate: Record<string, unknown> = {
-      extraction_attempts: newAttempts,
+      extraction_attempts: newAttempts,      // all tiers → inbox "Flagged" badge
+      extraction_hard_attempts: newHard,     // blatant only → stand-down gate + pause marker
       flagged_at: new Date().toISOString(),
     };
-    // Repeat-attempt auto-handoff (ships OFF; flag-only per owner decision).
-    if (AUTO_PAUSE_ON_EXTRACTION && extraction.level === "hard" && newAttempts >= EXTRACTION_PAUSE_THRESHOLD) {
+    // Repeat-attempt graceful auto-handoff: pause the thread for owner takeover on
+    // the Nth BLATANT (HARD) attempt (EXTRACTION_PAUSE_THRESHOLD, default 2). Gated
+    // on the HARD-only counter so a curious SOFT probe ("are you chatgpt?") never
+    // accrues toward a pause. Enabled by default (EXTRACTION_AUTO_STANDDOWN).
+    const standingDown =
+      AUTO_PAUSE_ON_EXTRACTION &&
+      extraction.level === "hard" &&
+      newHard >= EXTRACTION_PAUSE_THRESHOLD;
+    if (standingDown) {
       flagUpdate.status = "ai_paused";
     }
     await supabase
@@ -1005,15 +1019,22 @@ export async function POST(request: NextRequest) {
       })
       .then(() => {}, () => {});
 
-    // HARD, not mid-burst → guaranteed no-leak deflection (no AI call). The
-    // mid-burst guard mirrors keyword canCanned: a canned row mid-burst would
-    // become a burst boundary and strand an earlier unanswered question.
-    if (extraction.level === "hard" && !existing?.reply_claimed_for) {
-      const text = pickDeflection(body.subscriber_id, baseText.length);
+    // HARD → guaranteed no-leak deflection (no AI call). Normally skipped mid-burst
+    // (a canned row would become a burst boundary and strand an earlier question),
+    // BUT when standing down we send the graceful sign-off even mid-burst: the
+    // thread is being paused (no burst to preserve), and falling through would drop
+    // the reply silently with no sign-off.
+    if (extraction.level === "hard" && (standingDown || !existing?.reply_claimed_for)) {
+      const text = standingDown
+        ? EXTRACTION_STANDDOWN_MESSAGE
+        : pickDeflection(body.subscriber_id, baseText.length);
       await persistAndPush(supabase, conversationId!, body.subscriber_id, text, chatbot.user_id, chatbot.id, apiKey, platform);
-      return manychatReply(sanitizeReply(text), { ai_skipped: true, reason: "extraction_blocked" });
+      return manychatReply(sanitizeReply(text), {
+        ai_skipped: true,
+        reason: standingDown ? "extraction_standdown" : "extraction_blocked",
+      });
     }
-    // SOFT, or HARD mid-burst → steer this turn and fall through.
+    // SOFT, or HARD mid-burst (not standing down) → steer this turn and fall through.
     securityInstruction = EXTRACTION_REINFORCEMENT;
   }
 
