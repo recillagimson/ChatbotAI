@@ -17,6 +17,22 @@ alter table public.conversations
 create index if not exists conversations_ext_user_idx
   on public.conversations(chatbot_id, external_user_id);
 
+-- Backfill Instagram identities from the stored @handle so a pause/mute set BEFORE this
+-- fix still carries when the contact is later deleted+recreated. IG's contact_username is
+-- the real @handle (stable + unique per account); Messenger's is not, so this is
+-- Instagram-only. Guards mirror resolveExternalId: a single token (no whitespace), non-
+-- empty, and never a stray merge tag. Idempotent - only fills rows still NULL, so
+-- re-running is a no-op and it never overwrites an id the webhook already set.
+update public.conversations
+set external_user_id = contact_username
+where platform = 'instagram'
+  and external_user_id is null
+  and contact_username is not null
+  and length(contact_username) > 0
+  and contact_username !~ '[[:space:]]'
+  and contact_username not like '%{%';
+
 -- Teardown:
 -- drop index if exists conversations_ext_user_idx;
 -- alter table public.conversations drop column if exists external_user_id;
+-- (The backfill only sets a column that the teardown drops, so no separate undo needed.)
