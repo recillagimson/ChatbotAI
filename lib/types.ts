@@ -170,6 +170,7 @@ export interface Conversation {
   platform: Platform;
   contact_name: string | null;
   contact_username: string | null;
+  external_user_id: string | null;   // stable platform user id (Messenger PSID / IG id / @handle) that survives a ManyChat contact deletion; re-identifies a returning contact so an owner-set pause carries over
   status: "active" | "ai_paused" | "closed";
   last_message_at: string;
   last_followup_at: string | null;

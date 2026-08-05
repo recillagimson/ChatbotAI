@@ -71,6 +71,7 @@ import {
 import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
 import { refreshKnownFacts } from "@/lib/lead-facts";
 import { splitBurst, combineBurstText, remainingDebounceMs, clampDebounceSeconds, shouldStandDown } from "@/lib/debounce";
+import { suppressionCarry, resolveExternalId } from "@/lib/returning-contact";
 import type { Chatbot, Message } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -104,6 +105,18 @@ const BodySchema = z.object({
   username: z.string().optional().nullable(),
   ig_username: z.string().optional().nullable(),
   user_name: z.string().optional().nullable(),
+  // Stable per-user platform ID that SURVIVES a ManyChat contact deletion - unlike
+  // subscriber_id, which ManyChat reissues when a contact is deleted+recreated (so the
+  // fresh row loses any pause and the bot resumes). OPTIONAL dedicated fields: wire ONE
+  // to whatever stable id ManyChat exposes (Messenger PSID / Instagram id). If none is
+  // mapped, the webhook falls back to `username` on BOTH platforms (owners commonly map
+  // the PSID into username on Messenger and the @handle on Instagram); resolveExternalId
+  // guards that fallback to a single token so a display name can't be used as an id. The
+  // chosen value is stored as conversations.external_user_id to re-identify the contact.
+  external_user_id: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
+  psid: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
+  ig_id: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
+  messenger_id: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
   // Optional now: a photo/voice-only DM has no text. Either text or media is required.
   message: z.string().max(4000).optional().nullable(),
   // Inbound media. ManyChat flows map the attachment URL under different field
@@ -417,6 +430,18 @@ export async function POST(request: NextRequest) {
     cleanContactField(body.user_name);
   const displayName =
     [firstName, lastName].filter(Boolean).join(" ").trim() || username || null;
+  // Stable identity that survives a ManyChat contact deletion (see BodySchema). Prefer
+  // an explicitly-mapped platform id; else fall back to `username` when the owner has
+  // mapped a stable id into it (Messenger PSID / Instagram @handle) - the single-token
+  // guard in resolveExternalId keeps a free-text display name from being used as an id.
+  // Null = we cannot re-identify a returning contact (no carry-over, behaves as new).
+  const externalId = resolveExternalId({
+    externalUserId: cleanContactField(body.external_user_id),
+    psid: cleanContactField(body.psid),
+    igId: cleanContactField(body.ig_id),
+    messengerId: cleanContactField(body.messenger_id),
+    username,
+  });
 
   const { data: existing } = await supabase
     .from("conversations")
@@ -432,6 +457,10 @@ export async function POST(request: NextRequest) {
 
   let conversationId = existing?.id;
   let conversationStatus = existing?.status;
+  // Set when a fresh row inherited a prior thread's silence state (returning contact
+  // whose ManyChat contact was deleted+recreated). Stays silent this turn, after the
+  // inbound is recorded, so the owner still sees the returning message.
+  let carriedSuppression = false;
 
   if (!existing) {
     // Upsert, not insert: two simultaneous FIRST messages from one new
@@ -456,6 +485,7 @@ export async function POST(request: NextRequest) {
               platform,
               contact_name: displayName,
               contact_username: username,
+              external_user_id: externalId,
             },
             { onConflict: "chatbot_id,manychat_subscriber_id" }
           )
@@ -474,6 +504,36 @@ export async function POST(request: NextRequest) {
     }
     conversationId = created.id;
     conversationStatus = created.status;
+
+    // Returning contact: a deleted+recreated ManyChat contact arrives as a BRAND-NEW
+    // subscriber_id, so this fresh row has none of the prior thread's silence state and
+    // the bot would resume. If we can re-identify the person (stable external_user_id)
+    // and their most-recent prior thread is still silenced, carry ONLY that silence
+    // state onto this row (never the transcript - "keep the pause", not a merge) so the
+    // pause survives the deletion. Persisting it means the normal 6-* gates handle every
+    // LATER turn; carriedSuppression silences THIS turn (below, after the inbound is
+    // recorded). Best-effort: a lookup/update failure must not break the reply path.
+    if (externalId) {
+      const { data: prior } = await supabase
+        .from("conversations")
+        .select("status, user_muted_at, bot_off_at, confirmed_at, tag")
+        .eq("chatbot_id", chatbot.id)
+        .eq("external_user_id", externalId)
+        .neq("id", conversationId!)
+        .order("last_message_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const carry = suppressionCarry(prior);
+      if (Object.keys(carry).length > 0) {
+        await supabase
+          .from("conversations")
+          .update(carry)
+          .eq("id", conversationId!)
+          .then(() => {}, (err) => console.error("[manychat-webhook] suppression carry failed", err));
+        conversationStatus = carry.status ?? conversationStatus;
+        carriedSuppression = true;
+      }
+    }
   } else {
     // A reply RE-ARMS the drip timing but KEEPS the sequence position, so the lead
     // advances to the NEXT step the next time they go quiet - never a repeat of
@@ -498,6 +558,9 @@ export async function POST(request: NextRequest) {
         // Heal old rows too: replace a stored placeholder/empty with a real value.
         contact_name: cleanContactField(existing.contact_name) ?? displayName,
         contact_username: cleanContactField(existing.contact_username) ?? username,
+        // Backfill the stable identity once so a FUTURE contact deletion can carry this
+        // thread's pause. Only set when currently empty (never overwrite a good value).
+        ...(existing.external_user_id || !externalId ? {} : { external_user_id: externalId }),
         ...(muted ? {} : { last_followup_at: null }),
       })
       .eq("id", existing.id);
@@ -653,6 +716,15 @@ export async function POST(request: NextRequest) {
     { label: "inbound message insert" }
   );
   const inboundId = inboundMsg?.id as string | undefined;
+
+  // 5b. Returning-contact pause. This fresh row inherited a prior thread's silence
+  // state (step 4: the person's ManyChat contact was deleted+recreated). The inbound is
+  // now persisted + unread-bumped, so the owner SEES the returning message - we just
+  // withhold the auto-reply, exactly like the 6-* gates. Every LATER turn is covered by
+  // those gates on the fields we carried onto the row.
+  if (carriedSuppression) {
+    return manychatReply("", { ai_skipped: true, reason: "returning_contact_paused" });
+  }
 
   // 6. If human took over, do not generate AI reply
   if (conversationStatus === "ai_paused") {

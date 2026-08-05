@@ -1188,3 +1188,16 @@ alter table public.conversations add constraint conversations_quality_tag_check
 -- Teardown:
 -- alter table public.conversations drop constraint if exists conversations_quality_tag_check;
 -- alter table public.conversations drop column if exists quality_tag;
+
+-- Returning-contact identity (2026-08-05-external-user-id.sql) - a STABLE platform
+-- user id (Messenger PSID / Instagram id / @handle) that survives a ManyChat contact
+-- deletion (unlike manychat_subscriber_id, which ManyChat reissues on delete+recreate,
+-- dropping the pause and resuming the bot). The webhook uses it to re-identify a
+-- returning contact and carry the prior thread's silence state onto the new row.
+alter table public.conversations
+  add column if not exists external_user_id text;
+create index if not exists conversations_ext_user_idx
+  on public.conversations(chatbot_id, external_user_id);
+-- Teardown:
+-- drop index if exists conversations_ext_user_idx;
+-- alter table public.conversations drop column if exists external_user_id;
