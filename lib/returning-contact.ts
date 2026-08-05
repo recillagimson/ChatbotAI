@@ -72,11 +72,20 @@ export function resolveExternalId(fields: {
   igId?: string | null;
   messengerId?: string | null;
   username?: string | null;
+  pageId?: string | null;
 }): string | null {
   const explicit =
     fields.externalUserId || fields.psid || fields.igId || fields.messengerId;
-  if (explicit) return explicit;
-  const u = fields.username;
-  if (u && !/\s/.test(u)) return u;
-  return null;
+  let chosen: string | null = explicit || null;
+  if (!chosen) {
+    const u = fields.username;
+    if (u && !/\s/.test(u)) chosen = u;
+  }
+  if (!chosen) return null;
+  // Reject the Facebook Page ID: it is IDENTICAL for every contact on the page, so using
+  // it as a per-user identity would make one person's pause silence everyone. A stray
+  // mapping of "Page Id" into username/external_user_id (an easy ManyChat mistake) must
+  // never be treated as an identity. Only fires when the flow also sends page_id.
+  if (fields.pageId && chosen === fields.pageId) return null;
+  return chosen;
 }

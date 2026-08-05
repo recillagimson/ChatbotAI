@@ -81,6 +81,12 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 // subscribed). Set AUTO_TAG_ENABLED=false to disable all classifier calls.
 const AUTO_TAG_ENABLED = process.env.AUTO_TAG_ENABLED !== "false";
 
+// Returning-contact safety cap: if one external_user_id is shared by MORE than this many
+// conversations, it is not a per-user identity (e.g. a Page Id mapped into username by
+// mistake) - so we skip the suppression carry rather than silence a crowd. A real contact
+// accrues one row per delete+recreate cycle, so this leaves ample headroom.
+const IDENTITY_MAX_SHARED_ROWS = 10;
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // 300s (Vercel Pro ceiling) so the background push can pace a multi-bubble reply
@@ -441,6 +447,7 @@ export async function POST(request: NextRequest) {
     igId: cleanContactField(body.ig_id),
     messengerId: cleanContactField(body.messenger_id),
     username,
+    pageId: cleanContactField(body.page_id),
   });
 
   const { data: existing } = await supabase
@@ -514,24 +521,36 @@ export async function POST(request: NextRequest) {
     // LATER turn; carriedSuppression silences THIS turn (below, after the inbound is
     // recorded). Best-effort: a lookup/update failure must not break the reply path.
     if (externalId) {
-      const { data: prior } = await supabase
+      // Fetch a few prior threads sharing this identity (most-recent first). A genuine
+      // per-user id maps to at most a handful of rows (one per deletion cycle); if it's
+      // on MANY rows it's a shared/bogus id (e.g. a Page Id mapped by mistake) and using
+      // it would silence a crowd - so bail rather than carry. IDENTITY_MAX_SHARED_ROWS+1
+      // is fetched to detect the overflow.
+      const { data: priors } = await supabase
         .from("conversations")
         .select("status, user_muted_at, bot_off_at, confirmed_at, tag")
         .eq("chatbot_id", chatbot.id)
         .eq("external_user_id", externalId)
         .neq("id", conversationId!)
         .order("last_message_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const carry = suppressionCarry(prior);
-      if (Object.keys(carry).length > 0) {
-        await supabase
-          .from("conversations")
-          .update(carry)
-          .eq("id", conversationId!)
-          .then(() => {}, (err) => console.error("[manychat-webhook] suppression carry failed", err));
-        conversationStatus = carry.status ?? conversationStatus;
-        carriedSuppression = true;
+        .limit(IDENTITY_MAX_SHARED_ROWS + 1);
+      if (priors && priors.length > IDENTITY_MAX_SHARED_ROWS) {
+        console.warn(
+          "[manychat-webhook] external_user_id shared across too many contacts - skipping suppression carry (likely a non-unique id such as a Page Id)",
+          { chatbotId: chatbot.id, count: priors.length }
+        );
+      } else {
+        // Most-recent prior reflects the owner's latest intent for this person.
+        const carry = suppressionCarry(priors?.[0]);
+        if (Object.keys(carry).length > 0) {
+          await supabase
+            .from("conversations")
+            .update(carry)
+            .eq("id", conversationId!)
+            .then(() => {}, (err) => console.error("[manychat-webhook] suppression carry failed", err));
+          conversationStatus = carry.status ?? conversationStatus;
+          carriedSuppression = true;
+        }
       }
     }
   } else {
