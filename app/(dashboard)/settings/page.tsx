@@ -80,7 +80,10 @@ export default async function SettingsPage() {
                 </Step>
                 <Step n={4}>
                   Set the JSON body - copy the template from that same Connection
-                  tab, and set <Code>platform</Code> to this flow&apos;s channel.
+                  tab, set <Code>platform</Code> to this flow&apos;s channel, and
+                  use <B>+ Add Full Contact Data</B> for the <Code>contact</Code>{" "}
+                  value (that&apos;s what keeps long, multi-line messages from
+                  breaking the request).
                 </Step>
                 <Step n={5}>
                   Also create an <B>Instagram Default Reply</B> automation

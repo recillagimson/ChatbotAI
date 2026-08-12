@@ -638,22 +638,30 @@ async function ChatbotTabPanel({ id, tab }: { id: string; tab: ChatbotTabKey }) 
                   />
                 </div>
                 <Field
-                  label="JSON body fields to send"
+                  label="JSON body (External Request)"
                   value={`{
   "chatbot_id": "${chatbot.id}",
   "platform": "instagram",
-  "subscriber_id": "{{user_id}}",
-  "username": "{{user_name}}",
-  "first_name": "{{first_name}}",
-  "message": "{{last_input_text}}"
+  "contact": <Full Contact Data>
 }`}
                 />
+                <p className="text-[12.5px] leading-relaxed text-ss-body">
+                  Type those three lines, then put your cursor after{" "}
+                  <Code>&quot;contact&quot;:</Code> and click{" "}
+                  <strong className="font-semibold text-ss-ink">
+                    + Add Full Contact Data
+                  </strong>{" "}
+                  in ManyChat to replace <Code>{"<Full Contact Data>"}</Code>.
+                  ManyChat builds and escapes that object itself, so a long or
+                  multi-line message (a message with line breaks) can&apos;t break
+                  the request.
+                </p>
                 <p className="text-[12.5px] leading-relaxed text-ss-body">
                   Set <Code>platform</Code> to the channel this flow runs on - one
                   of <Code>instagram</Code>, <Code>messenger</Code> (Facebook),{" "}
                   <Code>whatsapp</Code>, <Code>telegram</Code> or{" "}
-                  <Code>tiktok</Code>. Use that channel&apos;s username variable
-                  (e.g. <Code>{"{{ig_username}}"}</Code> on Instagram).
+                  <Code>tiktok</Code>. The name and Instagram @handle are read from
+                  the contact object automatically - no username field to map.
                 </p>
                 <p className="text-[12.5px] leading-relaxed text-ss-body">
                   For Instagram, Facebook, WhatsApp and Telegram the reply is

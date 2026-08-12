@@ -72,6 +72,7 @@ import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
 import { refreshKnownFacts } from "@/lib/lead-facts";
 import { splitBurst, combineBurstText, remainingDebounceMs, clampDebounceSeconds, shouldStandDown } from "@/lib/debounce";
 import { suppressionCarry, resolveExternalId } from "@/lib/returning-contact";
+import { flattenManychatContact } from "@/lib/manychat-contact";
 import type { Chatbot, Message } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -330,8 +331,12 @@ export async function POST(request: NextRequest) {
   // against that chatbot's own webhook_secret (with a legacy env fallback).
   const secret = request.headers.get("x-manychat-secret");
 
-  // 2. Parse payload
-  const json = await request.json().catch(() => null);
+  // 2. Parse payload. flattenManychatContact hoists ManyChat "Full Contact Data" (sent
+  // as a nested `contact` object) into the flat fields BodySchema expects - the escape-
+  // proof way to send a free-text message, since ManyChat won't JSON-escape merge fields
+  // in a hand-built body and a newline in the message otherwise makes the request invalid
+  // JSON that ManyChat blocks before it reaches us. No-op for the legacy flat body.
+  const json = flattenManychatContact(await request.json().catch(() => null));
   const parsed = BodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(
