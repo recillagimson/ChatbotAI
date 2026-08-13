@@ -21,6 +21,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * bypasses the gate on their next message despite reading as "brand new". `bot_forced_on_at`
  * mirrors the BOT_ON tag (same self-healing re-sync tradeoff as bot_off_at);
  * `question_screen_count` resets to 0 so a reset contact can be screened afresh.
+ *
+ * ALL THREE MEMORY LAYERS must be listed here, not just the transcript. The bot's
+ * recall of a contact is fed by (1) the verbatim message window, (2) `memory_summary`
+ * (the rolling prose summary), and (3) `known_facts` - a durable bullet list of what the
+ * lead stated or showed, injected into the system prompt with a hard "NEVER ask for any
+ * of these again" rule (lib/lead-facts.ts). Layer 3 outlives a transcript wipe by design,
+ * so leaving it set made a reset thread open by reciting the previous conversation's
+ * details ("you've got late payments and that $2,700 bill") with nothing on screen to
+ * explain where that came from. Anything added later that is fed back into the prompt
+ * belongs in this list too - the transcript delete alone is NOT a memory wipe.
  */
 export const FRESH_CONVERSATION_RESET: Record<string, unknown> = {
   confirmed_at: null,
@@ -34,20 +44,93 @@ export const FRESH_CONVERSATION_RESET: Record<string, unknown> = {
   keyword_fired: [],
   question_engaged_at: null,
   question_screen_count: 0,
+  is_lead: false,
   followup_step_index: 0,
   followup_count: 0,
   last_followup_at: null,
+  // Which of the two drip sequences a thread is on: once set, the cron runs the
+  // post-link steps. A "brand new" contact has not been sent a link.
+  link_sent_at: null,
   start_on: null,
   start_note: null,
   memory_summary: null,
   memory_summary_at: null,
+  known_facts: null,
   extraction_attempts: 0,
+  // Counted separately from the all-tier total because the graceful stand-down
+  // fires on the Nth BLATANT attempt. Left stale, a reset thread carrying one
+  // prior hard attempt would auto-pause on its very first, tripping the
+  // threshold on what reads as a first-contact conversation.
+  extraction_hard_attempts: 0,
   flagged_at: null,
   reply_claimed_for: null,
   rn_opt_in_at: null,
   rn_topic_id: null,
   unread_count: 0,
 };
+
+/** PostgREST (schema cache) and Postgres codes for "no such column". */
+const MISSING_COLUMN_CODES = new Set(["PGRST204", "42703"]);
+
+/**
+ * Name the column an error is complaining about, or null if it isn't that kind of
+ * error. Both wordings quote it - PostgREST's "Could not find the 'x' column of
+ * 'conversations' in the schema cache" and Postgres's `column "x" of relation ...
+ * does not exist` - and the result is checked against the payload, so a reworded
+ * message falls back to a scan rather than being mistaken for something else.
+ */
+export function missingColumnFrom(
+  error: { code?: string | null; message?: string | null },
+  keys: string[]
+): string | null {
+  if (!MISSING_COLUMN_CODES.has(error.code ?? "")) return null;
+  const message = error.message ?? "";
+  const quoted = /['"`]([a-zA-Z0-9_]+)['"`]/.exec(message)?.[1];
+  if (quoted && keys.includes(quoted)) return quoted;
+  return keys.find((key) => message.includes(key)) ?? null;
+}
+
+/**
+ * Write the fresh-conversation defaults, dropping any column this database does not
+ * have and retrying.
+ *
+ * This helper hard-depends on a long tail of migrations, and a single unapplied one
+ * would otherwise fail the WHOLE update - breaking reset entirely on exactly the
+ * stuck threads it exists to recover, and over a column that by definition holds no
+ * stale data. A column that does not exist has nothing to wipe, so skipping it is
+ * always the correct outcome; it is logged so an unapplied migration is visible
+ * rather than silent. Every other error still fails loudly.
+ */
+async function applyFreshDefaults(
+  supabase: SupabaseClient,
+  conversationId: string
+): Promise<{ ok: boolean; error?: string; skipped: string[] }> {
+  const payload: Record<string, unknown> = { ...FRESH_CONVERSATION_RESET };
+  const skipped: string[] = [];
+
+  // At most one pass per column, so a persistently odd error can't loop.
+  for (let attempt = 0; attempt <= Object.keys(FRESH_CONVERSATION_RESET).length; attempt += 1) {
+    const { error } = await supabase
+      .from("conversations")
+      .update(payload)
+      .eq("id", conversationId);
+    if (!error) return { ok: true, skipped };
+
+    const missing = missingColumnFrom(error, Object.keys(payload));
+    if (!missing) return { ok: false, error: error.message, skipped };
+
+    delete payload[missing];
+    skipped.push(missing);
+    console.warn(
+      `[reset-conversation] conversations.${missing} does not exist - skipping it. ` +
+        "Apply the migration that adds it."
+    );
+    if (Object.keys(payload).length === 0) {
+      return { ok: false, error: "no resettable columns exist on conversations", skipped };
+    }
+  }
+  return { ok: false, error: `too many missing columns: ${skipped.join(", ")}`, skipped };
+}
 
 /**
  * Wipe a conversation back to true first-contact state: restore
@@ -71,11 +154,8 @@ export async function resetConversation(
 ): Promise<{ ok: boolean; error?: string }> {
   // 1. Restore fresh-conversation defaults (identity fields kept). Reversible, so it
   //    goes first: if it fails we bail with the transcript still intact.
-  const { error: rowErr } = await supabase
-    .from("conversations")
-    .update(FRESH_CONVERSATION_RESET)
-    .eq("id", conversationId);
-  if (rowErr) return { ok: false, error: `row reset failed: ${rowErr.message}` };
+  const row = await applyFreshDefaults(supabase, conversationId);
+  if (!row.ok) return { ok: false, error: `row reset failed: ${row.error}` };
 
   // 2. Wipe the transcript so the next inbound is a true first contact. Irreversible,
   //    so it runs only after the row reset succeeded.

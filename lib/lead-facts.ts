@@ -191,13 +191,26 @@ export async function refreshKnownFacts(ctx: {
       .eq("id", conversationId)
       .single<{ known_facts: string | null }>();
 
-    const next = await updateKnownFacts(conv?.known_facts ?? null, msgs);
+    const prev = conv?.known_facts ?? null;
+    const next = await updateKnownFacts(prev, msgs);
     // Skip the write when nothing changed (avoids a needless UPDATE + realtime ping).
-    if ((next ?? "") === (conv?.known_facts ?? "")) return;
-    await supabase
+    if ((next ?? "") === (prev ?? "")) return;
+
+    // Compare-and-swap on the value we read. This job runs AFTER the paced push, so
+    // the reply's bubbles can still be trickling out when someone hits Reset - which
+    // lands between the read above and this write, and without the guard would
+    // restore the memory the reset just cleared, seconds after it looked wiped.
+    // A no-op is the correct outcome: whoever changed it underneath us is newer.
+    // (This also covers a failed read, where `prev` is null and writing over a real
+    // value would be a guess.) PostgREST needs `.is` for null, `.eq` otherwise.
+    const write = supabase
       .from("conversations")
       .update({ known_facts: next })
       .eq("id", conversationId);
+    const { error } = await (prev === null
+      ? write.is("known_facts", null)
+      : write.eq("known_facts", prev));
+    if (error) console.error("[lead-facts] write failed", error);
   } catch (err) {
     console.error("[lead-facts] refresh failed", err);
   }

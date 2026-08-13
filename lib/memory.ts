@@ -183,11 +183,19 @@ export async function refreshConversationMemory(ctx: {
     const { data: older } = await q.returns<SummaryMessage[]>();
     if (!older || older.length === 0) return;
 
-    const next = await summarizeConversation(conv?.memory_summary ?? null, older);
-    await supabase
+    const prev = conv?.memory_summary ?? null;
+    const next = await summarizeConversation(prev, older);
+    // Compare-and-swap on the summary we read, so a reset landing between that read
+    // and this write can't have the memory it cleared restored underneath it. Same
+    // guard and reasoning as refreshKnownFacts in lib/lead-facts.ts.
+    const write = supabase
       .from("conversations")
       .update({ memory_summary: next, memory_summary_at: older[older.length - 1].created_at })
       .eq("id", conversationId);
+    const { error } = await (prev === null
+      ? write.is("memory_summary", null)
+      : write.eq("memory_summary", prev));
+    if (error) console.error("[memory] write failed", error);
   } catch (err) {
     console.error("[memory] refresh failed", err);
   }
