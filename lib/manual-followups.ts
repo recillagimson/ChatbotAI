@@ -224,3 +224,13 @@ export function nativeInboxLabel(platform: Platform): string {
     ? "Open in Messenger"
     : `Open in ${PLATFORM_META[platform].label}`;
 }
+
+/**
+ * ManyChat Live Chat - where the owner sends the drafted follow-up by hand. Every
+ * connected channel (Instagram/Messenger/WhatsApp/Telegram) routes through ManyChat,
+ * so this button is channel-agnostic and shows on every card. A generic account URL,
+ * like `nativeInboxUrl`: ManyChat exposes no public per-contact deep link we can build
+ * from the ids we store. (A future upgrade could capture `live_chat_url` from the
+ * ManyChat "Full Contact Data" payload to deep-link straight to the thread.)
+ */
+export const MANYCHAT_LIVE_CHAT_URL = "https://app.manychat.com/";

@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser, createServiceClient } from "@/lib/supabase/server";
-import { generateReply } from "@/lib/anthropic";
+import { generateFollowupText } from "@/lib/anthropic";
 import { buildKbBlock } from "@/lib/retrieval";
-import { renderTrainedResponses } from "@/lib/training";
 import type { Chatbot } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -10,12 +9,15 @@ export const runtime = "nodejs";
 const MAX_LEN = 1000; // ManyChat per-message ceiling (mirrors the /reply route)
 
 /**
- * Draft (do NOT send) an on-brand AI reply for a conversation, so the owner can
- * take over a thread the bot went silent on and keep it moving. Runs the same
- * reply engine the live bot uses (persona, KB, known facts, memory summary,
- * scheduled start, trained responses) over the stored transcript and returns the
- * text for the composer to prefill. It delivers nothing and writes no
- * conversation/message rows - the owner reviews, edits, and sends via POST /reply.
+ * Draft (do NOT send) an on-brand AI FOLLOW-UP nudge for a conversation the lead
+ * has gone quiet on, so the owner can re-engage them by hand from the Follow-ups
+ * queue. Uses `generateFollowupText` - the SAME engine that writes the bot's live
+ * drip follow-ups - so the draft is a short re-engagement message in the chatbot's
+ * own persona, grounded in the KB, the stored transcript, the rolling memory
+ * summary and the durable known-facts (it references where the conversation left
+ * off and does NOT just repeat the last reply). It delivers nothing and writes no
+ * conversation/message rows - the owner reviews, edits, and sends manually (the
+ * queue's "Open in ManyChat"/native buttons).
  * (buildKbBlock may refresh the chatbot's retrieval_active flag, exactly as the
  * live path does - idempotent KB-mode housekeeping, not conversation state.)
  *
@@ -38,7 +40,7 @@ export async function POST(
   // belt-and-suspenders and gives a clean 404 instead of an RLS empty.
   const { data: conversation, error } = await supabase
     .from("conversations")
-    .select("id, chatbot_id, memory_summary, known_facts, start_on, start_note")
+    .select("id, chatbot_id, memory_summary, known_facts")
     .eq("id", id)
     .eq("user_id", user.id)
     .single();
@@ -65,36 +67,38 @@ export async function POST(
     .order("created_at", { ascending: true });
 
   const all = (messages ?? [])
-    .map((m) => ({ role: m.role as string, content: (m.content ?? "").trim() }))
+    .map((m) => ({
+      role: m.role as string,
+      content: (m.content ?? "").trim(),
+      created_at: m.created_at as string,
+    }))
     .filter((m) => m.content);
 
-  // We're drafting a reply TO the lead's most recent turn.
-  let lastLeadIdx = -1;
-  for (let i = all.length - 1; i >= 0; i--) {
-    if (all[i].role === "user") {
-      lastLeadIdx = i;
-      break;
-    }
-  }
-  if (lastLeadIdx < 0) {
+  if (all.length === 0) {
     return NextResponse.json(
-      { error: "No message from this person to reply to yet." },
+      { error: "No conversation yet to follow up on." },
       { status: 422 }
     );
   }
-  const userMessage = all[lastLeadIdx].content;
-  // Everything else is context, in chronological order - exclude ONLY the row
-  // we're drafting a reply to. (Truncating the tail would hide our OWN most recent
-  // reply - e.g. a subscribed thread whose last row is the bot's confirmation - and
-  // the draft would then repeat or contradict it.) `human_agent` = the owner's past
-  // manual replies are OUR side, so map them to `assistant`; generateReply only
-  // distinguishes assistant vs. everything-else, and mapping them to `user` would
-  // misattribute the owner's words to the lead.
-  const rest = [...all.slice(0, lastLeadIdx), ...all.slice(lastLeadIdx + 1)];
-  const history = rest.map((m) => ({
+
+  // The WHOLE transcript is context for the follow-up (a re-engagement nudge picks
+  // up where the conversation left off - unlike a reply, it isn't answering one
+  // message). `human_agent` = the owner's own past manual replies are OUR side, so
+  // map them to `assistant`; generateReply only distinguishes assistant vs.
+  // everything-else, and mapping them to `user` would misattribute them to the lead.
+  const history = all.map((m) => ({
     role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
     content: m.content,
   }));
+
+  // The lead's last inbound drives both the KB retrieval query (stay on-topic) and
+  // the silence clock the follow-up references. Falls back to the last message of
+  // any kind on a welcome-only thread the lead hasn't answered yet.
+  const lastLead = [...all].reverse().find((m) => m.role === "user") ?? all[all.length - 1];
+  const hoursSilent = Math.max(
+    1,
+    (Date.now() - new Date(lastLead.created_at).getTime()) / 3_600_000
+  );
 
   try {
     // KB retrieval needs the SERVICE-ROLE client: the vector-search RPC
@@ -106,27 +110,24 @@ export async function POST(
       supabase: createServiceClient(),
       chatbot,
       history,
-      userMessage,
+      userMessage: lastLead.content,
     });
-    const { text } = await generateReply({
+    // generateFollowupText writes a short re-engagement nudge in the bot's persona
+    // from the conversation so far (buildFollowupInstruction) - the same engine as
+    // the live drip. instruction:null = let the model decide from the transcript.
+    const result = await generateFollowupText({
       chatbot,
       kbBlock: kb.block,
       history,
-      userMessage,
       memorySummary: conversation.memory_summary ?? null,
-      // No media catalog on purpose: a manual draft is text-only (delivered via
-      // /reply), so the model must not emit [[SEND_ASSET]] directives.
-      scheduledStart:
-        conversation.start_note || conversation.start_on
-          ? { note: conversation.start_note ?? null, on: conversation.start_on ?? null }
-          : null,
-      trainedResponses: renderTrainedResponses(chatbot.training_pairs),
       knownFacts: conversation.known_facts ?? null,
+      instruction: null,
+      hoursSilent,
     });
 
     // Defensive: strip any stray [[...]] directives, collapse blank runs, cap at
     // the ManyChat per-message ceiling. The owner edits before sending.
-    const draft = (text ?? "")
+    const draft = (result?.text ?? "")
       .replace(/\[\[[^\]]*\]\]/g, "")
       .replace(/\n{3,}/g, "\n\n")
       .trim()
@@ -135,15 +136,15 @@ export async function POST(
 
     if (!draft) {
       return NextResponse.json(
-        { error: "Couldn't draft a reply - try again." },
+        { error: "Couldn't draft a follow-up - try again." },
         { status: 502 }
       );
     }
     return NextResponse.json({ ok: true, draft });
   } catch (err) {
-    console.error("[suggest-reply] generate failed", err);
+    console.error("[suggest-reply] follow-up draft failed", err);
     return NextResponse.json(
-      { error: "Couldn't draft a reply - try again." },
+      { error: "Couldn't draft a follow-up - try again." },
       { status: 502 }
     );
   }

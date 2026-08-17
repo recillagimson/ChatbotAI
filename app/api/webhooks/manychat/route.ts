@@ -1371,7 +1371,17 @@ export async function POST(request: NextRequest) {
     if (AUTO_TAG_ENABLED && !confirmedAt && canPushPlatform(platform)) {
       const lastBotMessage =
         [...priorHistory].reverse().find((m) => m.role === "assistant")?.content ?? "";
-      const { outcome } = await screenDisqualify({ message: effectiveMessage, lastBotMessage });
+      let { outcome } = await screenDisqualify({ message: effectiveMessage, lastBotMessage });
+      // A `bot` (automated-sender) verdict only makes sense at first contact. Once the
+      // assistant has had genuine back-and-forth with this person (a prior assistant
+      // reply exists), they are a human, not a spam bot - so a late `bot` flag is almost
+      // always a false positive (e.g. they shared their website or re-sent a message
+      // after getting no reply). Downgrade it to none. `disqualified` (abuse / clear
+      // rejection) CAN legitimately happen mid-conversation, so it is left untouched.
+      if (outcome === "bot" && lastBotMessage) {
+        console.warn("[manychat-webhook] suppressed late 'bot' screen verdict for an engaged lead", { conversationId });
+        outcome = "none";
+      }
       if (outcome !== "none") {
         const { error: tagErr } = await supabase
           .from("conversations")

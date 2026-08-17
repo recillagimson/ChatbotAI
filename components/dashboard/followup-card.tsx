@@ -1,18 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import Link from "next/link";
-import {
-  Check,
-  Copy,
-  ExternalLink,
-  Hourglass,
-  RotateCcw,
-  Send,
-  Sparkles,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Check, Copy, ExternalLink, Hourglass, RotateCcw, Sparkles } from "lucide-react";
 import { SsAvatar, SsButton, SsChip } from "@/components/ss/controls";
 import { ChannelChip } from "@/components/ss/channel";
 
@@ -26,37 +16,35 @@ export interface FollowupItem {
   lastMessage: string | null;
   lastMessageAt: string;
   botName: string | null;
+  /** Native inbox (Instagram/Messenger/…) - where a human can send by hand. */
   nativeUrl: string | null;
   nativeLabel: string;
+  /** ManyChat Live Chat - the primary manual-send surface for these threads. */
+  manychatUrl: string | null;
 }
 
 /**
  * One card in the manual follow-up queue.
  *
- * The queue exists because Instagram and Messenger stop accepting automated
- * sends 24 hours after the lead's last message. Inside seven days a human-agent
- * reply still gets through, so "Send as me" really sends - it posts to the same
- * route the inbox composer uses, which carries the HUMAN_AGENT tag. The page
- * only ever lists threads inside that seven days, so every button here is one
- * the app can actually honour; if a thread crosses the edge between render and
- * click, the send route says so and the error lands under the draft.
+ * The queue exists because Instagram and Messenger stop accepting automated sends
+ * 24 hours after the lead's last message - past that the bot physically can't
+ * reach them. These are NOT sent from the app: an out-of-window send from here
+ * doesn't reliably arrive, so the card's job is to hand you an on-brand draft and
+ * a fast way OUT to where you actually send - ManyChat's Live Chat (every channel
+ * routes through it) or the native inbox. Nothing here delivers a message.
  *
- * "Suggest" asks the bot for a draft using the same engine that writes its live
- * replies, then hands it to you to edit. Nothing is sent until you press Send.
+ * "Suggest" asks the bot for a re-engagement FOLLOW-UP draft (the same engine that
+ * writes its live drip nudges, in its own voice, from the conversation so far),
+ * then hands it to you to copy and send by hand.
  */
 export function FollowupCard({ item }: { item: FollowupItem }) {
-  const router = useRouter();
   const [draft, setDraft] = useState("");
   const [suggesting, setSuggesting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  const busy = suggesting || isPending;
 
   async function suggest() {
-    if (busy) return;
+    if (suggesting) return;
     setSuggesting(true);
     setError(null);
     try {
@@ -89,50 +77,6 @@ export function FollowupCard({ item }: { item: FollowupItem }) {
         window.setTimeout(() => setCopied(false), 1800);
       })
       .catch(() => setError("Couldn't copy - select the text and copy manually."));
-  }
-
-  function send() {
-    const text = draft.trim();
-    if (!text || busy) return;
-    setError(null);
-    startTransition(async () => {
-      try {
-        const res = await fetch(`/api/conversations/${item.id}/reply`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-        if (!res.ok) {
-          const data = (await res.json().catch(() => null)) as {
-            error?: string;
-          } | null;
-          setError(data?.error ?? "Couldn't send. Try again.");
-          return;
-        }
-        setSent(true);
-        router.refresh();
-      } catch {
-        setError("Couldn't send - check your connection.");
-      }
-    });
-  }
-
-  if (sent) {
-    return (
-      <div className="flex items-center gap-3 rounded-card border border-ss-green-line bg-ss-green-bg px-5 py-4">
-        <Check className="h-5 w-5 shrink-0 text-ss-green" aria-hidden="true" />
-        <p className="text-[12.5px] leading-snug text-ss-green-ink">
-          Sent to <strong className="font-semibold">{item.name}</strong>. The
-          thread leaves this queue as soon as they reply.
-        </p>
-        <Link
-          href={`/conversations/${item.id}`}
-          className="ml-auto shrink-0 text-[12px] font-semibold text-ss-green-ink underline"
-        >
-          Open thread
-        </Link>
-      </div>
-    );
   }
 
   return (
@@ -172,7 +116,7 @@ export function FollowupCard({ item }: { item: FollowupItem }) {
               <button
                 type="button"
                 onClick={suggest}
-                disabled={busy}
+                disabled={suggesting}
                 className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold leading-none text-ss-indigo-600 transition-colors hover:text-ss-indigo-800 disabled:opacity-50"
               >
                 <RotateCcw className="h-3 w-3" aria-hidden="true" />
@@ -184,7 +128,7 @@ export function FollowupCard({ item }: { item: FollowupItem }) {
               onChange={(e) => setDraft(e.target.value)}
               rows={2}
               maxLength={1000}
-              disabled={busy}
+              disabled={suggesting}
               aria-label={`Follow-up message to ${item.name}`}
               placeholder="Write the nudge yourself, or let the bot draft one in its own voice…"
               className="mt-2.5 w-full resize-none bg-transparent text-[13px] leading-relaxed text-ss-ink outline-none placeholder:text-ss-faint disabled:opacity-60"
@@ -201,22 +145,19 @@ export function FollowupCard({ item }: { item: FollowupItem }) {
 
       {/* ---- Actions -------------------------------------------------- */}
       <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-ss-hair pt-3.5">
-        <SsButton
-          onClick={send}
-          disabled={busy || !draft.trim()}
-          variant="primary"
-          size="md"
-        >
-          <Send className="h-4 w-4" aria-hidden="true" />
-          {isPending ? "Sending…" : "Send as me"}
-        </SsButton>
+        {item.manychatUrl && (
+          <a
+            href={item.manychatUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-ss-indigo-600 px-[13px] py-2.5 text-[12.5px] font-semibold leading-none text-white transition-colors hover:bg-ss-indigo-700"
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            Open in ManyChat
+          </a>
+        )}
 
-        <SsButton
-          onClick={copy}
-          disabled={!draft.trim()}
-          variant="outline"
-          size="md"
-        >
+        <SsButton onClick={copy} disabled={!draft.trim()} variant="outline" size="md">
           {copied ? (
             <Check className="h-4 w-4 text-ss-green" aria-hidden="true" />
           ) : (

@@ -120,6 +120,20 @@ A SaaS platform (**SpeedSettr** - www.speedsettr.com) that auto-replies to Insta
     `resolveTagWrite` (owner-only reopen - change the tag in the inbox to resume).
     Fail-open: any screen error → a normal reply. Needs `2026-07-14-disqualify.sql`
     (7-value tag CHECK) applied before deploy. Screen prompt is generic (multi-tenant).
+    **`bot` false-positive hardening (2026-08-13):** a real prospect got tagged `bot`
+    for sharing his firm's URL and for RE-SENDING a message (which he did because the
+    bot had gone silent from the Anthropic-credits outage - repetition + a link both
+    read as "spam"). Two fixes: (a) tightened the `bot` prompt line - a relevant URL
+    (sharing their own site) or a repeat ALONE is never `bot`; flag `bot` only when the
+    message is spam AND shows no genuine interest; `none` explicitly covers "even if they
+    paste a relevant link or re-send". (b) **structural guard in route.ts 7b: a `bot`
+    verdict is downgraded to `none` once a prior assistant reply exists** (`lastBotMessage`
+    non-empty) - an already-engaged human is not an automated bot; `bot` now only fires at
+    first contact (where mass-DM spam actually hits). `disqualified` (abuse/rejection) is
+    untouched - it can legitimately happen mid-conversation. Verified with a live screener
+    eval: David's real messages + link-sharing → `none` (stable across runs), gibberish /
+    off-topic link-spam → `bot`, abuse → `disqualified`; a promotional blast leaking to
+    `none` is the accepted safe direction (a false disqualify is terminal). No migration.
 
 23. **ManyChat "stop follow-up" flag bridge (`ss_no_followup`).** A native ManyChat
     voice-note drip can't see SpeedSettr's tags, so it would keep following up

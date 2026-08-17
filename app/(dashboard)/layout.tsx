@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient, getRealUser } from "@/lib/supabase/server";
+import { getRealUser } from "@/lib/supabase/server";
 import { getImpersonation } from "@/lib/impersonation";
 import { getWorkspace } from "@/lib/workspace";
 import { Sidebar } from "@/components/dashboard/sidebar";
@@ -12,25 +12,24 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Gate + Admin-link decision use the REAL user; the page bodies below use the
-  // effective (possibly impersonated) user via getCurrentUser.
+  // Gate uses the REAL user; the page bodies below use the effective (possibly
+  // impersonated) user via getCurrentUser.
   const user = await getRealUser();
   if (!user) redirect("/login");
-
-  const supabase = await createClient();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .maybeSingle();
 
   const { target, active } = await getImpersonation();
   const clientLabel = target?.full_name || target?.email || "client";
 
-  // One read backs the rail badges, the chatbot switcher and the AI master
-  // switch. Scope (`?bot=`) is a page-level concern, so the shell always shows
-  // the whole workspace and each page narrows its own queries.
+  // One read backs the rail badges, the chatbot switcher, the AI master switch
+  // AND the Admin-link decision (workspace.isSuperadmin). Scope (`?bot=`) is a
+  // page-level concern, so the shell always shows the whole workspace and each
+  // page narrows its own queries. This is the same `cache()`-memoised load the
+  // page below reuses, so it runs once for the whole request.
   const workspace = await getWorkspace(null);
+  // Admin link only when NOT impersonating: `isSuperadmin` reflects the EFFECTIVE
+  // user, so during "View as client" it's the target's flag - the `!active` guard
+  // forces the link off regardless.
+  const isSuperadmin = !active && !!workspace?.isSuperadmin;
   const bots = workspace?.bots ?? [];
   const counts = {
     chatbots: workspace?.counts.chatbots ?? 0,
@@ -49,7 +48,7 @@ export default async function DashboardLayout({
       {/* While impersonating: scope the sidebar to Overview→Request Changes and
           hide the Admin link (the real admin returns via the banner's Exit). */}
       <Sidebar
-        isSuperadmin={!active && !!profile?.is_superadmin}
+        isSuperadmin={isSuperadmin}
         impersonating={active}
         counts={counts}
         planName={workspace?.planName}
@@ -57,7 +56,7 @@ export default async function DashboardLayout({
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <MobileNav
-          isSuperadmin={!active && !!profile?.is_superadmin}
+          isSuperadmin={isSuperadmin}
           impersonating={active}
           bots={bots}
           aiLive={workspace?.aiLive ?? false}

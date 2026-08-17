@@ -11,6 +11,7 @@ import {
   CLOSING_SOON_HOURS,
   countWindows,
   leadLastMessageAt,
+  MANYCHAT_LIVE_CHAT_URL,
   MAX_REACH_HOURS,
   nativeInboxLabel,
   nativeInboxUrl,
@@ -35,7 +36,19 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const VIEWS = ["waiting", "closing", "reachable"] as const;
+// The manual queue (past the 24h window, still hand-reachable for 7 days) split into
+// age bands so the coldest leads can be worked first. Hours are since the LEAD's last
+// message; the bands partition the whole [24h, 7d) manual window and never surface
+// anything past 7 days (that stays "expired" - nothing the app or a hand-send reaches).
+const DAY_BANDS = [
+  { key: "d1", label: "1 day", loHours: 24, hiHours: 72 },
+  { key: "d3", label: "3 days", loHours: 72, hiHours: 120 },
+  { key: "d5", label: "5 days", loHours: 120, hiHours: 144 },
+  { key: "d7", label: "7 days", loHours: 144, hiHours: 168 },
+] as const;
+type DayBand = (typeof DAY_BANDS)[number]["key"];
+
+const VIEWS = ["d1", "d3", "d5", "d7", "closing", "reachable"] as const;
 type View = (typeof VIEWS)[number];
 
 /**
@@ -65,7 +78,7 @@ export default async function FollowUpsPage({
   searchParams: Promise<{ bot?: string; view?: string }>;
 }) {
   const sp = await searchParams;
-  const view: View = VIEWS.includes(sp.view as View) ? (sp.view as View) : "waiting";
+  const view: View = VIEWS.includes(sp.view as View) ? (sp.view as View) : "d1";
   const windowHours = PLATFORM_META.instagram.standardWindowHours ?? 24;
   const reachDays = Math.round(MAX_REACH_HOURS / 24);
 
@@ -155,8 +168,21 @@ async function FollowUpsQueue({
     new Date(leadLastMessageAt(a)).getTime() -
     new Date(leadLastMessageAt(b)).getTime();
 
+  // The manual queue, longest-waiting first, then split into the day bands. `bandOf`
+  // measures from the lead's last message; because bucketOf already returns "manual"
+  // only inside [24h, 7d), every manual thread lands in exactly one band.
+  const manual = all
+    .filter((c) => bucketOf(c, now) === "manual")
+    .sort(byLeadClock);
+  const bandOf = (c: (typeof all)[number]): DayBand | null => {
+    const h = (now - new Date(leadLastMessageAt(c)).getTime()) / (60 * 60 * 1000);
+    return DAY_BANDS.find((b) => h >= b.loHours && h < b.hiHours)?.key ?? null;
+  };
   const buckets = {
-    waiting: all.filter((c) => bucketOf(c, now) === "manual").sort(byLeadClock),
+    d1: manual.filter((c) => bandOf(c) === "d1"),
+    d3: manual.filter((c) => bandOf(c) === "d3"),
+    d5: manual.filter((c) => bandOf(c) === "d5"),
+    d7: manual.filter((c) => bandOf(c) === "d7"),
     closing: all.filter((c) => bucketOf(c, now) === "closing").sort(byLeadClock),
     reachable: all.filter((c) => bucketOf(c, now) === "open").sort(byLeadClock),
   };
@@ -188,7 +214,7 @@ async function FollowUpsQueue({
   dayStart.setHours(0, 0, 0, 0);
   const sentToday = countHandSendsSince(activity, dayStart.toISOString());
 
-  const oldest = buckets.waiting[0] ?? null;
+  const oldest = manual[0] ?? null;
 
   const items: FollowupItem[] = visible.slice(0, 25).map((c) => {
     const platform = toPlatform(c.platform);
@@ -204,6 +230,7 @@ async function FollowUpsQueue({
       botName: null,
       nativeUrl: nativeInboxUrl(platform),
       nativeLabel: nativeInboxLabel(platform),
+      manychatUrl: MANYCHAT_LIVE_CHAT_URL,
     };
   });
 
@@ -327,13 +354,16 @@ async function FollowUpsQueue({
 
         {/* ---- Views ------------------------------------------------------ */}
         <div className="flex flex-wrap items-center gap-2">
-          <SsPill
-            href="/follow-ups?view=waiting"
-            active={view === "waiting"}
-            count={counts.manual}
-          >
-            {windowHours}h – {reachDays}d
-          </SsPill>
+          {DAY_BANDS.map((b) => (
+            <SsPill
+              key={b.key}
+              href={`/follow-ups?view=${b.key}`}
+              active={view === b.key}
+              count={buckets[b.key].length}
+            >
+              {b.label}
+            </SsPill>
+          ))}
           <SsPill
             href="/follow-ups?view=closing"
             active={view === "closing"}
@@ -359,18 +389,18 @@ async function FollowUpsQueue({
           <EmptyState
             icon={<SendHorizontal className="h-8 w-8" />}
             title={
-              view === "waiting"
-                ? "Nothing is waiting on you"
-                : view === "closing"
-                  ? "Nothing is about to close"
-                  : "No open threads inside the window"
+              view === "closing"
+                ? "Nothing is about to close"
+                : view === "reachable"
+                  ? "No open threads inside the window"
+                  : "Nothing waiting in this band"
             }
           >
-            {view === "waiting"
-              ? `No lead is sitting between ${windowHours} hours and ${reachDays} days without an answer - either the bot can still reach them, or they've replied and it's back on the bot.`
-              : view === "closing"
-                ? `No thread is within ${CLOSING_SOON_HOURS} hours of its cutoff right now.`
-                : "Threads appear here while the bot can still answer them automatically."}
+            {view === "closing"
+              ? `No thread is within ${CLOSING_SOON_HOURS} hours of its cutoff right now.`
+              : view === "reachable"
+                ? "Threads appear here while the bot can still answer them automatically."
+                : `No lead has been waiting this long right now - either the bot can still reach them, they've replied and it's back on the bot, or they've passed ${reachDays} days.`}
           </EmptyState>
         ) : view === "reachable" ? (
           // These don't need a human, so they're a list rather than a work
