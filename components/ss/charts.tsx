@@ -56,7 +56,7 @@ export function Sparkbars({
                 : "bg-ss-indigo-300/30"
               : d.peak
                 ? "bg-ss-indigo"
-                : "bg-ss-indigo-200/60"
+                : "bg-ss-indigo-200/60",
           )}
         />
       ))}
@@ -80,7 +80,7 @@ export function AxisTicks({
       className={cn(
         "mt-2 flex justify-between text-[10.5px] font-medium leading-none",
         dark ? "text-[#7d7eb0]" : "text-ss-faint",
-        className
+        className,
       )}
     >
       {labels.map((l, i) => (
@@ -108,8 +108,7 @@ export function GroupedBars({
   gap?: number;
   className?: string;
 }) {
-  const ceiling =
-    max ?? Math.max(1, ...data.flatMap((d) => [d.a, d.b]));
+  const ceiling = max ?? Math.max(1, ...data.flatMap((d) => [d.a, d.b]));
   return (
     <div
       aria-hidden="true"
@@ -145,14 +144,14 @@ export function YAxis({
   className?: string;
 }) {
   const labels = Array.from({ length: steps + 1 }, (_, i) =>
-    Math.round((max / steps) * (steps - i))
+    Math.round((max / steps) * (steps - i)),
   );
   return (
     <div
       style={{ height }}
       className={cn(
         "flex w-9 shrink-0 flex-col items-end justify-between text-[10.5px] font-medium leading-none text-ss-faint",
-        className
+        className,
       )}
     >
       {labels.map((l, i) => (
@@ -221,8 +220,11 @@ export function ProportionBar({
             s.color ?? RAMP[i % RAMP.length],
             i === 0 && "rounded-l-[7px]",
             i === shown.length - 1 && "rounded-r-[7px]",
-            shown.length > 1 && i > 0 && i < shown.length - 1 && "rounded-[3px]",
-            shown.length === 1 && "rounded-[7px]"
+            shown.length > 1 &&
+              i > 0 &&
+              i < shown.length - 1 &&
+              "rounded-[3px]",
+            shown.length === 1 && "rounded-[7px]",
           )}
         />
       ))}
@@ -255,7 +257,7 @@ export function LegendRow({
       <span
         className={cn(
           "ss-num ml-auto text-[13px] leading-none",
-          dim ? "text-ss-muted" : "text-ss-ink"
+          dim ? "text-ss-muted" : "text-ss-ink",
         )}
       >
         {value}
@@ -313,6 +315,7 @@ export function FunnelStep({
   value,
   level = 0,
   href,
+  onClick,
   expanded = false,
   children,
 }: {
@@ -320,31 +323,36 @@ export function FunnelStep({
   value: React.ReactNode;
   /** 0-3 - depth in the funnel, which sets both inset and colour. */
   level?: 0 | 1 | 2 | 3;
-  /** When set, the row toggles its drill-down. */
+  /** When set, the row is a <Link> that toggles its drill-down (server pages). */
   href?: string;
+  /** When set, the row is a <button> that toggles client-side (no navigation). */
+  onClick?: () => void;
   expanded?: boolean;
   /** The drill-down panel, rendered under the row when expanded. */
   children?: React.ReactNode;
 }) {
+  const interactive = !!href || !!onClick;
   const row = (
     <div
       className={cn(
         "flex h-[52px] items-center gap-3 rounded-[12px] px-[18px]",
         FUNNEL_TONE[level],
-        href && "transition-opacity hover:opacity-90"
+        interactive && "transition-opacity hover:opacity-90",
       )}
     >
       <span className="truncate text-[13.5px] font-semibold leading-none text-white">
         {label}
       </span>
       <span className="ml-auto flex shrink-0 items-center gap-2.5">
-        <span className="ss-num text-[20px] leading-none text-white">{value}</span>
-        {href ? (
+        <span className="ss-num text-[20px] leading-none text-white">
+          {value}
+        </span>
+        {interactive ? (
           <ChevronDown
             aria-hidden="true"
             className={cn(
               "h-5 w-5 text-white/70 transition-transform",
-              expanded && "rotate-180"
+              expanded && "rotate-180",
             )}
           />
         ) : null}
@@ -352,14 +360,22 @@ export function FunnelStep({
     </div>
   );
 
+  const ring =
+    "block w-full rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-2";
+
   return (
     <div className={FUNNEL_INSET[level]}>
-      {href ? (
-        <Link
-          href={href}
+      {onClick ? (
+        <button
+          type="button"
+          onClick={onClick}
           aria-expanded={expanded}
-          className="block rounded-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-2"
+          className={cn(ring, "text-left")}
         >
+          {row}
+        </button>
+      ) : href ? (
+        <Link href={href} aria-expanded={expanded} className={ring}>
           {row}
         </Link>
       ) : (
@@ -391,7 +407,7 @@ export function FunnelConnector({
           "ss-num rounded-full border px-2.5 py-1 text-[11px] font-semibold leading-[1.4]",
           tone === "amber"
             ? "border-ss-amber-line bg-ss-amber-tint text-ss-amber-ink"
-            : "border-ss-line bg-ss-page text-ss-body"
+            : "border-ss-line bg-ss-page text-ss-body",
         )}
       >
         {pct}
@@ -425,14 +441,14 @@ export function Progress({
       className={cn(
         "overflow-hidden rounded-full",
         dark ? "bg-white/[.14]" : "bg-ss-rule",
-        className
+        className,
       )}
     >
       <div
         style={{ width: `${Math.max(0, Math.min(100, value * 100))}%` }}
         className={cn(
           "h-full rounded-full",
-          tone === "mint" ? "bg-ss-mint" : "bg-ss-indigo"
+          tone === "mint" ? "bg-ss-mint" : "bg-ss-indigo",
         )}
       />
     </div>
