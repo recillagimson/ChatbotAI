@@ -58,16 +58,32 @@ export interface Workspace {
   planName: string;
 }
 
+/** Per-chatbot conversation rollup - the all-time counts the shell badges show. */
+interface BotRollup {
+  threads: number;
+  needsAttention: number;
+  platforms: string[];
+}
+
+/** One row of the `workspace_conversation_rollup` RPC (bigints arrive as numbers or strings). */
+type RollupRow = {
+  chatbot_id: string;
+  threads: number | string | null;
+  needs_attention: number | string | null;
+  platforms: string[] | null;
+};
+
 /**
- * The scope-INDEPENDENT half of the workspace load: identity, chatbots, and the
- * full conversation set (lead-clock stamped) that every shell badge is counted
- * from. This is the expensive part - it pages the whole conversation set and
- * reads the messages table for the follow-up clock - and it doesn't depend on
- * `?bot=` at all, so it's wrapped in React `cache()` to run AT MOST ONCE per
- * request even though the layout AND the page each ask for the workspace (with
- * different scopes). Before this split the heaviest query on the app ran two to
- * four times on a single page render; now it runs once and `getWorkspace` is a
- * cheap pure projection over the result.
+ * The scope-INDEPENDENT half of the workspace load: identity, chatbots, the
+ * per-bot all-time rollup, and ONLY the recently-active conversations needed for
+ * the follow-up clock. It doesn't depend on `?bot=`, so it's wrapped in React
+ * `cache()` to run AT MOST ONCE per request even though the layout AND the page
+ * both ask for the workspace with different scopes.
+ *
+ * It deliberately does NOT hold every conversation row. The big counts come from
+ * a grouped aggregate; the only rows pulled into memory are those inside the
+ * follow-up reach window - a small, bounded slice even on a workspace with tens
+ * of thousands of dormant threads.
  */
 interface WorkspaceBase {
   userId: string;
@@ -75,8 +91,13 @@ interface WorkspaceBase {
   email: string | null;
   isSuperadmin: boolean;
   bots: WorkspaceBot[];
-  /** Every conversation this user owns, lead-clock stamped, for count derivation. */
-  rows: (WindowConversation & {
+  /**
+   * Only the conversations inside the follow-up reach window (last activity within
+   * MAX_REACH_HOURS), lead-clock stamped. This is all `countWindows(...).manual`
+   * needs: a thread older than the reach window can never bucket as "manual", so
+   * omitting it changes no follow-up count.
+   */
+  reachRows: (WindowConversation & {
     id: string;
     chatbot_id: string;
     last_inbound_at: string | null;
@@ -87,71 +108,127 @@ interface WorkspaceBase {
   now: number;
 }
 
+/**
+ * Per-bot all-time counts + the reach-window conversation slice, in as little
+ * data as possible.
+ *
+ * Fast path: a grouped aggregate RPC returns one row per chatbot (threads,
+ * needs-attention, distinct channels) - no conversation rows cross the wire - and
+ * a second query pulls ONLY the reach-window slice for the follow-up clock.
+ *
+ * Fallback: if the RPC isn't present yet (migration not applied) or errors, page
+ * every conversation and roll it up in JS - exactly the pre-optimisation
+ * behaviour, so the shell is correct before AND after the migration lands.
+ */
+async function loadConversationRollup(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  lookbackIso: string
+): Promise<{ rollup: Map<string, BotRollup>; reachRows: WorkspaceBase["reachRows"] }> {
+  const CONVO_COLS =
+    "id, chatbot_id, platform, last_message_at, status, confirmed_at, user_muted_at, bot_off_at, tag";
+  const rollup = new Map<string, BotRollup>();
+
+  const { data: rollupRows, error: rollupErr } = await supabase.rpc(
+    "workspace_conversation_rollup",
+    { p_user_id: userId }
+  );
+
+  if (rollupErr || !Array.isArray(rollupRows)) {
+    // ---- Fallback: page everything and roll up in JS (pre-migration path). ----
+    if (rollupErr) {
+      console.warn(
+        "[workspace] rollup RPC unavailable, falling back to full scan:",
+        rollupErr.message
+      );
+    }
+    const { rows: allConvos } = await fetchAllRows<
+      WindowConversation & { id: string; chatbot_id: string }
+    >(
+      (from, to) =>
+        supabase.from("conversations").select(CONVO_COLS).eq("user_id", userId).range(from, to),
+      { label: "workspace conversations (fallback)" }
+    );
+    const { rows: leadClocked } = await withLeadClock(supabase, allConvos, lookbackIso);
+    for (const r of leadClocked) {
+      const agg = rollup.get(r.chatbot_id) ?? { threads: 0, needsAttention: 0, platforms: [] };
+      agg.threads += 1;
+      if (r.tag === "needs_human") agg.needsAttention += 1;
+      const platform = r.platform ?? "instagram";
+      if (!agg.platforms.includes(platform)) agg.platforms.push(platform);
+      rollup.set(r.chatbot_id, agg);
+    }
+    const lookbackMs = new Date(lookbackIso).getTime();
+    const reachRows = leadClocked.filter(
+      (r) => new Date(r.last_message_at).getTime() >= lookbackMs
+    );
+    return { rollup, reachRows };
+  }
+
+  // ---- Fast path: aggregate + reach-window slice only. ----
+  for (const row of rollupRows as RollupRow[]) {
+    rollup.set(row.chatbot_id, {
+      threads: Number(row.threads ?? 0),
+      needsAttention: Number(row.needs_attention ?? 0),
+      platforms: (row.platforms ?? []).map((p) => p ?? "instagram"),
+    });
+  }
+
+  // Only threads active inside the reach window can matter to the follow-up
+  // count; the aggregate above already carries every all-time total.
+  const { rows: reachRaw } = await fetchAllRows<
+    WindowConversation & { id: string; chatbot_id: string }
+  >(
+    (from, to) =>
+      supabase
+        .from("conversations")
+        .select(CONVO_COLS)
+        .eq("user_id", userId)
+        .gte("last_message_at", lookbackIso)
+        .range(from, to),
+    { label: "workspace reach-window conversations" }
+  );
+  const { rows: reachRows } = await withLeadClock(supabase, reachRaw, lookbackIso);
+  return { rollup, reachRows };
+}
+
 const loadWorkspaceBase = cache(async (): Promise<WorkspaceBase | null> => {
   const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const [
-    { data: profile },
-    { data: subscription },
-    { data: chatbots },
-    { rows: convoRows },
-  ] = await Promise.all([
-    // One profile read backs both the sidebar name/email AND the layout's Admin
-    // link (`is_superadmin`), so the layout no longer fires its own duplicate
-    // read of this same row.
-    supabase
-      .from("profiles")
-      .select("full_name, email, is_superadmin")
-      .eq("id", user.id)
-      .maybeSingle(),
-    supabase.from("subscriptions").select("*").eq("user_id", user.id).maybeSingle(),
-    supabase
-      .from("chatbots")
-      .select("id, name, is_active")
-      .eq("user_id", user.id)
-      .order("created_at"),
-    // One read backs every count in the shell. Selecting only the columns the
-    // window maths needs keeps this cheap even on a busy workspace.
-    //
-    // Paged, not `.limit(5000)`: PostgREST silently caps a request at 1,000
-    // rows, so the limit form made every badge here plateau - a workspace with
-    // 2,453 threads reported exactly "1,000", and the Follow-ups badge counted
-    // a different truncated slice than the Follow-ups page did, so the two
-    // never agreed.
-    fetchAllRows<WindowConversation & { id: string; chatbot_id: string }>(
-      (from, to) =>
-        supabase
-          .from("conversations")
-          .select(
-            "id, chatbot_id, platform, last_message_at, status, confirmed_at, user_muted_at, bot_off_at, tag"
-          )
-          .eq("user_id", user.id)
-          .range(from, to),
-      { label: "workspace conversations" }
-    ),
-  ]);
-
   const now = Date.now();
+  const lookbackIso = queueLookbackIso(now);
 
-  // The Follow-ups badge counts the same queue the Follow-ups page lists, which
-  // means it needs the same clock: the lead's last inbound, not the last
-  // activity on the thread. Only threads active inside the reach window are
-  // looked up, so a workspace full of dormant conversations costs nothing here.
-  const { rows } = await withLeadClock(supabase, convoRows, queueLookbackIso(now));
+  const [{ data: profile }, { data: subscription }, { data: chatbots }, { rollup, reachRows }] =
+    await Promise.all([
+      // One profile read backs both the sidebar name/email AND the layout's Admin
+      // link (`is_superadmin`), so the layout no longer fires its own duplicate
+      // read of this same row.
+      supabase
+        .from("profiles")
+        .select("full_name, email, is_superadmin")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase.from("subscriptions").select("*").eq("user_id", user.id).maybeSingle(),
+      supabase
+        .from("chatbots")
+        .select("id, name, is_active")
+        .eq("user_id", user.id)
+        .order("created_at"),
+      loadConversationRollup(supabase, user.id, lookbackIso),
+    ]);
 
   const bots: WorkspaceBot[] = (chatbots ?? []).map((c) => {
-    const mine = rows.filter((r) => r.chatbot_id === c.id);
-    const platforms = [...new Set(mine.map((r) => r.platform ?? "instagram"))];
+    const agg = rollup.get(c.id);
     return {
       id: c.id,
       name: c.name,
       is_active: !!c.is_active,
-      threads: mine.length,
-      needsAttention: mine.filter((r) => r.tag === "needs_human").length,
-      platforms,
-      unconnected: mine.length === 0,
+      threads: agg?.threads ?? 0,
+      needsAttention: agg?.needsAttention ?? 0,
+      platforms: agg?.platforms ?? [],
+      unconnected: (agg?.threads ?? 0) === 0,
     };
   });
 
@@ -161,7 +238,7 @@ const loadWorkspaceBase = cache(async (): Promise<WorkspaceBase | null> => {
     email: profile?.email ?? user.email ?? null,
     isSuperadmin: !!profile?.is_superadmin,
     bots,
-    rows,
+    reachRows,
     subscriptionActive: hasActiveAccess(subscription),
     planName: PLAN_NAME,
     now,
@@ -184,11 +261,15 @@ export async function getWorkspace(scopedBot?: string | null): Promise<Workspace
   const scopedBotId =
     scopedBot && base.bots.some((b) => b.id === scopedBot) ? scopedBot : null;
 
-  // Counts follow the current scope, so the badge next to "Conversations"
-  // always matches what clicking it will show.
-  const scoped = scopedBotId
-    ? base.rows.filter((r) => r.chatbot_id === scopedBotId)
-    : base.rows;
+  // Counts follow the current scope, so the badge next to "Conversations" always
+  // matches what clicking it will show. Totals come from the per-bot rollup; the
+  // follow-up count buckets the reach-window slice.
+  const scopedBots = scopedBotId
+    ? base.bots.filter((b) => b.id === scopedBotId)
+    : base.bots;
+  const scopedReach = scopedBotId
+    ? base.reachRows.filter((r) => r.chatbot_id === scopedBotId)
+    : base.reachRows;
 
   return {
     userId: base.userId,
@@ -199,9 +280,9 @@ export async function getWorkspace(scopedBot?: string | null): Promise<Workspace
     scopedBotId,
     counts: {
       chatbots: base.bots.length,
-      conversations: scoped.length,
-      needsAttention: scoped.filter((r) => r.tag === "needs_human").length,
-      followups: countWindows(scoped, base.now).manual,
+      conversations: scopedBots.reduce((sum, b) => sum + b.threads, 0),
+      needsAttention: scopedBots.reduce((sum, b) => sum + b.needsAttention, 0),
+      followups: countWindows(scopedReach, base.now).manual,
     },
     aiLive: base.bots.some((b) => b.is_active),
     subscriptionActive: base.subscriptionActive,

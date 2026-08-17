@@ -1,18 +1,18 @@
-import { SkInboxList } from "@/components/ss/skeleton";
-
 /**
- * The inbox, before the list arrives.
+ * The inbox, before the right pane arrives.
  *
- * Only the left pane is drawn. The right pane is the "pick a thread" empty
- * state, which carries no data - showing a placeholder there would promise
- * content that never comes.
+ * The thread list lives in the layout and renders its own skeleton, so this only
+ * covers the right pane (the "pick a thread" placeholder) - which carries no
+ * data on desktop and is hidden on mobile.
  */
 export default function ConversationsLoading() {
   return (
-    <div role="status" aria-busy="true" className="flex h-full bg-ss-page">
+    <div
+      role="status"
+      aria-busy="true"
+      className="hidden min-w-0 flex-1 bg-ss-page-alt lg:block"
+    >
       <span className="sr-only">Loading the inbox</span>
-      <SkInboxList />
-      <div className="hidden min-w-0 flex-1 lg:block" />
     </div>
   );
 }

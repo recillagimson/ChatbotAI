@@ -1201,3 +1201,39 @@ create index if not exists conversations_ext_user_idx
 -- Teardown:
 -- drop index if exists conversations_ext_user_idx;
 -- alter table public.conversations drop column if exists external_user_id;
+
+-- Workspace shell performance (2026-08-17-workspace-perf.sql) - the dashboard
+-- shell used to page every conversation into app memory just to count them.
+-- This index serves the shell/follow-up/tag-mix user_id + last_message_at range
+-- scans (the only user_id-leading index before was (user_id, tag)); the function
+-- returns one grouped row per chatbot so the shell gets its badge counts without
+-- pulling rows. SECURITY INVOKER keeps RLS scoping (and the "view as" overlay).
+create index if not exists conversations_user_last_msg_idx
+  on public.conversations (user_id, last_message_at desc);
+
+create or replace function public.workspace_conversation_rollup(p_user_id uuid)
+returns table (
+  chatbot_id uuid,
+  threads bigint,
+  needs_attention bigint,
+  platforms text[]
+)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select
+    c.chatbot_id,
+    count(*) as threads,
+    count(*) filter (where c.tag = 'needs_human') as needs_attention,
+    array_agg(distinct coalesce(c.platform, 'instagram')) as platforms
+  from public.conversations c
+  where c.user_id = p_user_id
+  group by c.chatbot_id
+$$;
+
+grant execute on function public.workspace_conversation_rollup(uuid) to authenticated;
+-- Teardown:
+-- drop function if exists public.workspace_conversation_rollup(uuid);
+-- drop index if exists conversations_user_last_msg_idx;
