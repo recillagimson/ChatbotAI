@@ -25,12 +25,44 @@ function bot(over: Partial<Chatbot> = {}): Chatbot {
 
 describe("buildSystemPrompt link flow", () => {
   it("includes the token instruction when enabled with a flow", () => {
-    const out = buildSystemPrompt(bot({ link_flow_enabled: true, link_flow_ns: "ig1" }), "KB");
+    const out = buildSystemPrompt(
+      bot({ link_flow_enabled: true, link_flow_ns: "ig1" }),
+      "KB",
+    );
     expect(out).toContain(DEFAULT_LINK_FLOW_TOKEN);
     expect(out).toContain("LINK DELIVERY");
   });
   it("omits it when disabled", () => {
-    const out = buildSystemPrompt(bot({ link_flow_enabled: false, link_flow_ns: "ig1" }), "KB");
+    const out = buildSystemPrompt(
+      bot({ link_flow_enabled: false, link_flow_ns: "ig1" }),
+      "KB",
+    );
     expect(out).not.toContain("LINK DELIVERY");
+  });
+  it("includes the token instruction in the legacy custom-prompt shape", () => {
+    const out = buildSystemPrompt(
+      bot({
+        persona_section: null,
+        system_prompt: "You are a custom persona.",
+        link_flow_enabled: true,
+        link_flow_ns: "ig1",
+      }),
+      "KB",
+    );
+    expect(out).toContain(DEFAULT_LINK_FLOW_TOKEN);
+    expect(out).toContain("LINK DELIVERY");
+  });
+  it("includes the token instruction in the default shape (no sections, no system_prompt)", () => {
+    const out = buildSystemPrompt(
+      bot({
+        persona_section: null,
+        system_prompt: null,
+        link_flow_enabled: true,
+        link_flow_ns: "ig1",
+      }),
+      "KB",
+    );
+    expect(out).toContain(DEFAULT_LINK_FLOW_TOKEN);
+    expect(out).toContain("LINK DELIVERY");
   });
 });

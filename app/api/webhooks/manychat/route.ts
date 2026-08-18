@@ -1248,7 +1248,7 @@ export async function POST(request: NextRequest) {
     // skip the extra per-image vision-describe call - the current turn still gets
     // the raw image as vision; we just don't persist a text description.
     synchronous = false
-  ): Promise<{ text: string; assets: OutboundAsset[]; tagWork?: Promise<void> } | null> => {
+  ): Promise<{ text: string; assets: OutboundAsset[]; tagWork?: Promise<void>; fireFlowNs: string | null } | null> => {
     // 6e. Process any inbound media (network): transcribe audio/video, read
     // documents, encode images for vision. Runs here (background for push
     // channels) so the fast-ack isn't blocked by downloads/transcription.

@@ -14,6 +14,7 @@ import { FollowupSequenceForm } from "@/components/dashboard/followup-sequence-f
 import { KeepRepliesToggle } from "@/components/dashboard/keep-replies-toggle";
 import { ModelControls } from "@/components/dashboard/model-controls";
 import { WelcomeForm } from "@/components/dashboard/welcome-form";
+import { LinkFlowForm } from "@/components/dashboard/link-flow-form";
 import { KeywordTriggersForm } from "@/components/dashboard/keyword-triggers-form";
 import { FollowupAssetManager } from "@/components/dashboard/followup-asset-manager";
 import { ChatbotEditForm } from "@/components/dashboard/chatbot-edit-form";
@@ -569,6 +570,14 @@ async function ChatbotTabPanel({ id, tab }: { id: string; tab: ChatbotTabKey }) 
                 className="mb-5"
               />
               <WelcomeForm chatbot={safeChatbot} />
+            </SsCard>
+            <SsCard className="p-[22px]">
+              <SsCardHead
+                title="Link via ManyChat"
+                description="Send your signup link through a ManyChat flow instead of a raw URL. The bot emits a token when it wants to send the link; useful on Instagram, which strips links from automated DMs."
+                className="mb-5"
+              />
+              <LinkFlowForm chatbot={safeChatbot} />
             </SsCard>
             <SsCard className="p-[22px]">
               <SsCardHead
