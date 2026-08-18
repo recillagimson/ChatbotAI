@@ -14,6 +14,7 @@ import {
   type OutboundAsset,
 } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
+import { planLinkFlow } from "@/lib/link-flow";
 import { splitIntoMessages } from "@/lib/message-split";
 import { buildKbBlock } from "@/lib/retrieval";
 import { renderTrainedResponses } from "@/lib/training";
@@ -1513,6 +1514,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 8a-link. Link-via-ManyChat: if the reply carries the link-flow token, strip it
+    // and remember which ManyChat flow to fire for this channel (fired in the delivery
+    // block below) instead of sending a raw URL. Runs for every reply (independent of
+    // ai_media_enabled); a no-op unless link_flow_enabled. Token is always stripped so
+    // it can never leak to the lead. On response channels the flow can't fire, but the
+    // token is still stripped here.
+    const linkPlan = planLinkFlow({ replyText, chatbot, platform });
+    replyText = linkPlan.cleanText;
+
     // 8b. Single-flight release (burst mode): atomically clear our claim. Zero
     // rows updated means a newer message claimed while we were generating -
     // discard this reply WITHOUT persisting or sending; the newer run's burst
@@ -1629,7 +1639,8 @@ export async function POST(request: NextRequest) {
       const userMessage = effectiveMessage;
       // A media-only reply has no text; give the classifier a stand-in so a
       // "just paid!" answered with media still gets detected.
-      const botReply = replyText || (assets.length ? "(sent media)" : "");
+      const botReply =
+        replyText || (assets.length ? "(sent media)" : linkPlan.fireFlowNs ? "(sent link)" : "");
       const today = new Date().toISOString().slice(0, 10); // UTC; lets the model resolve "Wednesday"
       // KICK OFF but don't await here - the classify OpenAI round-trip is a pure
       // side-effect (writes tag/confirmed_at/start_*) not needed to build or deliver
@@ -1706,7 +1717,7 @@ export async function POST(request: NextRequest) {
       })();
     }
 
-    return { text: replyText, assets, tagWork };
+    return { text: replyText, assets, tagWork, fireFlowNs: linkPlan.fireFlowNs };
   };
 
   // 10. Deliver. Two paths depending on whether the channel has a ManyChat send API:
@@ -1736,7 +1747,7 @@ export async function POST(request: NextRequest) {
       try {
         const result = await generateAndPersistReply(claimed ? "burst" : "single");
         if (!result) return; // stood down - a newer run owns the consolidated reply
-        const { text: replyText, assets } = result;
+        const { text: replyText, assets, fireFlowNs } = result;
         const bubbles = splitIntoMessages(replyText);
         // Per-chatbot: render Messenger links as tappable URL buttons (default off).
         const linkButtons = chatbot.link_buttons_enabled === true;
@@ -1787,6 +1798,12 @@ export async function POST(request: NextRequest) {
           // paced trickle was aborted mid-way (lead muted / owner took over / superseded).
           if (!aborted && assets.length > 0) {
             await sendManychatMedia({ subscriberId: body.subscriber_id, assets, apiKey, platform, linkButtons });
+          }
+          // Then fire the link-via-ManyChat flow if the reply asked to send the link.
+          // Same abort guard as media; sendManychatFlow retries and treats a client
+          // timeout as assume-delivered, so no raw-link fallback (avoids double sends).
+          if (!aborted && fireFlowNs) {
+            await sendManychatFlow({ subscriberId: body.subscriber_id, flowNs: fireFlowNs, apiKey });
           }
         } catch (err) {
           console.error("[manychat-webhook] push send failed", err);

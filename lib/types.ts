@@ -77,6 +77,12 @@ export interface Chatbot {
   welcome_flow_name: string | null;
   welcome_keywords: string[];
   welcome_use_keyword_triggers: boolean;  // ON = Welcome VM also fires on a keyword_triggers match
+  link_flow_enabled: boolean;        // ON = deliver the signup link via a ManyChat flow instead of a raw URL
+  link_flow_ns: string | null;       // Instagram/default flow namespace fired when the reply emits link_flow_token
+  link_flow_name: string | null;     // display label for the Instagram flow (from ManyChat getFlows); UI-only
+  link_flow_ns_fb: string | null;    // Messenger flow; falls back to link_flow_ns when unset
+  link_flow_name_fb: string | null;  // display label for the Messenger flow (from ManyChat getFlows); UI-only
+  link_flow_token: string | null;    // marker the AI emits to trigger the link flow; null/blank = "[[SEND_LINK]]"
   reply_debounce_seconds: number;          // per-bot quiet period (s) before replying; a rapid burst coalesces into ONE reply. Default 60; 0 = instant (still single-flight). App-clamped 0..120.
   created_at: string;
 }

@@ -6,6 +6,7 @@ import { HISTORY_TURNS } from "./memory";
 import { renderKnownFactsBlock } from "./lead-facts";
 import { HUMANIZER_STYLE } from "./humanizer";
 import { MODELS, resolveReplyModel } from "./model-tiers";
+import { linkFlowPromptBlock } from "@/lib/link-flow";
 
 let _anthropic: Anthropic | null = null;
 
@@ -148,6 +149,11 @@ AVAILABLE ASSETS:
 ${catalog}`
     : "";
 
+  // Link-via-ManyChat: when enabled with a flow, tell the model to emit the marker
+  // token instead of pasting the signup link (which Instagram strips). The webhook
+  // (lib/link-flow.ts) detects the token, strips it, and fires the ManyChat flow.
+  const linkFlowBlock = linkFlowPromptBlock(chatbot);
+
   // Scheduled start - the lead said they'll begin on a future date. Remember it
   // and don't re-pitch or pressure them to start now (see conversations.start_*).
   const startNote = scheduledStart?.note?.trim() || "";
@@ -178,6 +184,7 @@ ${catalog}`
     if (memoryBlock) parts.push(memoryBlock);
     if (scheduledBlock) parts.push(scheduledBlock);
     if (mediaBlock) parts.push(mediaBlock);
+    if (linkFlowBlock) parts.push(linkFlowBlock);
     parts.push(
       `KNOWLEDGE BASE (your single source of truth - never invent facts beyond this)\n${kbBlock}`
     );
@@ -196,7 +203,7 @@ ${catalog}`
   // bubble-split note.
   if (chatbot.system_prompt && chatbot.system_prompt.trim()) {
     return `${chatbot.system_prompt.trim()}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${knownFactsBlock ? `\n${knownFactsBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${knownFactsBlock ? `\n${knownFactsBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}${linkFlowBlock ? `\n${linkFlowBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
 ${kbBlock}${trainedBlock ? `\n\n${trainedBlock}` : ""}
 
@@ -218,7 +225,7 @@ ${chatbot.business_description || "(none provided)"}
 
 TONE
 ${TONE_GUIDES[chatbot.tone]}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${knownFactsBlock ? `\n${knownFactsBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${knownFactsBlock ? `\n${knownFactsBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}${linkFlowBlock ? `\n${linkFlowBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth - never invent facts beyond this)
 ${kbBlock}${trainedBlock ? `\n\n${trainedBlock}` : ""}
 

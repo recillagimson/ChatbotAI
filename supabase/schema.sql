@@ -771,6 +771,18 @@ alter table public.chatbots
   add column if not exists reply_model text,                                          -- admin-only per-bot reactive-reply model override; null/invalid = MODELS.reply() default (see 2026-08-03-admin-model-controls.sql)
   add column if not exists force_retrieval boolean not null default false;            -- admin-only: force KB vector retrieval regardless of size (needs an indexed KB); see 2026-08-03-admin-model-controls.sql
 
+-- Link via ManyChat: when link_flow_enabled and a flow is set, the reactive reply
+-- delegates the signup-link send to a native ManyChat flow instead of sending a raw
+-- URL, since Instagram silently strips links from automated DMs. Default off: an
+-- un-set-up bot behaves exactly as today. See 2026-08-18-link-flow.sql.
+alter table public.chatbots
+  add column if not exists link_flow_enabled boolean not null default false,  -- ON = deliver the signup link via a ManyChat flow instead of a raw URL
+  add column if not exists link_flow_ns text,                                 -- Instagram/default flow namespace fired when the reply emits link_flow_token
+  add column if not exists link_flow_name text,                               -- display label for the Instagram flow (from ManyChat getFlows); UI-only
+  add column if not exists link_flow_ns_fb text,                              -- Messenger flow; falls back to link_flow_ns when unset
+  add column if not exists link_flow_name_fb text,                           -- display label for the Messenger flow (from ManyChat getFlows); UI-only
+  add column if not exists link_flow_token text;                              -- marker the AI emits to trigger the link flow; null/blank = "[[SEND_LINK]]"
+
 -- Data-layer guard: reply_model + force_retrieval are admin-only (the UI hides
 -- them, but the "own chatbots" RLS policy alone would let an owner set them via
 -- devtools). Allows superadmins + service-role writes; blocks authenticated
