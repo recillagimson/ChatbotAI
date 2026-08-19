@@ -71,6 +71,14 @@ import {
 } from "@/lib/inbound-media";
 import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
 import { refreshKnownFacts } from "@/lib/lead-facts";
+import {
+  flowStateEnabled,
+  refreshFlowState,
+  renderFlowStateBlock,
+  extractLastQuestion,
+  countRecentAsks,
+  countStaleTurns,
+} from "@/lib/flow-state";
 import { splitBurst, combineBurstText, remainingDebounceMs, clampDebounceSeconds, shouldStandDown } from "@/lib/debounce";
 import { suppressionCarry, resolveExternalId } from "@/lib/returning-contact";
 import { flattenManychatContact } from "@/lib/manychat-contact";
@@ -1298,6 +1306,13 @@ export async function POST(request: NextRequest) {
     // transcript for the surviving run to fold in.
     let memorySummary: string | null = existing?.memory_summary ?? null;
     let confirmedAt: string | null = existing?.confirmed_at ?? null;
+    // Read through LOCALS, not `existing`, for everything the prompt consumes: the
+    // run-start snapshot predates the debounce sleep, during which the PREVIOUS turn's
+    // background extractors land. Injecting the pre-sleep snapshot is what makes the
+    // bot re-ask a question the last turn already recorded as answered.
+    let knownFacts: string | null = existing?.known_facts ?? null;
+    let flowState: string | null = existing?.flow_state ?? null;
+    let flowStateAt: string | null = existing?.flow_state_at ?? null;
     if (mode === "burst") {
       // Per-chatbot wait window (chatbots.reply_debounce_seconds, default 60s),
       // clamped 0..120. A MISSING column (pre-migration) reads as undefined →
@@ -1310,11 +1325,30 @@ export async function POST(request: NextRequest) {
           : undefined;
       const waitMs = remainingDebounceMs(performance.now() - startedAt, overrideMs);
       if (waitMs > 0) await sleep(waitMs);
+      // known_facts is unconditional (it had the same staleness bug memory_summary was
+      // already fixed for). flow_state is conditional: this select also gates supersede
+      // detection, so turning the flag on BEFORE the migration must not be able to
+      // error it. Migration first, flag second. The columns are built as a runtime
+      // string, so the row shape is declared explicitly rather than inferred.
+      const freshCols = flowStateEnabled(chatbot.id)
+        ? "status, user_muted_at, reply_claimed_for, memory_summary, confirmed_at, known_facts, flow_state, flow_state_at"
+        : "status, user_muted_at, reply_claimed_for, memory_summary, confirmed_at, known_facts";
       const { data: fresh } = await supabase
         .from("conversations")
-        .select("status, user_muted_at, reply_claimed_for, memory_summary, confirmed_at")
+        .select(freshCols)
         .eq("id", conversationId!)
-        .maybeSingle();
+        .maybeSingle()
+        .returns<{
+          status: string | null;
+          user_muted_at: string | null;
+          reply_claimed_for: string | null;
+          memory_summary: string | null;
+          confirmed_at: string | null;
+          known_facts: string | null;
+          // Absent from the row whenever the flag is off (see freshCols above).
+          flow_state?: string | null;
+          flow_state_at?: string | null;
+        } | null>();
       // Human takeover OR a self-service stop during the sleep → stand down and
       // release our claim (don't answer the burst after the lead muted).
       if (shouldStandDown(fresh)) {
@@ -1326,6 +1360,9 @@ export async function POST(request: NextRequest) {
       if (fresh && fresh.reply_claimed_for !== inboundId) return null;
       memorySummary = fresh?.memory_summary ?? memorySummary;
       confirmedAt = fresh?.confirmed_at ?? confirmedAt;
+      knownFacts = fresh?.known_facts ?? knownFacts;
+      flowState = fresh?.flow_state ?? flowState;
+      flowStateAt = fresh?.flow_state_at ?? flowStateAt;
     }
 
     // 7. Fetch recent history. Order desc + limit so we get the newest
@@ -1333,13 +1370,15 @@ export async function POST(request: NextRequest) {
     // Context older than this window is carried by the rolling memory summary.
     const { data: history } = await supabase
       .from("messages")
-      .select("id, role, content")
+      // created_at + media_url are for the flow-state Layer A computation below;
+      // splitBurst/combineBurstText read only id/role/content, so they are inert here.
+      .select("id, role, content, created_at, media_url")
       .eq("conversation_id", conversationId!)
       .order("created_at", { ascending: false })
       .limit(HISTORY_TURNS + 1)
-      .returns<Pick<Message, "id" | "role" | "content">[]>();
+      .returns<Pick<Message, "id" | "role" | "content" | "created_at" | "media_url">[]>();
 
-    let priorHistory: Pick<Message, "id" | "role" | "content">[];
+    let priorHistory: Pick<Message, "id" | "role" | "content" | "created_at" | "media_url">[];
     if (mode === "burst") {
       // The leading run of unanswered user rows (this message + any that piled
       // up around it, including rate-limited ones that never got their own run)
@@ -1423,6 +1462,34 @@ export async function POST(request: NextRequest) {
       userMessage: effectiveMessage,
     });
 
+    // 8b. Flow state (the question ledger). Layer A is pure and computed from the
+    // persisted transcript on THIS turn, so it can never be stale: the exact question
+    // the bot last sent, and how many of its last 3 messages carried it. Layer B (the
+    // stored ledger) is one turn behind by construction and says so in its own header.
+    // renderFlowStateBlock returns "" when the feature is off for this bot, so every
+    // line below is inert until the flag is set.
+    const assistantTexts = priorHistory
+      .filter((m) => m.role !== "user" && !m.media_url)
+      .map((m) => m.content)
+      .reverse(); // newest first
+    const lastQuestion = assistantTexts[0] ? extractLastQuestion(assistantTexts[0]) : null;
+    const askCount = lastQuestion ? countRecentAsks(assistantTexts.slice(0, 3), lastQuestion) : 0;
+    // Counted over the WHOLE window, not priorHistory: the message being answered is
+    // itself newer than the stored ledger, and leaving it out would under-report the
+    // block's age by one. countStaleTurns owns the row filter so this count and
+    // refreshFlowState's fold window stay the same set of rows (outbound asset rows
+    // are in neither - they are written after the assistant text row in step 9, so
+    // counting them aged the ledger past FLOW_STATE_MAX_STALE_TURNS on the very turn
+    // it was written).
+    const staleTurns = countStaleTurns(history ?? [], flowStateAt);
+    const flowStateBlock = renderFlowStateBlock({
+      chatbotId: chatbot.id,
+      stored: flowState,
+      staleTurns,
+      lastQuestion,
+      askCount,
+    });
+
     let replyText = "Thanks for the message, a teammate will follow up shortly.";
     let tokens = 0;
     try {
@@ -1447,9 +1514,11 @@ export async function POST(request: NextRequest) {
         // Owner-trained scenario corrections (Bot Trainer). chatbot is select("*").
         trainedResponses: renderTrainedResponses(chatbot.training_pairs),
         // Durable "already told you" facts so the bot never re-asks the lead's
-        // score/goals/etc. Run-start snapshot (existing is select("*")); the
-        // background refresh below keeps it current for the next turn.
-        knownFacts: existing?.known_facts ?? null,
+        // score/goals/etc. Read from the post-debounce local, not the run-start
+        // snapshot, so a refresh that landed during our own sleep is honoured.
+        knownFacts,
+        // Which questions this bot has already asked and what is still owed.
+        flowStateBlock,
       });
       if (text) {
         replyText = text;
@@ -1747,6 +1816,18 @@ export async function POST(request: NextRequest) {
       try {
         const result = await generateAndPersistReply(claimed ? "burst" : "single");
         if (!result) return; // stood down - a newer run owns the consolidated reply
+        // Kick the state refreshes NOW so they overlap the paced trickle instead of
+        // queueing behind it. Pacing is budgeted to 280s of a 300s maxDuration
+        // (BUBBLE_PACING_BUDGET_MS / PACING_DEADLINE_MS in lib/manychat.ts), so a job
+        // appended after the push is the platform's first casualty on exactly the long
+        // multi-bubble conversations these layers exist for. None of them depend on
+        // delivery - the assistant row is already persisted. allSettled so one
+        // rejection can't skip the other two.
+        const stateJobs = Promise.allSettled([
+          refreshConversationMemory({ supabase, conversationId: conversationId! }),
+          refreshKnownFacts({ supabase, conversationId: conversationId! }),
+          refreshFlowState({ supabase, conversationId: conversationId!, chatbotId: chatbot.id }),
+        ]);
         const { text: replyText, assets, fireFlowNs } = result;
         const bubbles = splitIntoMessages(replyText);
         // Per-chatbot: render Messenger links as tappable URL buttons (default off).
@@ -1812,10 +1893,10 @@ export async function POST(request: NextRequest) {
         // Auto-tag ran concurrently with the push (kicked off in step 9a); await it
         // here so the tag/confirm write completes within the after() window. Never throws.
         if (result.tagWork) await result.tagWork;
-        // Refresh the rolling memory summary + the durable known-facts list for the
-        // next reply (both best-effort, so the bot doesn't re-ask what's now recorded).
-        await refreshConversationMemory({ supabase, conversationId: conversationId! });
-        await refreshKnownFacts({ supabase, conversationId: conversationId! });
+        // Collect the state refreshes kicked off above (rolling memory summary, known
+        // facts, question ledger) so they complete inside the after() window. All three
+        // are best-effort and never throw, so the bot doesn't re-ask what's now recorded.
+        await stateJobs;
       } catch (err) {
         // after() runs detached - swallow so nothing crashes the background task.
         console.error("[manychat-webhook] background processing failed", err);
@@ -1847,8 +1928,11 @@ export async function POST(request: NextRequest) {
   // Refresh the rolling memory summary + known-facts list in the background (don't
   // block the reply).
   after(async () => {
-    await refreshConversationMemory({ supabase, conversationId: conversationId! });
-    await refreshKnownFacts({ supabase, conversationId: conversationId! });
+    await Promise.allSettled([
+      refreshConversationMemory({ supabase, conversationId: conversationId! }),
+      refreshKnownFacts({ supabase, conversationId: conversationId! }),
+      refreshFlowState({ supabase, conversationId: conversationId!, chatbotId: chatbot.id }),
+    ]);
   });
   return manychatReply(replyText, { ai_delivery: "response", platform });
 }

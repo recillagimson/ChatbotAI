@@ -1190,6 +1190,20 @@ alter table public.conversations
 -- Teardown:
 -- alter table public.conversations drop column if exists known_facts;
 
+-- Question ledger (2026-08-19-flow-state.sql) - a compact, domain-neutral record of
+-- which questions THIS business has asked this lead, which the lead actually answered,
+-- and which are still owed; re-derived after each reply (lib/flow-state.ts) and injected
+-- next to known_facts so the model stops re-deriving its position in a scripted flow
+-- from raw prose. flow_state_at is the created_at of the newest message folded in - a
+-- freshness stamp + CAS token, NOT a "skip these messages" watermark.
+alter table public.conversations
+  add column if not exists flow_state text;
+alter table public.conversations
+  add column if not exists flow_state_at timestamptz;
+-- Teardown:
+-- alter table public.conversations drop column if exists flow_state;
+-- alter table public.conversations drop column if exists flow_state_at;
+
 -- Conversation quality tag (2026-07-22-quality-tag.sql) - a SEPARATE, owner-set
 -- quality rating, ORTHOGONAL to the funnel `tag`. Manual only. Null = unrated.
 alter table public.conversations

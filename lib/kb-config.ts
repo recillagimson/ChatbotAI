@@ -5,8 +5,16 @@
 /** Full-context block soft cap (~12k tokens). Below this, inject everything. */
 export const KB_CHAR_BUDGET = Number(process.env.KB_CHAR_BUDGET ?? 48_000);
 
-/** Switch INTO retrieval only above this (dead-band vs KB_CHAR_BUDGET = hysteresis). */
-export const RETRIEVAL_CUTOVER = Number(process.env.RETRIEVAL_CUTOVER ?? 64_000);
+/** Switch INTO retrieval only above this (dead-band vs KB_CHAR_BUDGET = hysteresis).
+ *  INVARIANT: RETRIEVAL_CUTOVER >= KB_CHAR_BUDGET, or the dead band INVERTS and a bot
+ *  sized between them flips mode on EVERY reply (whole KB one turn, a 14k slice the
+ *  next) - which is precisely the input instability that makes a prose-encoded flow
+ *  skip steps, plus a prompt-cache bust and an extra DB write per reply. Clamped here
+ *  so env can never break it; no behavior change at the default values. */
+export const RETRIEVAL_CUTOVER = Math.max(
+  Number(process.env.RETRIEVAL_CUTOVER ?? 64_000),
+  KB_CHAR_BUDGET
+);
 
 /** Cap on the assembled retrieved-chunk block (chars). */
 export const RETRIEVAL_CHAR_BUDGET = Number(process.env.RETRIEVAL_CHAR_BUDGET ?? 14_000);

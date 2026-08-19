@@ -53,6 +53,7 @@ export const MODELS = {
   reply: () => resolveModel("reply", "OPENAI_DM_MODEL"),
   memory: () => resolveModel("helper", "MEMORY_SUMMARY_MODEL", "OPENAI_DM_MODEL"),
   leadFacts: () => resolveModel("helper", "LEAD_FACTS_MODEL", "OPENAI_DM_MODEL"),
+  flowState: () => resolveModel("helper", "FLOW_STATE_MODEL", "OPENAI_DM_MODEL"),
   vision: () => resolveModel("helper", "OPENAI_VISION_MODEL", "OPENAI_DM_MODEL"),
   change: () => resolveModel("helper", "OPENAI_CHANGE_MODEL"),
 } as const;

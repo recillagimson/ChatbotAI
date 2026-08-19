@@ -207,6 +207,8 @@ export interface Conversation {
   memory_summary: string | null;     // rolling summary of turns older than the verbatim window
   memory_summary_at: string | null;  // created_at watermark of the newest message folded into the summary
   known_facts: string | null;        // durable compact list of what the LEAD already told/showed; injected with a "never re-ask" rule
+  flow_state: string | null;         // question ledger: one "status|asks|label|answer" line per question the BUSINESS asked (lib/flow-state.ts)
+  flow_state_at: string | null;      // created_at of the newest message folded into flow_state (freshness stamp + CAS token, NOT a watermark)
   created_at: string;
 }
 

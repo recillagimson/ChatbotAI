@@ -100,7 +100,12 @@ export function buildSystemPrompt(
   turnInstruction?: string | null,
   scheduledStart?: { note: string | null; on: string | null } | null,
   trainedResponses?: string | null,
-  knownFacts?: string | null
+  knownFacts?: string | null,
+  // Trailing options bag. buildSystemPrompt already carries 9 positionals and both
+  // tests/link-flow-prompt.spec.ts and scripts/test-systemprompt.ts call it
+  // positionally, so a 10th would be a wrong-order regression waiting to happen.
+  // EVERY future block goes in here instead.
+  extras?: { flowStateBlock?: string | null }
 ): string {
   const persona = chatbot.persona_section?.trim() || "";
   const offers = chatbot.offers_section?.trim() || "";
@@ -120,6 +125,16 @@ export function buildSystemPrompt(
   // the background extractor (lib/lead-facts.ts) has something concrete. This is the
   // load-bearing fix for the bot re-asking answered questions.
   const knownFactsBlock = renderKnownFactsBlock(knownFacts);
+
+  // Flow state - the question ledger (which questions THIS bot has already asked this
+  // lead, which they answered, and the exact question it sent last turn). Arrives
+  // PRE-RENDERED: half of it is computed from the live transcript on the current turn,
+  // which only the webhook has, and rendering upstream keeps the feature flag in one
+  // choke point (renderFlowStateBlock) instead of adding an import edge here. Sits
+  // immediately after knownFactsBlock because the two are complements - facts = what we
+  // know about them, ledger = what we have asked and still owe - and above
+  // OFFERS/REBUTTALS/MEMORY/KB so no prose below can re-open a question it closed.
+  const flowStateBlock = extras?.flowStateBlock?.trim() || "";
 
   // Continuity - when there are prior messages, force the bot to CONTINUE the
   // conversation instead of restarting the intro/greeting or re-asking answered
@@ -178,6 +193,7 @@ ${catalog}`
     );
     if (continuityBlock) parts.push(continuityBlock);
     if (knownFactsBlock) parts.push(knownFactsBlock);
+    if (flowStateBlock) parts.push(flowStateBlock);
     if (instructionBlock) parts.push(instructionBlock);
     if (offers) parts.push(`OFFERS, SERVICES & LINKS\n${offers}`);
     if (rebuttals) parts.push(`REBUTTALS & FAQ HANDLING\n${rebuttals}`);
@@ -203,7 +219,7 @@ ${catalog}`
   // bubble-split note.
   if (chatbot.system_prompt && chatbot.system_prompt.trim()) {
     return `${chatbot.system_prompt.trim()}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${knownFactsBlock ? `\n${knownFactsBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}${linkFlowBlock ? `\n${linkFlowBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${knownFactsBlock ? `\n${knownFactsBlock}\n` : ""}${flowStateBlock ? `\n${flowStateBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}${linkFlowBlock ? `\n${linkFlowBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth, never invent facts beyond this)
 ${kbBlock}${trainedBlock ? `\n\n${trainedBlock}` : ""}
 
@@ -225,7 +241,7 @@ ${chatbot.business_description || "(none provided)"}
 
 TONE
 ${TONE_GUIDES[chatbot.tone]}
-${continuityBlock ? `\n${continuityBlock}\n` : ""}${knownFactsBlock ? `\n${knownFactsBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}${linkFlowBlock ? `\n${linkFlowBlock}\n` : ""}
+${continuityBlock ? `\n${continuityBlock}\n` : ""}${knownFactsBlock ? `\n${knownFactsBlock}\n` : ""}${flowStateBlock ? `\n${flowStateBlock}\n` : ""}${instructionBlock ? `\n${instructionBlock}\n` : ""}${memoryBlock ? `\n${memoryBlock}\n` : ""}${scheduledBlock ? `\n${scheduledBlock}\n` : ""}${mediaBlock ? `\n${mediaBlock}\n` : ""}${linkFlowBlock ? `\n${linkFlowBlock}\n` : ""}
 KNOWLEDGE BASE (your single source of truth - never invent facts beyond this)
 ${kbBlock}${trainedBlock ? `\n\n${trainedBlock}` : ""}
 
@@ -263,6 +279,11 @@ export async function generateReply(opts: {
   // Durable list of what the lead already told/showed (conversations.known_facts);
   // injected with a hard "never re-ask these" rule so the bot stops re-asking.
   knownFacts?: string | null;
+  // Pre-rendered FLOW STATE block (lib/flow-state.ts renderFlowStateBlock output).
+  // Empty/absent = no block. Rendered upstream because half of it (the last question
+  // actually sent + how many recent messages repeated it) is computed from the live
+  // transcript on THIS turn; the feature flag is checked inside the renderer.
+  flowStateBlock?: string | null;
   // When true, ignore the per-chatbot reply_model override and use the reply-tier
   // default (MODELS.reply()). The override is a REACTIVE-reply lever only; the
   // follow-up drip (generateFollowupText) sets this so it never inherits it.
@@ -280,7 +301,8 @@ export async function generateReply(opts: {
     opts.turnInstruction,
     opts.scheduledStart,
     opts.trainedResponses ?? null,
-    opts.knownFacts ?? null
+    opts.knownFacts ?? null,
+    { flowStateBlock: opts.flowStateBlock ?? null }
   );
   const images = opts.images ?? [];
 

@@ -56,6 +56,11 @@ export const FRESH_CONVERSATION_RESET: Record<string, unknown> = {
   memory_summary: null,
   memory_summary_at: null,
   known_facts: null,
+  // Layer 4: the question ledger (which questions this bot already asked this lead).
+  // Same rule as the three memory layers above - it is fed back into the prompt, so a
+  // reset thread must not resume mid-flow with "you already told me" for a wiped chat.
+  flow_state: null,
+  flow_state_at: null,
   extraction_attempts: 0,
   // Counted separately from the all-tier total because the graceful stand-down
   // fires on the Nth BLATANT attempt. Left stale, a reset thread carrying one

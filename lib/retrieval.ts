@@ -65,15 +65,49 @@ export function assembledSize(entries: KbEntryLite[]): number {
   );
 }
 
+/**
+ * Opt-in hard cap on a single oversized FIRST entry. Read at CALL time so it can be
+ * flipped per environment (and toggled in a test) without a rebuild.
+ *
+ * DEFAULT OFF, deliberately. Entries are fetched oldest-first and decideMode returns
+ * "full" whenever embeddings are off or anything is unindexed, so for any bot whose
+ * OLDEST kb entry is one big pasted document (the UI allows 100k chars in a single
+ * field) turning this on removes tens of thousands of chars of knowledge that reached
+ * the model yesterday. That is a real content change for live bots, not a bug fix, so
+ * it does not ride along with an unrelated rollout: check the actual per-entry sizes
+ * for the bots you serve, then set KB_HARD_TRUNCATE_ENTRIES=true. With it off the
+ * emitted block is byte-identical to the long-standing behaviour; the console.warn
+ * below fires either way, so the situation is diagnosable before anyone flips it.
+ */
+export function kbHardTruncateEnabled(): boolean {
+  return process.env.KB_HARD_TRUNCATE_ENTRIES === "true";
+}
+
 /** Full-context KB block, truncated at KB_CHAR_BUDGET (moved from anthropic.ts). */
 export function buildFullContextBlock(entries: KbEntryLite[]): string {
   if (entries.length === 0) return NO_KB;
   const parts: string[] = [];
   let used = 0;
   let truncated = false;
+  let oversizedFirst = false;
   for (const e of entries) {
     const t = entryText(e);
-    if (parts.length > 0 && used + t.length > KB_CHAR_BUDGET) {
+    if (used + t.length > KB_CHAR_BUDGET) {
+      // The FIRST entry bypasses the cap: one pasted 100k-char document (the
+      // per-entry write ceiling) is injected whole rather than cut mid-sentence,
+      // because for a single-document KB that cut silently deletes most of the
+      // bot's knowledge. KB_HARD_TRUNCATE_ENTRIES=true opts into bounding it.
+      if (parts.length === 0) {
+        oversizedFirst = true;
+        if (kbHardTruncateEnabled()) {
+          parts.push(t.slice(0, KB_CHAR_BUDGET));
+          used = KB_CHAR_BUDGET;
+        } else {
+          parts.push(t);
+          used += t.length;
+          continue; // keep packing; later entries still respect the budget
+        }
+      }
       truncated = true;
       break;
     }
@@ -83,6 +117,23 @@ export function buildFullContextBlock(entries: KbEntryLite[]): string {
   let block = parts.join(SEP);
   if (truncated) {
     block += `${SEP}…(knowledge base truncated - some entries were omitted to stay within limits)`;
+  }
+  // The only owner-visible signal today is a line of text addressed to the MODEL.
+  // Log the real numbers so "my bot forgot the thing I added last" is diagnosable -
+  // including the over-budget-but-untruncated case, which emits no notice at all.
+  if (truncated || oversizedFirst) {
+    console.warn(
+      "[retrieval] KB over budget: %d of %d chars reaching the model (%d of %d entries)%s",
+      used,
+      assembledSize(entries),
+      parts.length,
+      entries.length,
+      oversizedFirst
+        ? kbHardTruncateEnabled()
+          ? " (first entry hard-truncated)"
+          : " (first entry exceeds the budget on its own and was passed through whole)"
+        : ""
+    );
   }
   return block;
 }
@@ -108,13 +159,25 @@ export function decideMode(opts: {
   return opts.size > RETRIEVAL_CUTOVER ? "retrieval" : "full";
 }
 
-/** Build the retrieval query from the last turns + current message. */
+/**
+ * Build the retrieval query from the last turns + current message.
+ *
+ * The CURRENT message is budgeted first and the history tail is truncated from its
+ * end. The old version appended userMessage last and sliced from the front, so a
+ * single prior message carrying extracted document text (up to MAX_DOC_CHARS = 20k,
+ * see lib/inbound-media.ts) ate the whole 4000-char budget and the live question was
+ * cut out completely - the embedding was of the attachment, not of what they asked.
+ * Invisible in logs: mode=retrieval, chunks>0, topSimilarity looks healthy.
+ */
 export function buildQueryString(
   history: { role: string; content: string }[],
   userMessage: string
 ): string {
-  const tail = history.slice(-2).map((m) => m.content);
-  return [...tail, userMessage].join("\n").slice(0, 4000);
+  const cur = userMessage.slice(0, 2000);
+  const room = Math.max(0, 4000 - cur.length - 1);
+  const tail = history.slice(-2).map((m) => m.content).join("\n");
+  if (room === 0 || !tail) return cur;
+  return `${tail.slice(-room)}\n${cur}`;
 }
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -139,6 +202,14 @@ export async function indexEntry(
   entry: { id: string; chatbot_id: string; user_id: string; content: string }
 ): Promise<{ indexed: boolean; chunks: number }> {
   if (!isEmbeddingsEnabled()) return { indexed: false, chunks: 0 };
+
+  // Flip the flag DOWN before touching the chunks. The embed call below can take long
+  // enough to be killed by the calling route's maxDuration, and if that happens after
+  // the delete the entry would be left indexed=true with zero chunks - permanently
+  // invisible to retrieval, with hasUnindexed false so decideMode never falls back to
+  // full-context to compensate. Failing this way round leaves indexed=false, which
+  // decideMode already treats as "serve full-context". Degrades in the safe direction.
+  await supabase.from("knowledge_base").update({ indexed: false }).eq("id", entry.id);
 
   await supabase.from("kb_chunks").delete().eq("knowledge_base_id", entry.id);
 
@@ -177,6 +248,29 @@ export interface KbBlockResult {
   mode: "full" | "retrieval" | "fallback";
   chunks: number;
   topSimilarity: number | null;
+}
+
+interface KbHit {
+  content: string;
+  knowledge_base_id: string;
+  similarity: number;
+}
+
+/** Pack retrieved chunks into a KB block, bounded by RETRIEVAL_CHAR_BUDGET. Shared by
+ *  the normal path and the zero-hit relaxed pass so the two can never drift. */
+function packHits(
+  hits: KbHit[],
+  titleById: Map<string, string>
+): { block: string; count: number } {
+  const parts: string[] = [];
+  let used = 0;
+  for (const h of hits) {
+    const piece = `### ${titleById.get(h.knowledge_base_id) ?? "Knowledge"}\n${h.content}`;
+    if (parts.length > 0 && used + piece.length > RETRIEVAL_CHAR_BUDGET) break;
+    parts.push(piece);
+    used += piece.length;
+  }
+  return { block: parts.join("\n\n---\n\n"), count: parts.length };
 }
 
 /**
@@ -237,35 +331,51 @@ export async function buildKbBlock(opts: {
       p_model: OPENAI_EMBEDDING_MODEL,
     });
     if (error) throw new Error(error.message);
-    const hits = (matches ?? []) as {
-      content: string;
-      knowledge_base_id: string;
-      similarity: number;
-    }[];
+    const hits = (matches ?? []) as KbHit[];
+    const titleById = new Map(entries.map((e) => [e.id, e.title]));
     if (hits.length === 0) {
-      // Nothing cleared the similarity floor. For a genuinely large KB (retrieval
-      // engaged by size) an empty block → the model defers, as intended. But when
-      // retrieval was FORCED by the admin flag on a normal/small KB, deferring
-      // would drop knowledge the bot actually has (a vague query can miss every
-      // chunk), so fall back to full-context instead of returning nothing.
+      // Zero hits is a property of the QUERY, not of the KB: a 2-4 char opener ("ok",
+      // "hi", a bare trigger word) embeds to a low-information vector that clears the
+      // floor against nothing, and that is equally true at 45k or 165k chars. The old
+      // branch keyed the safety fallback off force_retrieval - an admin token-cost
+      // lever - and otherwise returned "", which lands in the prompt as a bare
+      // "KNOWLEDGE BASE" heading with nothing under it, immediately followed by "never
+      // invent facts beyond this". That is exactly the turn a scripted flow opens on.
+      //
+      // 1) Relaxed second pass on the SAME vector (no new embedding call): no
+      //    similarity floor, top 3, still bounded by RETRIEVAL_CHAR_BUDGET.
+      const { data: relaxed } = await supabase.rpc("match_kb_chunks", {
+        p_chatbot_id: chatbot.id,
+        p_query: JSON.stringify(vec),
+        p_top_k: 3,
+        p_min_similarity: 0,
+        p_model: OPENAI_EMBEDDING_MODEL,
+      });
+      const relaxedHits = (relaxed ?? []) as KbHit[];
+      if (relaxedHits.length > 0) {
+        const packed = packHits(relaxedHits, titleById);
+        return {
+          block: packed.block,
+          mode: "retrieval",
+          chunks: packed.count,
+          topSimilarity: relaxedHits[0].similarity,
+        };
+      }
+      // 2) Genuinely nothing matched at any threshold (e.g. an OPENAI_EMBEDDING_MODEL
+      //    change orphaned every chunk). force_retrieval keeps its full-context
+      //    fallback; everyone else gets the honest NO_KB sentinel, so isEmptyKbBlock
+      //    stays true and the model is told to politely defer instead of being handed
+      //    an empty heading. `block: ""` is no longer reachable on any path.
       if (chatbot.force_retrieval) {
         return { block: buildFullContextBlock(entries), mode: "fallback", chunks: 0, topSimilarity: null };
       }
-      return { block: "", mode: "retrieval", chunks: 0, topSimilarity: null };
+      return { block: NO_KB, mode: "retrieval", chunks: 0, topSimilarity: null };
     }
-    const titleById = new Map(entries.map((e) => [e.id, e.title]));
-    const parts: string[] = [];
-    let used = 0;
-    for (const h of hits) {
-      const piece = `### ${titleById.get(h.knowledge_base_id) ?? "Knowledge"}\n${h.content}`;
-      if (parts.length > 0 && used + piece.length > RETRIEVAL_CHAR_BUDGET) break;
-      parts.push(piece);
-      used += piece.length;
-    }
+    const packed = packHits(hits, titleById);
     return {
-      block: parts.join("\n\n---\n\n"),
+      block: packed.block,
       mode: "retrieval",
-      chunks: parts.length,
+      chunks: packed.count,
       topSimilarity: hits[0].similarity,
     };
   } catch (err) {

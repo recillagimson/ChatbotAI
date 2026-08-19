@@ -41,6 +41,12 @@ export const SUMMARY_TRIGGER_TURNS = Number(process.env.SUMMARY_TRIGGER_TURNS ??
 export const SUMMARY_MAX_WORDS = 220;
 /** Model for the (cheap, background) summarizer. */
 export const MEMORY_SUMMARY_MODEL = MODELS.memory();
+/** Most out-of-window messages folded into ONE summarizer call. A null watermark (a
+ *  conversation predating the column) or one stalled by weeks of muted/paused inbound
+ *  would otherwise fold a whole backlog into a single 400-token call - the call most
+ *  likely to fail, on the conversation that can least afford it. Batching lets
+ *  successive turns catch up instead. */
+export const SUMMARY_BATCH_MAX = Number(process.env.SUMMARY_BATCH_MAX ?? 60);
 
 export interface SummaryMessage {
   role: string;
@@ -113,14 +119,22 @@ export function buildSummaryPrompt(
 
 /**
  * Produce the next running summary from the previous one + the new messages.
- * Cheap, single call. Never throws - on any failure it returns the previous
- * summary unchanged so the caller can proceed.
+ * Cheap, single call. Never throws.
+ *
+ * Returns NULL on failure (throw, timeout, or an empty completion) rather than the
+ * previous summary. The caller advances a created_at watermark on success, and a
+ * failure that looked like a no-op used to advance it anyway: the messages that had
+ * just scrolled out of the verbatim window ended up below the watermark, absent from
+ * the summary, and out of the window - gone from every memory layer, with no recovery
+ * short of a manual reset. An empty completion is not theoretical here: maxTokens 400
+ * is shared with reasoning tokens on the gpt-5.x default, so a long fold-in can come
+ * back with content "" and no error at all.
  */
 export async function summarizeConversation(
   prevSummary: string | null,
   newMsgs: Pick<SummaryMessage, "role" | "content">[]
-): Promise<string> {
-  if (newMsgs.length === 0) return prevSummary ?? "";
+): Promise<string | null> {
+  if (newMsgs.length === 0) return null;
   try {
     const { system, user } = buildSummaryPrompt(prevSummary, newMsgs);
     const { text } = await openaiChat({
@@ -129,10 +143,10 @@ export async function summarizeConversation(
       messages: [{ role: "user", content: user }],
       maxTokens: 400,
     });
-    return text.trim() || (prevSummary ?? "");
+    return text.trim() || null;
   } catch (err) {
     console.error("[memory] summarize failed", err);
-    return prevSummary ?? "";
+    return null;
   }
 }
 
@@ -180,11 +194,15 @@ export async function refreshConversationMemory(ctx: {
       .lt("created_at", cutoff)
       .order("created_at", { ascending: true });
     if (watermark) q = q.gt("created_at", watermark);
-    const { data: older } = await q.returns<SummaryMessage[]>();
+    const { data: older } = await q.limit(SUMMARY_BATCH_MAX).returns<SummaryMessage[]>();
     if (!older || older.length === 0) return;
 
     const prev = conv?.memory_summary ?? null;
     const next = await summarizeConversation(prev, older);
+    // A failed summarize must NOT advance the watermark - `older` would drop below it
+    // and become invisible to every future refresh. Skip the write; the same batch is
+    // re-folded on the next turn.
+    if (next === null) return;
     // Compare-and-swap on the summary we read, so a reset landing between that read
     // and this write can't have the memory it cleared restored underneath it. Same
     // guard and reasoning as refreshKnownFacts in lib/lead-facts.ts.

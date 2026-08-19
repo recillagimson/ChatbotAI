@@ -73,9 +73,20 @@ export function normalizeFacts(raw: string | null | undefined): string {
     lines.push(`- ${line}`);
     if (lines.length >= LEAD_FACTS_MAX_LINES) break;
   }
-  let out = lines.join("\n");
-  if (out.length > LEAD_FACTS_MAX_CHARS) out = out.slice(0, LEAD_FACTS_MAX_CHARS).trimEnd();
-  return out;
+  // Cap on a LINE boundary, never mid-line. A raw slice at LEAD_FACTS_MAX_CHARS turns
+  // "- Their current score is 580 and they want to buy a house in Q1" into "- Their
+  // current score is 5" - and that mangled half-fact is then pinned as permanent truth
+  // under the block's "NEVER ask for any of these again" rule, so the question that
+  // would have corrected it never gets asked. Worse than having no fact at all.
+  const kept: string[] = [];
+  let total = 0;
+  for (const l of lines) {
+    const add = kept.length ? l.length + 1 : l.length;
+    if (total + add > LEAD_FACTS_MAX_CHARS) break;
+    kept.push(l);
+    total += add;
+  }
+  return kept.join("\n");
 }
 
 /**
@@ -117,6 +128,11 @@ export function buildFactsPrompt(
  * re-asking answered questions.
  */
 export function renderKnownFactsBlock(facts: string | null | undefined): string {
+  // The flag gates the RENDER side too, not just the writer. Without this,
+  // LEAD_FACTS_ENABLED=false freezes the stored facts and keeps injecting them
+  // forever under "NEVER ask for any of these again" - i.e. the documented kill
+  // switch does not roll anything back.
+  if (!LEAD_FACTS_ENABLED) return "";
   const f = (facts ?? "").trim();
   if (!f) return "";
   return (
@@ -176,6 +192,16 @@ export async function refreshKnownFacts(ctx: {
       .from("messages")
       .select("role, content, created_at")
       .eq("conversation_id", conversationId)
+      // Drop OUTBOUND asset rows only: one numbered proof set writes up to
+      // MAX_AI_ASSETS (default 6) assistant "(sent image: key)" rows, which would
+      // otherwise fill most of this window with rows carrying nothing the lead said.
+      // The lead's OWN media rows must stay: the webhook backfills that same row's
+      // content with the transcript / document text / image description (see the
+      // media backfill in app/api/webhooks/manychat/route.ts), and buildFactsPrompt
+      // above is written to mine exactly those rows ('Content the lead sent as a
+      // photo, voice note, or document appears labelled "[Image]:" ...'). Filtering
+      // them out would delete the evidence layer this module exists to capture.
+      .or("media_url.is.null,role.eq.user")
       .order("created_at", { ascending: false })
       .limit(HISTORY_TURNS)
       .returns<{ role: string; content: string; created_at: string }[]>();

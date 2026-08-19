@@ -56,7 +56,7 @@ test.describe("conversation memory (real OpenAI)", () => {
       { role: "user", content: "my email is maria@example.com if you need it" },
     ];
 
-    const summary = (await summarizeConversation(null, msgs)).toLowerCase();
+    const summary = ((await summarizeConversation(null, msgs)) ?? "").toLowerCase();
     console.log("[memory] summary:", summary);
     expect(summary).toContain("maria");
     expect(summary).toContain("50"); // $50,000 funding goal
