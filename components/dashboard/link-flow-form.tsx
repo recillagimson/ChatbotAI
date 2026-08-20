@@ -131,7 +131,19 @@ export function LinkFlowForm({ chatbot }: { chatbot: Chatbot }) {
     const supabase = createClient();
     const { error } = await supabase
       .from("chatbots")
-      .update({ link_flow_enabled: enabled, link_flows: clean })
+      .update({
+        link_flow_enabled: enabled,
+        link_flows: clean,
+        // Retire the legacy single-link columns once the owner saves through this
+        // list, so link_flows is the single source of truth and an old single link
+        // never re-seeds when the list is empty. resolveLinkFlows still reads these as
+        // a one-time fallback for bots that have not yet been saved through this form.
+        link_flow_ns: null,
+        link_flow_name: null,
+        link_flow_ns_fb: null,
+        link_flow_name_fb: null,
+        link_flow_token: null,
+      })
       .eq("id", chatbot.id);
     setSaving(false);
     if (error) {
