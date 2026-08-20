@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_LINK_FLOW_TOKEN,
+  linkSentMarker,
   resolveLinkFlowToken,
   selectLinkFlow,
   planLinkFlow,
@@ -54,14 +55,39 @@ describe("selectLinkFlow", () => {
   });
 });
 
+describe("linkSentMarker + fired", () => {
+  it("reports each fired flow with its channel-correct name for the marker row", () => {
+    const bot = cfg({
+      link_flow_enabled: true,
+      link_flow_ns: "ig1",
+      link_flow_name: "Skool signup",
+      link_flow_ns_fb: "fb1",
+      link_flow_name_fb: "Skool signup FB",
+      link_flow_token: "[[skool_link]]",
+    });
+    const ig = planLinkFlow({ replyText: "here\n[[skool_link]]", chatbot: bot, platform: "instagram" });
+    expect(ig.fired).toEqual([{ ns: "ig1", name: "Skool signup" }]);
+    const fb = planLinkFlow({ replyText: "here\n[[skool_link]]", chatbot: bot, platform: "messenger" });
+    expect(fb.fired).toEqual([{ ns: "fb1", name: "Skool signup FB" }]);
+    // No token -> nothing fired, so no marker row gets written.
+    const none = planLinkFlow({ replyText: "no token", chatbot: bot, platform: "instagram" });
+    expect(none.fired).toEqual([]);
+  });
+  it("renders the marker like the asset rows, with a fallback when unnamed", () => {
+    expect(linkSentMarker("Skool signup")).toBe("(sent link: Skool signup)");
+    expect(linkSentMarker(null)).toBe("(sent link: link)");
+    expect(linkSentMarker("  ")).toBe("(sent link: link)");
+  });
+});
+
 describe("planLinkFlow", () => {
   it("passes through when disabled", () => {
     const r = planLinkFlow({ replyText: "here [[SEND_LINK]]", chatbot: cfg({ link_flow_ns: "ig1" }), platform: "instagram" });
-    expect(r).toEqual({ cleanText: "here [[SEND_LINK]]", fireFlowNs: [], tokenFound: false });
+    expect(r).toEqual({ cleanText: "here [[SEND_LINK]]", fireFlowNs: [], fired: [], tokenFound: false });
   });
   it("passes through when the token is absent", () => {
     const r = planLinkFlow({ replyText: "no marker here", chatbot: cfg({ link_flow_enabled: true, link_flow_ns: "ig1" }), platform: "instagram" });
-    expect(r).toEqual({ cleanText: "no marker here", fireFlowNs: [], tokenFound: false });
+    expect(r).toEqual({ cleanText: "no marker here", fireFlowNs: [], fired: [], tokenFound: false });
   });
   it("strips the token and fires the IG flow on instagram", () => {
     const r = planLinkFlow({ replyText: "Grab your spot\n[[SEND_LINK]]", chatbot: cfg({ link_flow_enabled: true, link_flow_ns: "ig1" }), platform: "instagram" });
@@ -99,7 +125,7 @@ describe("planLinkFlow", () => {
   });
   it("passes through empty text", () => {
     const r = planLinkFlow({ replyText: "", chatbot: cfg({ link_flow_enabled: true, link_flow_ns: "ig1" }), platform: "instagram" });
-    expect(r).toEqual({ cleanText: "", fireFlowNs: [], tokenFound: false });
+    expect(r).toEqual({ cleanText: "", fireFlowNs: [], fired: [], tokenFound: false });
   });
   it("preserves a pre-existing blank line (bubble separator) elsewhere", () => {
     const r = planLinkFlow({ replyText: "bubble A\n\n[[SEND_LINK]]\n\nbubble B", chatbot: cfg({ link_flow_enabled: true, link_flow_ns: "ig1" }), platform: "instagram" });

@@ -118,20 +118,26 @@ export function planLinkFlow(input: {
   replyText: string;
   chatbot: LinkFlowConfig;
   platform: Platform;
-}): { cleanText: string; fireFlowNs: string[]; tokenFound: boolean } {
+}): {
+  cleanText: string;
+  fireFlowNs: string[];
+  fired: { ns: string; name: string | null }[];
+  tokenFound: boolean;
+} {
   const { replyText, chatbot, platform } = input;
   if (!chatbot.link_flow_enabled || !replyText) {
-    return { cleanText: replyText ?? "", fireFlowNs: [], tokenFound: false };
+    return { cleanText: replyText ?? "", fireFlowNs: [], fired: [], tokenFound: false };
   }
   const entries = resolveLinkFlows(chatbot).filter((e) => e.token.trim());
   if (!entries.length) {
-    return { cleanText: replyText, fireFlowNs: [], tokenFound: false };
+    return { cleanText: replyText, fireFlowNs: [], fired: [], tokenFound: false };
   }
   const sorted = [...entries].sort(
     (a, b) => b.token.trim().length - a.token.trim().length
   );
   let text = replyText;
   const fireFlowNs: string[] = [];
+  const fired: { ns: string; name: string | null }[] = [];
   const seen = new Set<string>();
   for (const e of sorted) {
     const token = e.token.trim();
@@ -143,6 +149,9 @@ export function planLinkFlow(input: {
     if (ns && !seen.has(ns)) {
       seen.add(ns);
       fireFlowNs.push(ns);
+      const name =
+        platform === "messenger" && e.ns_fb?.trim() ? e.name_fb : e.name;
+      fired.push({ ns, name: name?.trim() || null });
     }
   }
   const tokenFound = text.length !== replyText.length;
@@ -153,7 +162,17 @@ export function planLinkFlow(input: {
         .replace(/\n{3,}/g, "\n\n")
         .trim()
     : replyText;
-  return { cleanText, fireFlowNs, tokenFound };
+  return { cleanText, fireFlowNs, fired, tokenFound };
+}
+
+/**
+ * The persisted trace of a fired link flow, mirroring the "(sent image: key)" rows
+ * asset sends leave. Without a stored trace the model's own history shows a close
+ * that says "use this link" with no link attached - a promise it then "keeps" by
+ * sending the link again on the next nudge.
+ */
+export function linkSentMarker(name: string | null): string {
+  return `(sent link: ${name?.trim() || "link"})`;
 }
 
 /**

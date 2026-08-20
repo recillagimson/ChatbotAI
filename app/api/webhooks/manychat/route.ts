@@ -14,7 +14,7 @@ import {
   type OutboundAsset,
 } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
-import { planLinkFlow } from "@/lib/link-flow";
+import { planLinkFlow, linkSentMarker } from "@/lib/link-flow";
 import { splitIntoMessages } from "@/lib/message-split";
 import { buildKbBlock } from "@/lib/retrieval";
 import { renderTrainedResponses } from "@/lib/training";
@@ -1669,6 +1669,18 @@ export async function POST(request: NextRequest) {
         ai_generated: true,
         tokens_used: 0,
         ...row,
+      });
+    }
+    // Each fired link flow leaves a marker row. The token is stripped from the stored
+    // text above, so without this the model's history shows "use this link" with no
+    // link attached and it re-sends on the next nudge (live double-link, 2026-08-20).
+    for (const f of linkPlan.fired) {
+      await supabase.from("messages").insert({
+        conversation_id: conversationId!,
+        role: "assistant",
+        content: linkSentMarker(f.name),
+        ai_generated: true,
+        tokens_used: 0,
       });
     }
     await Promise.all([
