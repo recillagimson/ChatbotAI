@@ -21,13 +21,16 @@ export type ConvFilterState = {
 };
 
 /**
- * How many filters beyond the tag tabs are currently narrowing the list - the
- * number the design puts in the "Filters" pill. Tag is excluded because it has
- * its own visible tabs; counting it there would double-report it.
+ * How many filters are currently narrowing the list - the number the design puts
+ * in the "Filters" pill. Tag is now counted too: it lives in the popover's Status
+ * section, and the tags without a quick pill (starting_later / subscribed /
+ * disqualified / bot) have no other collapsed-state indicator, so the pill count
+ * is the one signal that a Status filter is active.
  */
 export function activeFilterCount(s: ConvFilterState): number {
-  return [s.platform, s.quality, s.range ?? s.from ?? s.to, s.q].filter(Boolean)
-    .length;
+  return [s.tag, s.platform, s.quality, s.range ?? s.from ?? s.to, s.q].filter(
+    Boolean
+  ).length;
 }
 
 /** Trim a raw ?q= into something worth querying, or null. */

@@ -36,6 +36,15 @@ export interface Subscription {
   comp_note: string | null;
 }
 
+/** One configured link trigger: a keyword the AI emits -> a ManyChat flow that delivers that link. */
+export type LinkFlowEntry = {
+  token: string; // verbatim trigger; matched case-insensitively, always stripped from the reply
+  ns: string; // Instagram/default flow namespace ("" = no IG flow)
+  name: string | null; // IG flow display label (from getFlows); UI + prompt hint only
+  ns_fb: string | null; // Messenger flow namespace; falls back to `ns`
+  name_fb: string | null; // Messenger flow display label; UI only
+};
+
 export interface Chatbot {
   id: string;
   user_id: string;
@@ -83,6 +92,7 @@ export interface Chatbot {
   link_flow_ns_fb: string | null;    // Messenger flow; falls back to link_flow_ns when unset
   link_flow_name_fb: string | null;  // display label for the Messenger flow (from ManyChat getFlows); UI-only
   link_flow_token: string | null;    // marker the AI emits to trigger the link flow; null/blank = "[[SEND_LINK]]"
+  link_flows: LinkFlowEntry[] | null; // multi-link triggers; when non-empty, overrides the single link_flow_* columns above
   reply_debounce_seconds: number;          // per-bot quiet period (s) before replying; a rapid burst coalesces into ONE reply. Default 60; 0 = instant (still single-flight). App-clamped 0..120.
   created_at: string;
 }

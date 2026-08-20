@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildSystemPrompt } from "@/lib/anthropic";
-import { DEFAULT_LINK_FLOW_TOKEN } from "@/lib/link-flow";
+import { DEFAULT_LINK_FLOW_TOKEN, linkFlowPromptBlock } from "@/lib/link-flow";
 import type { Chatbot } from "@/lib/types";
 
 function bot(over: Partial<Chatbot> = {}): Chatbot {
@@ -64,5 +64,41 @@ describe("buildSystemPrompt link flow", () => {
     );
     expect(out).toContain(DEFAULT_LINK_FLOW_TOKEN);
     expect(out).toContain("LINK DELIVERY");
+  });
+});
+
+const linkBase = {
+  link_flow_enabled: true,
+  link_flow_ns: null,
+  link_flow_name: null,
+  link_flow_ns_fb: null,
+  link_flow_name_fb: null,
+  link_flow_token: null,
+  link_flows: null,
+};
+
+describe("linkFlowPromptBlock (multi)", () => {
+  it("single legacy entry keeps the original one-token wording", () => {
+    const block = linkFlowPromptBlock({ ...linkBase, link_flow_ns: "L" });
+    expect(block).toContain("[[SEND_LINK]]");
+    expect(block).toContain("write [[SEND_LINK]] on its OWN line");
+    expect(block).not.toContain("tokens below");
+  });
+  it("multiple entries list every token", () => {
+    const block = linkFlowPromptBlock({
+      ...linkBase,
+      link_flows: [
+        { token: "[[skool]]", ns: "a", name: "Skool", ns_fb: null, name_fb: null },
+        { token: "[[call]]", ns: "b", name: "Call", ns_fb: null, name_fb: null },
+      ],
+    });
+    expect(block).toContain("tokens below");
+    expect(block).toContain("[[skool]] = sends Skool");
+    expect(block).toContain("[[call]] = sends Call");
+  });
+  it("empty when disabled", () => {
+    expect(
+      linkFlowPromptBlock({ ...linkBase, link_flow_enabled: false, link_flows: [{ token: "[[x]]", ns: "a", name: null, ns_fb: null, name_fb: null }] })
+    ).toBe("");
   });
 });

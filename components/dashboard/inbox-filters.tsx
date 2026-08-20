@@ -9,6 +9,7 @@ import {
   CONVERSATION_QUALITY,
   QUALITY_LABEL,
 } from "@/lib/conversation-quality";
+import { CONVERSATION_TAGS, TAG_LABEL } from "@/lib/conversation-tags";
 import {
   CONV_DATE_PRESETS,
   activeFilterCount,
@@ -86,7 +87,25 @@ export function InboxFilters({
           aria-label="Filter conversations"
           className="absolute right-0 top-[calc(100%+8px)] z-40 w-[19rem] max-w-[calc(100vw-2rem)] rounded-card border border-ss-rule bg-white p-4 shadow-ss-pop"
         >
-          <Group label="Channel">
+          <Group label="Status">
+            <Option
+              href={buildConversationsHref(current, { tag: null }, basePath)}
+              active={!current.tag}
+            >
+              Any
+            </Option>
+            {CONVERSATION_TAGS.map((t) => (
+              <Option
+                key={t}
+                href={buildConversationsHref(current, { tag: t }, basePath)}
+                active={current.tag === t}
+              >
+                {TAG_LABEL[t]}
+              </Option>
+            ))}
+          </Group>
+
+          <Group label="Channel" className="mt-4">
             <Option
               href={buildConversationsHref(current, { platform: null }, basePath)}
               active={!current.platform}
@@ -144,7 +163,7 @@ export function InboxFilters({
             <Link
               href={buildConversationsHref(
                 current,
-                { platform: null, quality: null, range: null, from: null, to: null, q: null },
+                { tag: null, platform: null, quality: null, range: null, from: null, to: null, q: null },
                 basePath
               )}
               onClick={() => setOpen(false)}

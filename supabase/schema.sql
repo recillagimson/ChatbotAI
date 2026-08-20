@@ -783,6 +783,12 @@ alter table public.chatbots
   add column if not exists link_flow_name_fb text,                           -- display label for the Messenger flow (from ManyChat getFlows); UI-only
   add column if not exists link_flow_token text;                              -- marker the AI emits to trigger the link flow; null/blank = "[[SEND_LINK]]"
 
+-- Multiple link triggers per bot: an array of {token, ns, name, ns_fb, name_fb}.
+-- When non-empty it overrides the single link_flow_* columns above; empty falls
+-- back to them. See 2026-08-20-link-flows-multi.sql.
+alter table public.chatbots
+  add column if not exists link_flows jsonb not null default '[]'::jsonb;
+
 -- Data-layer guard: reply_model + force_retrieval are admin-only (the UI hides
 -- them, but the "own chatbots" RLS policy alone would let an owner set them via
 -- devtools). Allows superadmins + service-role writes; blocks authenticated
