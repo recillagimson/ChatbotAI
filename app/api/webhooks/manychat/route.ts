@@ -1256,7 +1256,7 @@ export async function POST(request: NextRequest) {
     // skip the extra per-image vision-describe call - the current turn still gets
     // the raw image as vision; we just don't persist a text description.
     synchronous = false
-  ): Promise<{ text: string; assets: OutboundAsset[]; tagWork?: Promise<void>; fireFlowNs: string | null } | null> => {
+  ): Promise<{ text: string; assets: OutboundAsset[]; tagWork?: Promise<void>; fireFlowNs: string[] } | null> => {
     // 6e. Process any inbound media (network): transcribe audio/video, read
     // documents, encode images for vision. Runs here (background for push
     // channels) so the fast-ack isn't blocked by downloads/transcription.
@@ -1709,7 +1709,7 @@ export async function POST(request: NextRequest) {
       // A media-only reply has no text; give the classifier a stand-in so a
       // "just paid!" answered with media still gets detected.
       const botReply =
-        replyText || (assets.length ? "(sent media)" : linkPlan.fireFlowNs ? "(sent link)" : "");
+        replyText || (assets.length ? "(sent media)" : linkPlan.fireFlowNs.length ? "(sent link)" : "");
       const today = new Date().toISOString().slice(0, 10); // UTC; lets the model resolve "Wednesday"
       // KICK OFF but don't await here - the classify OpenAI round-trip is a pure
       // side-effect (writes tag/confirmed_at/start_*) not needed to build or deliver
@@ -1880,11 +1880,14 @@ export async function POST(request: NextRequest) {
           if (!aborted && assets.length > 0) {
             await sendManychatMedia({ subscriberId: body.subscriber_id, assets, apiKey, platform, linkButtons });
           }
-          // Then fire the link-via-ManyChat flow if the reply asked to send the link.
-          // Same abort guard as media; sendManychatFlow retries and treats a client
-          // timeout as assume-delivered, so no raw-link fallback (avoids double sends).
-          if (!aborted && fireFlowNs) {
-            await sendManychatFlow({ subscriberId: body.subscriber_id, flowNs: fireFlowNs, apiKey });
+          // Fire each link-via-ManyChat flow the reply asked for (deduped upstream;
+          // capped at the UI's 10). Sequential to avoid hammering ManyChat. Same abort
+          // guard as media; sendManychatFlow retries and treats a client timeout as
+          // assume-delivered, so no raw-link fallback (avoids double sends).
+          if (!aborted && fireFlowNs.length) {
+            for (const flowNs of fireFlowNs) {
+              await sendManychatFlow({ subscriberId: body.subscriber_id, flowNs, apiKey });
+            }
           }
         } catch (err) {
           console.error("[manychat-webhook] push send failed", err);
