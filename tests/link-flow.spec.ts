@@ -8,8 +8,11 @@ import {
   linkFlowPromptBlock,
   parseLinkFlows,
   resolveLinkFlows,
+  planDeliveryBubbles,
   type LinkFlowConfig,
+  type LinkFlowDelivery,
 } from "@/lib/link-flow";
+import { findAssetDirectives } from "@/lib/ai-media";
 
 function cfg(over: Partial<LinkFlowConfig> = {}): LinkFlowConfig {
   return {
@@ -393,5 +396,200 @@ describe("planLinkFlow delivery order (interleaving)", () => {
     expect(r.fireFlowNs).toEqual([]);
     expect(r.tokenFound).toBe(true);
     expect(r.deliver).toEqual([{ kind: "text", text: "hi\nbye" }]);
+  });
+
+  it("a non-firing token INSIDE a firing reply is stripped in place, joining the text", () => {
+    // fb-only entry does not fire on instagram; [[go]] does. The text around [[fb]] must
+    // join into one segment rather than cutting an empty piece.
+    const r = planLinkFlow({
+      replyText: "a [[fb]] b [[go]] c",
+      chatbot: cfg({
+        link_flow_enabled: true,
+        link_flows: [
+          { token: "[[fb]]", ns: "", name: null, ns_fb: "fbns", name_fb: null },
+          { token: "[[go]]", ns: "gons", name: "Go", ns_fb: null, name_fb: null },
+        ],
+      }),
+      platform: "instagram",
+    });
+    expect(r.fireFlowNs).toEqual(["gons"]);
+    expect(r.deliver).toEqual([
+      { kind: "text", text: "a b" },
+      { kind: "flow", ns: "gons", name: "Go" },
+      { kind: "text", text: "c" },
+    ]);
+  });
+
+  it("dedup keeps the FIRST TEXT occurrence's flow name, regardless of config order", () => {
+    const r = planLinkFlow({
+      replyText: "[[first]] then [[second]]",
+      chatbot: cfg({
+        link_flow_enabled: true,
+        link_flows: [
+          // config lists 'second' first, but 'first' appears first in the TEXT
+          { token: "[[second]]", ns: "same", name: "SecondName", ns_fb: null, name_fb: null },
+          { token: "[[first]]", ns: "same", name: "FirstName", ns_fb: null, name_fb: null },
+        ],
+      }),
+      platform: "instagram",
+    });
+    expect(r.fired).toEqual([{ ns: "same", name: "FirstName" }]);
+  });
+
+  it("adjacent flow tokens yield back-to-back flow items, no empty text between", () => {
+    const r = planLinkFlow({
+      replyText: "[[x]][[y]]",
+      chatbot: cfg({
+        link_flow_enabled: true,
+        link_flows: [
+          { token: "[[x]]", ns: "one", name: null, ns_fb: null, name_fb: null },
+          { token: "[[y]]", ns: "two", name: null, ns_fb: null, name_fb: null },
+        ],
+      }),
+      platform: "instagram",
+    });
+    expect(r.deliver).toEqual([
+      { kind: "flow", ns: "one", name: null },
+      { kind: "flow", ns: "two", name: null },
+    ]);
+  });
+});
+
+describe("planDeliveryBubbles", () => {
+  it("splits text segments into bubbles and keeps flows in position", () => {
+    const deliver: LinkFlowDelivery[] = [
+      { kind: "text", text: "Delegent." },
+      { kind: "flow", ns: "deleg", name: "Delegent" },
+      { kind: "text", text: "Free plan." },
+      { kind: "flow", ns: "book", name: "Book Here" },
+    ];
+    expect(planDeliveryBubbles(deliver)).toEqual([
+      { kind: "text", text: "Delegent." },
+      { kind: "flow", ns: "deleg", name: "Delegent" },
+      { kind: "text", text: "Free plan." },
+      { kind: "flow", ns: "book", name: "Book Here" },
+    ]);
+  });
+
+  it("keeps the whole-reply bubble cap ACROSS segments (anti-spam bound), flows preserved", () => {
+    const deliver: LinkFlowDelivery[] = [
+      { kind: "text", text: "a\nb\nc\nd" }, // 4 lines -> up to 4 bubbles
+      { kind: "flow", ns: "f1", name: "F1" },
+      { kind: "text", text: "e\nf\ng" }, // 3 lines -> up to 3 bubbles
+    ];
+    const out = planDeliveryBubbles(deliver, 3);
+    const textCount = out.filter((s) => s.kind === "text").length;
+    expect(textCount).toBeLessThanOrEqual(3); // NOT 3-per-segment (would be up to 6)
+    const flowIdx = out.findIndex((s) => s.kind === "flow");
+    expect(out[flowIdx]).toEqual({ kind: "flow", ns: "f1", name: "F1" });
+    expect(flowIdx).toBeGreaterThan(0); // at least one text bubble before the flow
+    expect(flowIdx).toBeLessThan(out.length - 1); // and at least one after it
+  });
+
+  it("with no flows, matches splitIntoMessages(cap) on the whole text (unchanged path)", () => {
+    const out = planDeliveryBubbles([{ kind: "text", text: "a\nb\nc\nd\ne" }], 3);
+    expect(out.filter((s) => s.kind === "text").length).toBe(3);
+  });
+
+  it("passes media steps through in position (like flows)", () => {
+    const out = planDeliveryBubbles(
+      [
+        { kind: "text", text: "a\nb" },
+        { kind: "media", key: "x" },
+        { kind: "text", text: "c" },
+      ],
+      3
+    );
+    expect(out).toEqual([
+      { kind: "text", text: "a" },
+      { kind: "text", text: "b" },
+      { kind: "media", key: "x" },
+      { kind: "text", text: "c" },
+    ]);
+  });
+});
+
+describe("planLinkFlow media interleaving ([[SEND_ASSET]])", () => {
+  // The caller (webhook) passes mediaMatches only when the bot has AI media enabled;
+  // here we derive them from the reply exactly as the route does.
+  const withMedia = (replyText: string, chatbot = cfg(), platform: "instagram" | "messenger" = "instagram") =>
+    planLinkFlow({ replyText, chatbot, platform, mediaMatches: findAssetDirectives(replyText) });
+
+  it("sends a media directive at its authored position, stripping it from the text", () => {
+    const r = withMedia("Here's proof\n[[SEND_ASSET: receipt]]\nWant in?");
+    expect(r.cleanText).toBe("Here's proof\nWant in?");
+    expect(r.fireFlowNs).toEqual([]);
+    expect(r.deliver).toEqual([
+      { kind: "text", text: "Here's proof" },
+      { kind: "media", key: "receipt" },
+      { kind: "text", text: "Want in?" },
+    ]);
+  });
+
+  it("interleaves media AND a link flow in TEXT order (photo, then link, where written)", () => {
+    const r = withMedia(
+      "Proof:\n[[SEND_ASSET: r1]]\nGrab your spot\n[[SEND_LINK]]",
+      cfg({ link_flow_enabled: true, link_flow_ns: "ig1", link_flow_name: "Signup" })
+    );
+    expect(r.fireFlowNs).toEqual(["ig1"]);
+    expect(r.deliver).toEqual([
+      { kind: "text", text: "Proof:" },
+      { kind: "media", key: "r1" },
+      { kind: "text", text: "Grab your spot" },
+      { kind: "flow", ns: "ig1", name: "Signup" },
+    ]);
+  });
+
+  it("a link before a media directive keeps the link first, media second", () => {
+    const r = withMedia(
+      "[[SEND_LINK]]\n[[SEND_ASSET: r1]]",
+      cfg({ link_flow_enabled: true, link_flow_ns: "ig1" })
+    );
+    expect(r.deliver).toEqual([
+      { kind: "flow", ns: "ig1", name: null },
+      { kind: "media", key: "r1" },
+    ]);
+  });
+
+  it("dedupes a repeated media key: sends once at the first occurrence", () => {
+    const r = withMedia("[[SEND_ASSET: r1]] a [[SEND_ASSET: r1]] b");
+    expect(r.deliver).toEqual([
+      { kind: "media", key: "r1" },
+      { kind: "text", text: "a b" },
+    ]);
+  });
+
+  it("keeps adjacent media as separate steps (coalescing is a downstream send concern)", () => {
+    const r = withMedia("proof\n[[SEND_ASSET: a]]\n[[SEND_ASSET: b]]");
+    expect(r.deliver).toEqual([
+      { kind: "text", text: "proof" },
+      { kind: "media", key: "a" },
+      { kind: "media", key: "b" },
+    ]);
+  });
+
+  it("lower-cases the key (matches resolveAssetByKey's case-insensitive lookup)", () => {
+    const r = withMedia("[[SEND_ASSET: Results_Video]]");
+    expect(r.deliver).toEqual([{ kind: "media", key: "results_video" }]);
+  });
+
+  it("leaves the directive as visible text when the caller supplies no matches (media disabled)", () => {
+    // No mediaMatches passed -> planLinkFlow never touches [[SEND_ASSET]] (bot has AI media off).
+    const r = planLinkFlow({
+      replyText: "hi [[SEND_ASSET: r1]]",
+      chatbot: cfg({ link_flow_enabled: true, link_flow_ns: "ig1", link_flow_token: "[[go]]" }),
+      platform: "instagram",
+    });
+    expect(r.cleanText).toBe("hi [[SEND_ASSET: r1]]");
+    expect(r.deliver).toEqual([{ kind: "text", text: "hi [[SEND_ASSET: r1]]" }]);
+  });
+
+  it("works with media only when the link feature is disabled", () => {
+    const r = withMedia("here you go\n[[SEND_ASSET: r1]]", cfg({ link_flow_enabled: false }));
+    expect(r.fireFlowNs).toEqual([]);
+    expect(r.deliver).toEqual([
+      { kind: "text", text: "here you go" },
+      { kind: "media", key: "r1" },
+    ]);
   });
 });

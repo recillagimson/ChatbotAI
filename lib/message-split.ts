@@ -53,11 +53,17 @@ function splitLongSegment(seg: string): string[] {
  * Split a reply string into ordered DM bubbles.
  *  - Blank lines separate bubbles when present (preserves intentional 2-line
  *    bubbles); otherwise each non-empty line becomes its own bubble.
- *  - Over-length segments are sub-split; the total is capped at MAX_BUBBLES with
- *    any overflow merged into the final bubble.
- * Returns [] for empty / whitespace-only input.
+ *  - Over-length segments are sub-split; the total is capped at `maxBubbles`
+ *    (default MAX_BUBBLES) with any overflow merged into the final bubble.
+ * `maxBubbles` lets a caller apportion a smaller share of the reply-wide cap to
+ * one part of a reply - e.g. the webhook splits each inter-link text segment with
+ * a slice of MAX_BUBBLES so an interleaved multi-link reply still honours the
+ * whole-reply spam-flag bound. Floored to 1. Returns [] for empty input.
  */
-export function splitIntoMessages(text: string): string[] {
+export function splitIntoMessages(
+  text: string,
+  maxBubbles: number = MAX_BUBBLES
+): string[] {
   const clean = (text ?? "").replace(/\r\n/g, "\n").trim();
   if (!clean) return [];
 
@@ -78,9 +84,10 @@ export function splitIntoMessages(text: string): string[] {
 
   // Cap bubble count: merge the overflow tail into the last kept bubble so the
   // full reply is preserved while the number of sent messages stays bounded.
-  if (bubbles.length > MAX_BUBBLES) {
-    const head = bubbles.slice(0, MAX_BUBBLES - 1);
-    const tail = bubbles.slice(MAX_BUBBLES - 1).join("\n\n");
+  const cap = Math.max(1, Math.floor(maxBubbles));
+  if (bubbles.length > cap) {
+    const head = bubbles.slice(0, cap - 1);
+    const tail = bubbles.slice(cap - 1).join("\n\n");
     bubbles = [...head, tail];
   }
 

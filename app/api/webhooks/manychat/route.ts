@@ -7,6 +7,7 @@ import {
   sendManychatSequencePaced,
   sendManychatMedia,
   sendManychatFlow,
+  buildPacedItems,
   pacingEnabled,
   resolveManychatApiKey,
   ManychatKeyError,
@@ -15,11 +16,11 @@ import {
   type PacedItem,
 } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
-import { planLinkFlow, linkSentMarker, type LinkFlowDelivery } from "@/lib/link-flow";
+import { planLinkFlow, linkSentMarker, planDeliveryBubbles, type LinkFlowDelivery } from "@/lib/link-flow";
 import { splitIntoMessages } from "@/lib/message-split";
 import { buildKbBlock } from "@/lib/retrieval";
 import { renderTrainedResponses } from "@/lib/training";
-import { parseAssetDirectives } from "@/lib/ai-media";
+import { findAssetDirectives } from "@/lib/ai-media";
 import {
   fetchFollowupAssets,
   resolveAssetByKey,
@@ -1257,7 +1258,15 @@ export async function POST(request: NextRequest) {
     // skip the extra per-image vision-describe call - the current turn still gets
     // the raw image as vision; we just don't persist a text description.
     synchronous = false
-  ): Promise<{ text: string; assets: OutboundAsset[]; tagWork?: Promise<void>; deliver: LinkFlowDelivery[] } | null> => {
+  ): Promise<{
+    text: string;
+    deliver: LinkFlowDelivery[];
+    /** Media directive keys resolved to sendable assets, keyed by (lower-cased) asset key.
+     *  The delivery block looks each `media` step's key up here; unresolved keys are absent
+     *  and simply skipped. */
+    resolvedAssets: Record<string, OutboundAsset>;
+    tagWork?: Promise<void>;
+  } | null> => {
     // 6e. Process any inbound media (network): transcribe audio/video, read
     // documents, encode images for vision. Runs here (background for push
     // channels) so the fast-ack isn't blocked by downloads/transcription.
@@ -1529,69 +1538,57 @@ export async function POST(request: NextRequest) {
       console.error("[manychat-webhook] AI error", err);
     }
 
-    // 8a. AI-triggered media: pull [[SEND_ASSET: key]] directives out of the reply
-    // and resolve them to library assets. Capped per reply so one turn can never
-    // spam the whole library, and so this sendContent call stays well under
-    // ManyChat's 10-message limit (the media push carries no caption bubbles -
-    // the text was already delivered on the paced text path - so the cap IS the
-    // message count). The default allows a full "numbered set" (name_1..name_N,
-    // several files for the same thing, which the model is told to send together)
-    // without truncating it mid-set, which would silently drop proof. Raise via
-    // env only if a bot genuinely registers larger sets.
-    const MAX_AI_ASSETS = Math.max(
-      1,
-      Math.min(10, Number(process.env.MAX_AI_ASSETS) || 6)
-    );
-    const assets: OutboundAsset[] = [];
-    const assetRows: { content: string; media_url: string; media_type: string | null }[] = [];
-    if (chatbot.ai_media_enabled) {
-      const parsed = parseAssetDirectives(replyText);
-      if (parsed.assetKeys.length) {
-        // Never truncate silently: a dropped key looks identical to a bot that
-        // "didn't send the picture", which is expensive to diagnose from an inbox.
-        if (parsed.assetKeys.length > MAX_AI_ASSETS) {
-          console.warn(
-            "[manychat-webhook] asset cap hit - dropping keys",
-            parsed.assetKeys.slice(MAX_AI_ASSETS),
-            `(cap=${MAX_AI_ASSETS}, set MAX_AI_ASSETS to raise)`
-          );
-        }
-        for (const key of parsed.assetKeys.slice(0, MAX_AI_ASSETS)) {
-          const asset = resolveAssetByKey(assetLib, key);
-          // An unregistered / URL-less key resolves to nothing. Log it: this is
-          // the single most common cause of "the bot isn't sending its images",
-          // and it is otherwise completely invisible (see the numbered-key
-          // gotcha - bulk upload names files name_1/name_2, so a prompt written
-          // against the bare `name` matches nothing).
-          if (!asset?.url) {
-            console.warn(
-              "[manychat-webhook] SEND_ASSET key not found in library",
-              key,
-              `(chatbot=${chatbot.id})`
-            );
-            continue;
-          }
-          assets.push({ kind: asset.kind, url: asset.url });
-          // media_type stays a real MIME (or null) - the inbox renderer matches
-          // on startsWith("image/"|"audio/"|"video/").
-          assetRows.push({
-            content: `(sent ${asset.kind}: ${asset.key})`,
-            media_url: asset.url,
-            media_type: asset.mime ?? null,
-          });
-        }
-        replyText = parsed.cleanText;
-      }
-    }
-
-    // 8a-link. Link-via-ManyChat: if the reply carries the link-flow token, strip it
-    // and remember which ManyChat flow to fire for this channel (fired in the delivery
-    // block below) instead of sending a raw URL. Runs for every reply (independent of
-    // ai_media_enabled); a no-op unless link_flow_enabled. Token is always stripped so
-    // it can never leak to the lead. On response channels the flow can't fire, but the
-    // token is still stripped here.
-    const linkPlan = planLinkFlow({ replyText, chatbot, platform });
+    // 8a. AI media + link-via-ManyChat, in ONE ordered pass. Both the [[SEND_ASSET: key]]
+    // media directives and the link-flow token(s) are detected against the SAME reply text
+    // so each lands at the position the model wrote it - a photo/link interleaved with the
+    // text, not batched at the end. planLinkFlow strips both from `cleanText` and returns an
+    // ordered `deliver` plan (text | flow | media). Media detection runs only when the bot
+    // has AI media enabled; otherwise directives are left untouched, exactly as before. The
+    // link path is a no-op unless link_flow_enabled. Tokens/directives are always stripped
+    // so none leaks to the lead; on response channels the flow can't fire but is stripped.
+    const mediaMatches = chatbot.ai_media_enabled ? findAssetDirectives(replyText) : [];
+    const linkPlan = planLinkFlow({ replyText, chatbot, platform, mediaMatches });
     replyText = linkPlan.cleanText;
+
+    // Resolve each first-seen media key (the plan already de-duplicated them and kept text
+    // order) to a sendable library asset, capped per reply so one turn can't spam the whole
+    // library. The cap default allows a full "numbered set" (name_1..name_N, which the model
+    // is told to send together) without truncating it mid-set; raise MAX_AI_ASSETS via env
+    // only if a bot registers larger sets. Two invisible-failure guards are preserved: a
+    // warn when the cap drops keys, and a warn when a key resolves to nothing (the single
+    // most common cause of "the bot isn't sending its images" - see the numbered-key gotcha,
+    // where bulk upload names files name_1/name_2 so a prompt against the bare `name` matches
+    // nothing). resolvedAssets is looked up by the delivery block at each media step.
+    const MAX_AI_ASSETS = Math.max(1, Math.min(10, Number(process.env.MAX_AI_ASSETS) || 6));
+    const mediaKeys = linkPlan.deliver.flatMap((s) => (s.kind === "media" ? [s.key] : []));
+    const resolvedAssets: Record<string, OutboundAsset> = {};
+    const assetRows: { content: string; media_url: string; media_type: string | null }[] = [];
+    if (mediaKeys.length > MAX_AI_ASSETS) {
+      console.warn(
+        "[manychat-webhook] asset cap hit - dropping keys",
+        mediaKeys.slice(MAX_AI_ASSETS),
+        `(cap=${MAX_AI_ASSETS}, set MAX_AI_ASSETS to raise)`
+      );
+    }
+    for (const key of mediaKeys.slice(0, MAX_AI_ASSETS)) {
+      const asset = resolveAssetByKey(assetLib, key);
+      if (!asset?.url) {
+        console.warn(
+          "[manychat-webhook] SEND_ASSET key not found in library",
+          key,
+          `(chatbot=${chatbot.id})`
+        );
+        continue;
+      }
+      resolvedAssets[key] = { kind: asset.kind, url: asset.url };
+      // media_type stays a real MIME (or null) - the inbox renderer matches on
+      // startsWith("image/"|"audio/"|"video/").
+      assetRows.push({
+        content: `(sent ${asset.kind}: ${asset.key})`,
+        media_url: asset.url,
+        media_type: asset.mime ?? null,
+      });
+    }
 
     // 8b. Single-flight release (burst mode): atomically clear our claim. Zero
     // rows updated means a newer message claimed while we were generating -
@@ -1722,7 +1719,12 @@ export async function POST(request: NextRequest) {
       // A media-only reply has no text; give the classifier a stand-in so a
       // "just paid!" answered with media still gets detected.
       const botReply =
-        replyText || (assets.length ? "(sent media)" : linkPlan.fireFlowNs.length ? "(sent link)" : "");
+        replyText ||
+        (Object.keys(resolvedAssets).length
+          ? "(sent media)"
+          : linkPlan.fireFlowNs.length
+            ? "(sent link)"
+            : "");
       const today = new Date().toISOString().slice(0, 10); // UTC; lets the model resolve "Wednesday"
       // KICK OFF but don't await here - the classify OpenAI round-trip is a pure
       // side-effect (writes tag/confirmed_at/start_*) not needed to build or deliver
@@ -1799,7 +1801,7 @@ export async function POST(request: NextRequest) {
       })();
     }
 
-    return { text: replyText, assets, tagWork, deliver: linkPlan.deliver };
+    return { text: replyText, deliver: linkPlan.deliver, resolvedAssets, tagWork };
   };
 
   // 10. Deliver. Two paths depending on whether the channel has a ManyChat send API:
@@ -1841,34 +1843,29 @@ export async function POST(request: NextRequest) {
           refreshKnownFacts({ supabase, conversationId: conversationId! }),
           refreshFlowState({ supabase, conversationId: conversationId!, chatbotId: chatbot.id }),
         ]);
-        const { assets, deliver } = result;
+        const { deliver, resolvedAssets } = result;
         // Per-chatbot: render Messenger links as tappable URL buttons (default off).
         const linkButtons = chatbot.link_buttons_enabled === true;
         // Build ONE ordered delivery sequence: each text segment expands to its bubbles,
-        // each link flow sits at its authored position in the reply. Walked in order so a
-        // link lands exactly where the model wrote its token (not after all text), and is
-        // fully delivered before the following bubble goes out. splitIntoMessages runs per
-        // segment (its MAX_BUBBLES cap applies per segment).
-        const items: PacedItem[] = [];
-        for (const step of deliver) {
-          if (step.kind === "text") {
-            for (const bubble of splitIntoMessages(step.text)) {
-              items.push({ kind: "text", text: bubble });
-            }
-          } else {
-            items.push({ kind: "flow", flowNs: step.ns });
-          }
-        }
+        // and each link flow AND each media asset sits at its authored position in the reply.
+        // Walked in order so a link/photo lands exactly where the model wrote its token/
+        // directive (not after all text) and is fully delivered before the next item.
+        // planDeliveryBubbles splits each text segment into bubbles (whole-reply MAX_BUBBLES
+        // spam-flag bound preserved across segments) and keeps flow/media steps in place;
+        // buildPacedItems resolves each media step's key to its asset (unresolved/over-cap
+        // keys are absent from resolvedAssets, so they collapse into the surrounding text)
+        // and coalesces consecutive media into one send so a "numbered set" still lands in a
+        // single ManyChat message.
+        const items: PacedItem[] = buildPacedItems(planDeliveryBubbles(deliver), resolvedAssets);
         try {
-          let aborted = false;
           if (items.length > 0) {
             // Paced even for a single item: a human-like typing delay before the reply
-            // lands, then a length-scaled trickle for the rest (a flow waits the follow-on
-            // floor). Because the trickle can span minutes, re-check before each follow-on
-            // item - bubble OR flow - whether the lead muted / the owner took over / a
-            // newer run superseded this one, and stop the rest if so (mirrors the pre-push
-            // re-check at 8c). Read-once, retry-once on null, fail-open. pace=false (pacing
-            // disabled) still delivers in order with no gaps, so links stay in place.
+            // lands, then a length-scaled trickle for the rest (a flow/media item waits the
+            // follow-on floor). Because the trickle can span minutes, re-check before each
+            // follow-on item - bubble, flow, OR media - whether the lead muted / the owner
+            // took over / a newer run superseded this one, and stop the rest if so (mirrors
+            // the pre-push re-check at 8c). Read-once, retry-once on null, fail-open.
+            // pace=false (pacing disabled) still delivers in order with no gaps.
             const shouldAbort = async (): Promise<boolean> => {
               const read = async () =>
                 (
@@ -1889,7 +1886,7 @@ export async function POST(request: NextRequest) {
               }
               return false;
             };
-            const paced = await sendManychatSequencePaced({
+            await sendManychatSequencePaced({
               subscriberId: body.subscriber_id,
               items,
               startedAt,
@@ -1899,15 +1896,6 @@ export async function POST(request: NextRequest) {
               pace: pacingEnabled(),
               shouldAbort,
             });
-            aborted = paced.aborted;
-          }
-          // Then push any AI-triggered media assets (channel-aware; unsupported media on
-          // this channel is dropped inside sendManychatMedia). Media has no authored
-          // position in the text stream (a separate [[SEND_ASSET]] directive system), so
-          // it follows the ordered text+link sequence. Skipped when the sequence aborted
-          // mid-way (lead muted / owner took over / superseded).
-          if (!aborted && assets.length > 0) {
-            await sendManychatMedia({ subscriberId: body.subscriber_id, assets, apiKey, platform, linkButtons });
           }
         } catch (err) {
           console.error("[manychat-webhook] push send failed", err);

@@ -25,6 +25,7 @@ import {
   canSendMediaKind,
 } from "./platforms";
 import type { FollowupAssetKind } from "./types";
+import type { LinkFlowDelivery } from "./link-flow";
 
 /** Thrown when a chatbot's ManyChat API key can't be resolved. */
 export class ManychatKeyError extends Error {
@@ -702,16 +703,56 @@ export function pacingFits(
  * rest still send; throws once at the end if any failed so the caller can record
  * push_failed. Abort is NOT a failure (no throw).
  */
-/** One step in an ordered paced delivery: a text bubble or a link-flow trigger. */
+/** One step in an ordered paced delivery: a text bubble, a link-flow trigger, or a media
+ *  send (one or more assets delivered together in a single ManyChat message). */
 export type PacedItem =
   | { kind: "text"; text: string }
-  | { kind: "flow"; flowNs: string };
+  | { kind: "flow"; flowNs: string }
+  | { kind: "media"; assets: OutboundAsset[] };
 
 /**
- * Deliver an ORDERED sequence of items - text bubbles and link-flow triggers - as one
- * continuous human-like trickle, awaiting each before the next so a flow lands exactly
- * where it sits in the sequence (a link fires at its authored position, not after all
- * text). Generalises the bubble trickle; sendManychatMessagePaced is now a thin wrapper.
+ * Turn an ordered bubble-level delivery plan (from planDeliveryBubbles) into the paced
+ * items the sender walks: text and flow steps pass straight through; each media step's key
+ * is resolved via `resolvedAssets` (an unresolved key - dropped by the per-reply cap or
+ * missing from the library - is simply skipped, collapsing into the surrounding text); and
+ * CONSECUTIVE media are coalesced into ONE media item so a "numbered set" the model emitted
+ * back-to-back still lands together in a single ManyChat message (a flow or text between
+ * two media breaks the run, as the model intended). Pure + unit-tested.
+ */
+export function buildPacedItems(
+  bubbles: LinkFlowDelivery[],
+  resolvedAssets: Record<string, OutboundAsset>
+): PacedItem[] {
+  const items: PacedItem[] = [];
+  let run: OutboundAsset[] = [];
+  const flush = () => {
+    if (run.length) {
+      items.push({ kind: "media", assets: run });
+      run = [];
+    }
+  };
+  for (const step of bubbles) {
+    if (step.kind === "text") {
+      flush();
+      items.push({ kind: "text", text: step.text });
+    } else if (step.kind === "flow") {
+      flush();
+      items.push({ kind: "flow", flowNs: step.ns });
+    } else {
+      const asset = resolvedAssets[step.key];
+      if (asset) run.push(asset);
+    }
+  }
+  flush();
+  return items;
+}
+
+/**
+ * Deliver an ORDERED sequence of items - text bubbles, link-flow triggers, and media
+ * sends - as one continuous human-like trickle, awaiting each before the next so a flow
+ * or an asset lands exactly where it sits in the sequence (fired/sent at its authored
+ * position, not after all text). Generalises the bubble trickle; sendManychatMessagePaced
+ * is now a thin wrapper.
  *
  * Pacing is shared with the bubble path (itemDelay/pacingFits/thinkingDelayMs): item 0
  * waits out the "thinking" pause, later items wait a length-scaled gap, and a flow (no
@@ -744,11 +785,14 @@ export async function sendManychatSequencePaced(opts: {
    */
   shouldAbort?: () => Promise<boolean>;
 }): Promise<{ aborted: boolean }> {
-  // Normalise: trim text items and drop empties; keep every flow item.
+  // Normalise: trim text items and drop empties; keep every flow item; keep media items
+  // that carry at least one asset (an empty media group is a no-op, so drop it).
   const items: PacedItem[] = [];
   for (const it of opts.items) {
     if (it.kind === "flow") items.push(it);
-    else {
+    else if (it.kind === "media") {
+      if (it.assets.length) items.push(it);
+    } else {
       const text = (it.text ?? "").trim();
       if (text) items.push({ kind: "text", text });
     }
@@ -799,6 +843,19 @@ export async function sendManychatSequencePaced(opts: {
         await sendManychatMessage({
           subscriberId: opts.subscriberId,
           text: item.text,
+          messageTag: opts.messageTag,
+          apiKey: opts.apiKey,
+          platform: opts.platform,
+          linkButtons: opts.linkButtons,
+        });
+      } else if (item.kind === "media") {
+        // One send per media group (consecutive assets coalesced by the caller), so a
+        // "numbered set" still lands in a single ManyChat message. No caption: the text
+        // already delivered as its own bubbles. Unsupported media on this channel is
+        // dropped inside sendManychatMedia; it keeps assumeDeliveredOnError (no dup video).
+        await sendManychatMedia({
+          subscriberId: opts.subscriberId,
+          assets: item.assets,
           messageTag: opts.messageTag,
           apiKey: opts.apiKey,
           platform: opts.platform,
