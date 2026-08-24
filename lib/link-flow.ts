@@ -109,10 +109,40 @@ export function selectLinkFlow(
 }
 
 /**
- * Detect + strip every configured link token and decide which flows to fire. Total.
- * Tokens are matched longest-first so a shorter token can't partial-match a longer one
- * (e.g. `link_1` won't eat `link_10`). Every matched token is stripped so none can leak.
- * Returned namespaces are deduped (two tokens -> same flow fires once).
+ * One step in the ordered delivery plan: a text segment (split into bubbles at send
+ * time) or a link flow to fire, in the ORDER the tokens appear in the reply.
+ */
+export type LinkFlowDelivery =
+  | { kind: "text"; text: string }
+  | { kind: "flow"; ns: string; name: string | null };
+
+/** Collapse runs of spaces/tabs, drop trailing space before a newline, and cap blank
+ *  runs at one blank line - the same tidy the fully-stripped reply gets. */
+function tidyText(s: string): string {
+  return s
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Detect + strip every configured link token, decide which flows to fire, and build an
+ * ORDERED delivery plan that interleaves text and flows in the order the tokens appear
+ * in the reply. Total.
+ *
+ * Matching is longest-first so a shorter token can't partial-match a longer one (e.g.
+ * `link_1` won't eat `link_10`). FIRING order, however, follows token POSITION in the
+ * text, not token length - so a link lands exactly where the model wrote its token.
+ * Every matched token is stripped so none can leak. Flows are deduped by namespace: two
+ * tokens mapping to the same flow fire once, at the FIRST occurrence in the text; the
+ * later token is still stripped but fires nothing.
+ *
+ * `deliver` is the ordered sequence the webhook walks (each `text` segment is split into
+ * bubbles at send time; each `flow` fires at its authored position). `fired`/`fireFlowNs`
+ * are the deduped flows in that same text order (used for the persisted "(sent link:)"
+ * markers and the classifier stand-in). `cleanText` is the fully-stripped reply, kept
+ * unchanged for persistence/echo.
  */
 export function planLinkFlow(input: {
   replyText: string;
@@ -123,46 +153,84 @@ export function planLinkFlow(input: {
   fireFlowNs: string[];
   fired: { ns: string; name: string | null }[];
   tokenFound: boolean;
+  deliver: LinkFlowDelivery[];
 } {
   const { replyText, chatbot, platform } = input;
+  const asText = (t: string): LinkFlowDelivery[] =>
+    t ? [{ kind: "text", text: t }] : [];
   if (!chatbot.link_flow_enabled || !replyText) {
-    return { cleanText: replyText ?? "", fireFlowNs: [], fired: [], tokenFound: false };
+    const text = replyText ?? "";
+    return { cleanText: text, fireFlowNs: [], fired: [], tokenFound: false, deliver: asText(text) };
   }
   const entries = resolveLinkFlows(chatbot).filter((e) => e.token.trim());
   if (!entries.length) {
-    return { cleanText: replyText, fireFlowNs: [], fired: [], tokenFound: false };
+    return { cleanText: replyText, fireFlowNs: [], fired: [], tokenFound: false, deliver: asText(replyText) };
   }
+  // Longest-first is for MATCHING only (stops a short token matching inside a longer one).
   const sorted = [...entries].sort(
     (a, b) => b.token.trim().length - a.token.trim().length
   );
-  let text = replyText;
-  const fireFlowNs: string[] = [];
-  const fired: { ns: string; name: string | null }[] = [];
-  const seen = new Set<string>();
+
+  // cleanText: strip every token, longest-first, exactly as before (persisted + echoed).
+  let stripped = replyText;
   for (const e of sorted) {
-    const token = e.token.trim();
-    const re = new RegExp(escapeRegExp(token) + "[ \\t]*\\n?", "gi");
-    const before = text;
-    text = text.replace(re, "");
-    if (text.length === before.length) continue; // token not present
-    const ns = selectFlowForEntry(e, platform);
-    if (ns && !seen.has(ns)) {
-      seen.add(ns);
-      fireFlowNs.push(ns);
-      const name =
-        platform === "messenger" && e.ns_fb?.trim() ? e.name_fb : e.name;
-      fired.push({ ns, name: name?.trim() || null });
+    const re = new RegExp(escapeRegExp(e.token.trim()) + "[ \\t]*\\n?", "gi");
+    stripped = stripped.replace(re, "");
+  }
+  const tokenFound = stripped.length !== replyText.length;
+  const cleanText = tokenFound ? tidyText(stripped) : replyText;
+
+  // Ordered, non-overlapping token occurrences across the ORIGINAL text. Longest-first
+  // precedence claims character ranges so a shorter token can't sit inside a longer one.
+  type Occ = { start: number; end: number; entry: LinkFlowEntry };
+  const claimed: { s: number; e: number }[] = [];
+  const occ: Occ[] = [];
+  for (const e of sorted) {
+    const re = new RegExp(escapeRegExp(e.token.trim()) + "[ \\t]*\\n?", "gi");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(replyText)) !== null) {
+      if (m[0].length === 0) { re.lastIndex++; continue; } // defensive: never advance zero
+      const s = m.index;
+      const end = s + m[0].length; // token + the trailing spaces/newline the strip removes
+      if (claimed.some((c) => s < c.e && c.s < end)) continue; // overlaps a longer token
+      claimed.push({ s, e: end });
+      occ.push({ start: s, end, entry: e });
     }
   }
-  const tokenFound = text.length !== replyText.length;
-  const cleanText = tokenFound
-    ? text
-        .replace(/[ \t]{2,}/g, " ")
-        .replace(/[ \t]+\n/g, "\n")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim()
-    : replyText;
-  return { cleanText, fireFlowNs, fired, tokenFound };
+  occ.sort((a, b) => a.start - b.start);
+
+  // Walk occurrences in TEXT order, cutting a new segment only at a token that actually
+  // fires. A non-firing token (no flow on this channel, or a duplicate ns) is stripped in
+  // place so the text on both sides joins into one segment.
+  const deliver: LinkFlowDelivery[] = [];
+  const fired: { ns: string; name: string | null }[] = [];
+  const seen = new Set<string>();
+  let cursor = 0;
+  let seg = "";
+  for (const o of occ) {
+    seg += replyText.slice(cursor, o.start);
+    cursor = o.end;
+    const ns = selectFlowForEntry(o.entry, platform);
+    if (!ns || seen.has(ns)) continue; // stripped in place: no cut, no fire
+    seen.add(ns);
+    const name =
+      platform === "messenger" && o.entry.ns_fb?.trim() ? o.entry.name_fb : o.entry.name;
+    const t = tidyText(seg);
+    if (t) deliver.push({ kind: "text", text: t });
+    deliver.push({ kind: "flow", ns, name: name?.trim() || null });
+    fired.push({ ns, name: name?.trim() || null });
+    seg = "";
+  }
+  seg += replyText.slice(cursor);
+  const tail = tidyText(seg);
+  if (tail) deliver.push({ kind: "text", text: tail });
+
+  // Tokens present but nothing fired on this channel: deliver the plain cleaned text as
+  // one block, exactly like a reply with no link at all.
+  if (!fired.length) {
+    return { cleanText, fireFlowNs: [], fired: [], tokenFound, deliver: asText(cleanText) };
+  }
+  return { cleanText, fireFlowNs: fired.map((f) => f.ns), fired, tokenFound, deliver };
 }
 
 /**

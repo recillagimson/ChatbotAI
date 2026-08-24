@@ -83,11 +83,23 @@ describe("linkSentMarker + fired", () => {
 describe("planLinkFlow", () => {
   it("passes through when disabled", () => {
     const r = planLinkFlow({ replyText: "here [[SEND_LINK]]", chatbot: cfg({ link_flow_ns: "ig1" }), platform: "instagram" });
-    expect(r).toEqual({ cleanText: "here [[SEND_LINK]]", fireFlowNs: [], fired: [], tokenFound: false });
+    expect(r).toEqual({
+      cleanText: "here [[SEND_LINK]]",
+      fireFlowNs: [],
+      fired: [],
+      tokenFound: false,
+      deliver: [{ kind: "text", text: "here [[SEND_LINK]]" }],
+    });
   });
   it("passes through when the token is absent", () => {
     const r = planLinkFlow({ replyText: "no marker here", chatbot: cfg({ link_flow_enabled: true, link_flow_ns: "ig1" }), platform: "instagram" });
-    expect(r).toEqual({ cleanText: "no marker here", fireFlowNs: [], fired: [], tokenFound: false });
+    expect(r).toEqual({
+      cleanText: "no marker here",
+      fireFlowNs: [],
+      fired: [],
+      tokenFound: false,
+      deliver: [{ kind: "text", text: "no marker here" }],
+    });
   });
   it("strips the token and fires the IG flow on instagram", () => {
     const r = planLinkFlow({ replyText: "Grab your spot\n[[SEND_LINK]]", chatbot: cfg({ link_flow_enabled: true, link_flow_ns: "ig1" }), platform: "instagram" });
@@ -125,7 +137,7 @@ describe("planLinkFlow", () => {
   });
   it("passes through empty text", () => {
     const r = planLinkFlow({ replyText: "", chatbot: cfg({ link_flow_enabled: true, link_flow_ns: "ig1" }), platform: "instagram" });
-    expect(r).toEqual({ cleanText: "", fireFlowNs: [], fired: [], tokenFound: false });
+    expect(r).toEqual({ cleanText: "", fireFlowNs: [], fired: [], tokenFound: false, deliver: [] });
   });
   it("preserves a pre-existing blank line (bubble separator) elsewhere", () => {
     const r = planLinkFlow({ replyText: "bubble A\n\n[[SEND_LINK]]\n\nbubble B", chatbot: cfg({ link_flow_enabled: true, link_flow_ns: "ig1" }), platform: "instagram" });
@@ -256,5 +268,130 @@ describe("resolveLinkFlows", () => {
     expect(resolveLinkFlows(cfg({ link_flows: [SAMPLE_FLOWS[0]] })).length).toBe(1);
     expect(resolveLinkFlows(cfg({ link_flows: [], link_flow_ns: "L" }))[0].ns).toBe("L");
     expect(resolveLinkFlows(cfg())).toEqual([]);
+  });
+});
+
+describe("planLinkFlow delivery order (interleaving)", () => {
+  const DELEG = { token: "[[DELEGENT_LINK]]", ns: "deleg", name: "Delegent", ns_fb: null, name_fb: null };
+  // Longer token (18 chars vs 17), authored SECOND - must still fire second.
+  const BOOK = { token: "[[BOOKING_LINK_2]]", ns: "book", name: "Book Here", ns_fb: null, name_fb: null };
+
+  it("fires flows in TEXT order, not token-length order (the Delegent/Booking bug)", () => {
+    const r = planLinkFlow({
+      replyText: "Delegent.\n[[DELEGENT_LINK]]\nFree plan.\n[[BOOKING_LINK_2]]",
+      chatbot: cfg({ link_flow_enabled: true, link_flows: [DELEG, BOOK] }),
+      platform: "instagram",
+    });
+    // Token-length order would be ["book","deleg"]; text order is the fix.
+    expect(r.fireFlowNs).toEqual(["deleg", "book"]);
+    expect(r.deliver).toEqual([
+      { kind: "text", text: "Delegent." },
+      { kind: "flow", ns: "deleg", name: "Delegent" },
+      { kind: "text", text: "Free plan." },
+      { kind: "flow", ns: "book", name: "Book Here" },
+    ]);
+    // Marker rows follow the same text order.
+    expect(r.fired).toEqual([
+      { ns: "deleg", name: "Delegent" },
+      { ns: "book", name: "Book Here" },
+    ]);
+  });
+
+  it("keeps longest-first MATCHING so a short token can't eat a longer one mid-text", () => {
+    const r = planLinkFlow({
+      replyText: "before link_10 after",
+      chatbot: cfg({
+        link_flow_enabled: true,
+        link_flows: [
+          { token: "link_1", ns: "one", name: null, ns_fb: null, name_fb: null },
+          { token: "link_10", ns: "ten", name: null, ns_fb: null, name_fb: null },
+        ],
+      }),
+      platform: "instagram",
+    });
+    expect(r.fireFlowNs).toEqual(["ten"]);
+    expect(r.deliver).toEqual([
+      { kind: "text", text: "before" },
+      { kind: "flow", ns: "ten", name: null },
+      { kind: "text", text: "after" },
+    ]);
+  });
+
+  it("token at the very start: flow leads, no empty leading bubble", () => {
+    const r = planLinkFlow({
+      replyText: "[[skool]] then chat",
+      chatbot: cfg({ link_flow_enabled: true, link_flows: [SAMPLE_FLOWS[0]] }),
+      platform: "instagram",
+    });
+    expect(r.deliver).toEqual([
+      { kind: "flow", ns: "flowA", name: "Skool" },
+      { kind: "text", text: "then chat" },
+    ]);
+  });
+
+  it("token at the very end: flow trails, no empty trailing bubble", () => {
+    const r = planLinkFlow({
+      replyText: "chat then [[skool]]",
+      chatbot: cfg({ link_flow_enabled: true, link_flows: [SAMPLE_FLOWS[0]] }),
+      platform: "instagram",
+    });
+    expect(r.deliver).toEqual([
+      { kind: "text", text: "chat then" },
+      { kind: "flow", ns: "flowA", name: "Skool" },
+    ]);
+  });
+
+  it("two tokens mapping to the same ns fire once, at the FIRST occurrence", () => {
+    const r = planLinkFlow({
+      replyText: "a [[x]] b [[y]] c",
+      chatbot: cfg({
+        link_flow_enabled: true,
+        link_flows: [
+          { token: "[[x]]", ns: "same", name: "First", ns_fb: null, name_fb: null },
+          { token: "[[y]]", ns: "same", name: "Second", ns_fb: null, name_fb: null },
+        ],
+      }),
+      platform: "instagram",
+    });
+    // Fires once at [[x]]; [[y]] is stripped in place so the text around it joins.
+    expect(r.fireFlowNs).toEqual(["same"]);
+    expect(r.deliver).toEqual([
+      { kind: "text", text: "a" },
+      { kind: "flow", ns: "same", name: "First" },
+      { kind: "text", text: "b c" },
+    ]);
+  });
+
+  it("legacy single-column path interleaves the same way", () => {
+    const r = planLinkFlow({
+      replyText: "start\n[[SEND_LINK]]\nend",
+      chatbot: cfg({
+        link_flow_enabled: true,
+        link_flows: [],
+        link_flow_ns: "legacy",
+        link_flow_name: "Legacy link",
+      }),
+      platform: "instagram",
+    });
+    expect(r.fireFlowNs).toEqual(["legacy"]);
+    expect(r.deliver).toEqual([
+      { kind: "text", text: "start" },
+      { kind: "flow", ns: "legacy", name: "Legacy link" },
+      { kind: "text", text: "end" },
+    ]);
+  });
+
+  it("token present but no flow on this channel: stripped, one text block, no flow item", () => {
+    const r = planLinkFlow({
+      replyText: "hi\n[[fbonly]]\nbye",
+      chatbot: cfg({
+        link_flow_enabled: true,
+        link_flows: [{ token: "[[fbonly]]", ns: "", name: null, ns_fb: "fb1", name_fb: "FB" }],
+      }),
+      platform: "instagram",
+    });
+    expect(r.fireFlowNs).toEqual([]);
+    expect(r.tokenFound).toBe(true);
+    expect(r.deliver).toEqual([{ kind: "text", text: "hi\nbye" }]);
   });
 });

@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import {
   verifyManychatSecret,
   sendManychatMessage,
-  sendManychatMessagePaced,
+  sendManychatSequencePaced,
   sendManychatMedia,
   sendManychatFlow,
   pacingEnabled,
@@ -12,9 +12,10 @@ import {
   ManychatKeyError,
   isolateLinkBubbles,
   type OutboundAsset,
+  type PacedItem,
 } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
-import { planLinkFlow, linkSentMarker } from "@/lib/link-flow";
+import { planLinkFlow, linkSentMarker, type LinkFlowDelivery } from "@/lib/link-flow";
 import { splitIntoMessages } from "@/lib/message-split";
 import { buildKbBlock } from "@/lib/retrieval";
 import { renderTrainedResponses } from "@/lib/training";
@@ -1256,7 +1257,7 @@ export async function POST(request: NextRequest) {
     // skip the extra per-image vision-describe call - the current turn still gets
     // the raw image as vision; we just don't persist a text description.
     synchronous = false
-  ): Promise<{ text: string; assets: OutboundAsset[]; tagWork?: Promise<void>; fireFlowNs: string[] } | null> => {
+  ): Promise<{ text: string; assets: OutboundAsset[]; tagWork?: Promise<void>; deliver: LinkFlowDelivery[] } | null> => {
     // 6e. Process any inbound media (network): transcribe audio/video, read
     // documents, encode images for vision. Runs here (background for push
     // channels) so the fast-ack isn't blocked by downloads/transcription.
@@ -1798,7 +1799,7 @@ export async function POST(request: NextRequest) {
       })();
     }
 
-    return { text: replyText, assets, tagWork, fireFlowNs: linkPlan.fireFlowNs };
+    return { text: replyText, assets, tagWork, deliver: linkPlan.deliver };
   };
 
   // 10. Deliver. Two paths depending on whether the channel has a ManyChat send API:
@@ -1840,19 +1841,34 @@ export async function POST(request: NextRequest) {
           refreshKnownFacts({ supabase, conversationId: conversationId! }),
           refreshFlowState({ supabase, conversationId: conversationId!, chatbotId: chatbot.id }),
         ]);
-        const { text: replyText, assets, fireFlowNs } = result;
-        const bubbles = splitIntoMessages(replyText);
+        const { assets, deliver } = result;
         // Per-chatbot: render Messenger links as tappable URL buttons (default off).
         const linkButtons = chatbot.link_buttons_enabled === true;
+        // Build ONE ordered delivery sequence: each text segment expands to its bubbles,
+        // each link flow sits at its authored position in the reply. Walked in order so a
+        // link lands exactly where the model wrote its token (not after all text), and is
+        // fully delivered before the following bubble goes out. splitIntoMessages runs per
+        // segment (its MAX_BUBBLES cap applies per segment).
+        const items: PacedItem[] = [];
+        for (const step of deliver) {
+          if (step.kind === "text") {
+            for (const bubble of splitIntoMessages(step.text)) {
+              items.push({ kind: "text", text: bubble });
+            }
+          } else {
+            items.push({ kind: "flow", flowNs: step.ns });
+          }
+        }
         try {
           let aborted = false;
-          if (pacingEnabled() && bubbles.length > 0) {
-            // Paced even for a single bubble: a human-like typing delay before the
-            // reply lands (see computeBubbleDelays), then a 15–30s trickle for extra
-            // bubbles. Because the trickle can span minutes, re-check before each
-            // follow-on bubble whether the lead muted / the owner took over / a newer
-            // run superseded this one, and stop the rest if so (mirrors the pre-push
-            // re-check at 8c). Read-once, retry-once on null, fail-open.
+          if (items.length > 0) {
+            // Paced even for a single item: a human-like typing delay before the reply
+            // lands, then a length-scaled trickle for the rest (a flow waits the follow-on
+            // floor). Because the trickle can span minutes, re-check before each follow-on
+            // item - bubble OR flow - whether the lead muted / the owner took over / a
+            // newer run superseded this one, and stop the rest if so (mirrors the pre-push
+            // re-check at 8c). Read-once, retry-once on null, fail-open. pace=false (pacing
+            // disabled) still delivers in order with no gaps, so links stay in place.
             const shouldAbort = async (): Promise<boolean> => {
               const read = async () =>
                 (
@@ -1873,33 +1889,25 @@ export async function POST(request: NextRequest) {
               }
               return false;
             };
-            const paced = await sendManychatMessagePaced({
+            const paced = await sendManychatSequencePaced({
               subscriberId: body.subscriber_id,
-              bubbles,
+              items,
               startedAt,
               apiKey,
               platform,
               linkButtons,
+              pace: pacingEnabled(),
               shouldAbort,
             });
             aborted = paced.aborted;
-          } else if (bubbles.length > 0) {
-            await sendManychatMessage({ subscriberId: body.subscriber_id, text: bubbles, apiKey, platform, linkButtons });
           }
-          // Then push any AI-triggered media assets (channel-aware; unsupported media
-          // on this channel is dropped inside sendManychatMedia). Skipped when the
-          // paced trickle was aborted mid-way (lead muted / owner took over / superseded).
+          // Then push any AI-triggered media assets (channel-aware; unsupported media on
+          // this channel is dropped inside sendManychatMedia). Media has no authored
+          // position in the text stream (a separate [[SEND_ASSET]] directive system), so
+          // it follows the ordered text+link sequence. Skipped when the sequence aborted
+          // mid-way (lead muted / owner took over / superseded).
           if (!aborted && assets.length > 0) {
             await sendManychatMedia({ subscriberId: body.subscriber_id, assets, apiKey, platform, linkButtons });
-          }
-          // Fire each link-via-ManyChat flow the reply asked for (deduped upstream;
-          // capped at the UI's 10). Sequential to avoid hammering ManyChat. Same abort
-          // guard as media; sendManychatFlow retries and treats a client timeout as
-          // assume-delivered, so no raw-link fallback (avoids double sends).
-          if (!aborted && fireFlowNs.length) {
-            for (const flowNs of fireFlowNs) {
-              await sendManychatFlow({ subscriberId: body.subscriber_id, flowNs, apiKey });
-            }
           }
         } catch (err) {
           console.error("[manychat-webhook] push send failed", err);

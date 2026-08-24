@@ -652,14 +652,21 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
  * send time by pacingFits, so real gaps are never silently shrunk.
  * Exported for unit testing.
  */
+/**
+ * Pure: delay (ms) before the item at `index`, scaled by its `charLen`. A flow item has
+ * no text (charLen 0), so it waits the follow-on floor - a short human beat before the
+ * link. Same formula the bubble trickle has always used; shared so a mixed text+flow
+ * sequence paces identically. Exported logic via computeBubbleDelays for unit testing.
+ */
+function itemDelay(index: number, charLen: number): number {
+  if (index === 0) {
+    return clamp(READ_MS + charLen * PER_CHAR_MS, FIRST_MIN_MS, FIRST_MAX_MS);
+  }
+  return clamp(charLen * BUBBLE_GAP_PER_CHAR_MS, BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS);
+}
+
 export function computeBubbleDelays(bubbles: string[]): number[] {
-  return bubbles.map((b, i) => {
-    const len = (b ?? "").trim().length;
-    if (i === 0) {
-      return clamp(READ_MS + len * PER_CHAR_MS, FIRST_MIN_MS, FIRST_MAX_MS);
-    }
-    return clamp(len * BUBBLE_GAP_PER_CHAR_MS, BUBBLE_GAP_MIN_MS, BUBBLE_GAP_MAX_MS);
-  });
+  return bubbles.map((b, i) => itemDelay(i, (b ?? "").trim().length));
 }
 
 /**
@@ -695,6 +702,128 @@ export function pacingFits(
  * rest still send; throws once at the end if any failed so the caller can record
  * push_failed. Abort is NOT a failure (no throw).
  */
+/** One step in an ordered paced delivery: a text bubble or a link-flow trigger. */
+export type PacedItem =
+  | { kind: "text"; text: string }
+  | { kind: "flow"; flowNs: string };
+
+/**
+ * Deliver an ORDERED sequence of items - text bubbles and link-flow triggers - as one
+ * continuous human-like trickle, awaiting each before the next so a flow lands exactly
+ * where it sits in the sequence (a link fires at its authored position, not after all
+ * text). Generalises the bubble trickle; sendManychatMessagePaced is now a thin wrapper.
+ *
+ * Pacing is shared with the bubble path (itemDelay/pacingFits/thinkingDelayMs): item 0
+ * waits out the "thinking" pause, later items wait a length-scaled gap, and a flow (no
+ * text) waits the follow-on floor - all budget-guarded via pacingFits, so a long reply
+ * never overshoots maxDuration. `shouldAbort` is checked before EVERY follow-on item
+ * (text or flow), so a mute/takeover/supersede stops the rest, a flow included. `pace:
+ * false` sends everything in order with no gaps/thinking (pacing disabled). A single
+ * item's failure is logged and the rest still send; if any failed, the call throws at
+ * the end so the caller's push-failure handler runs. sendManychatFlow retries internally
+ * and treats a client timeout as assume-delivered, so there is no raw-link fallback here.
+ */
+export async function sendManychatSequencePaced(opts: {
+  subscriberId: string;
+  items: PacedItem[];
+  messageTag?: string;
+  startedAt?: number; // performance.now() at request start, for the budget guard
+  /** ManyChat API key to authenticate each send (resolved per-chatbot by the caller). */
+  apiKey: string;
+  /** Channel the contact is on; forwarded to each send. */
+  platform?: Platform;
+  /** Per-chatbot opt-in (chatbots.link_buttons_enabled): render Messenger links as URL buttons. */
+  linkButtons?: boolean;
+  /** Sleep between items (default true). false = deliver in order with no gaps/thinking. */
+  pace?: boolean;
+  /**
+   * Optional stand-down check, evaluated before each FOLLOW-ON item (2..N). Return true
+   * to stop sending the rest (lead muted / owner took over / superseded). If it throws,
+   * this loop keeps going (fail-open) - dropping a legit reply on a transient blip is the
+   * worse outcome, and the next item re-checks anyway.
+   */
+  shouldAbort?: () => Promise<boolean>;
+}): Promise<{ aborted: boolean }> {
+  // Normalise: trim text items and drop empties; keep every flow item.
+  const items: PacedItem[] = [];
+  for (const it of opts.items) {
+    if (it.kind === "flow") items.push(it);
+    else {
+      const text = (it.text ?? "").trim();
+      if (text) items.push({ kind: "text", text });
+    }
+  }
+  if (items.length === 0) return { aborted: false };
+
+  const pace = opts.pace ?? true;
+  const gaps = items.map((it, i) =>
+    itemDelay(i, it.kind === "text" ? it.text.length : 0)
+  );
+  const startedAt = opts.startedAt ?? performance.now();
+  let anyFailed = false;
+
+  for (let i = 0; i < items.length; i++) {
+    if (pace) {
+      // Item 0 also waits out the "thinking" pause so the first message lands ~THINKING_MS
+      // after the customer's (minus time already spent generating). Later items use their
+      // length-scaled gap. Sleep only while the WHOLE gap finishes within budget, else send
+      // the rest immediately so cumulative pacing never overshoots maxDuration.
+      const elapsed = performance.now() - startedAt;
+      const wait = i === 0 ? Math.max(gaps[i], thinkingDelayMs(elapsed)) : gaps[i];
+      if (pacingFits(elapsed, wait)) {
+        await sleep(wait);
+      }
+    }
+
+    // Mid-trickle stand-down: re-check before each follow-on item (item 0 was just
+    // re-checked pre-push). Catches a stop/takeover/supersede that landed during the gap.
+    // A flow is an item too, so a link never fires after an abort. Fail-open if it throws.
+    if (i > 0 && opts.shouldAbort) {
+      let abort = false;
+      try {
+        abort = await opts.shouldAbort();
+      } catch (err) {
+        console.error("[manychat] paced stand-down check failed; continuing", err);
+      }
+      if (abort) {
+        console.log(
+          `[manychat] paced send aborted before item ${i + 1}/${items.length} (muted/superseded)`
+        );
+        return { aborted: true };
+      }
+    }
+
+    const item = items[i];
+    try {
+      if (item.kind === "text") {
+        await sendManychatMessage({
+          subscriberId: opts.subscriberId,
+          text: item.text,
+          messageTag: opts.messageTag,
+          apiKey: opts.apiKey,
+          platform: opts.platform,
+          linkButtons: opts.linkButtons,
+        });
+      } else {
+        await sendManychatFlow({
+          subscriberId: opts.subscriberId,
+          flowNs: item.flowNs,
+          apiKey: opts.apiKey,
+        });
+      }
+    } catch (err) {
+      anyFailed = true;
+      console.error(
+        `[manychat] paced item ${i + 1}/${items.length} (${item.kind}) failed`,
+        err
+      );
+    }
+  }
+
+  if (anyFailed) throw new Error("ManyChat paced send: one or more items failed");
+  return { aborted: false };
+}
+
 export async function sendManychatMessagePaced(opts: {
   subscriberId: string;
   bubbles: string[];
@@ -706,72 +835,20 @@ export async function sendManychatMessagePaced(opts: {
   platform?: Platform;
   /** Per-chatbot opt-in (chatbots.link_buttons_enabled): render Messenger links as URL buttons. */
   linkButtons?: boolean;
-  /**
-   * Optional stand-down check, evaluated before each FOLLOW-ON bubble (2..N). Return
-   * true to stop sending the rest (lead muted / owner took over / superseded). If it
-   * throws, this loop keeps going (fail-open) - dropping a legit reply on a transient
-   * blip is the worse outcome, and the next bubble re-checks anyway.
-   */
+  /** Optional stand-down check, evaluated before each FOLLOW-ON bubble (2..N). */
   shouldAbort?: () => Promise<boolean>;
 }): Promise<{ aborted: boolean }> {
-  const bubbles = opts.bubbles.map((b) => (b ?? "").trim()).filter(Boolean);
-  if (bubbles.length === 0) return { aborted: false };
-
-  const gaps = computeBubbleDelays(bubbles);
-
-  const startedAt = opts.startedAt ?? performance.now();
-  let anyFailed = false;
-
-  for (let i = 0; i < bubbles.length; i++) {
-    // Bubble 0 also waits out the "thinking" pause so the first reply lands
-    // ~THINKING_MS after the customer's message (minus time already spent
-    // generating). Later bubbles use their random trickle gap.
-    const elapsed = performance.now() - startedAt;
-    const wait = i === 0 ? Math.max(gaps[i], thinkingDelayMs(elapsed)) : gaps[i];
-    // Sleep only while the WHOLE gap finishes within budget - otherwise send the
-    // rest immediately so we never overshoot maxDuration (bubbles never dropped).
-    if (pacingFits(elapsed, wait)) {
-      await sleep(wait);
-    }
-
-    // Mid-trickle stand-down: re-check before each follow-on bubble (bubble 0 was
-    // just re-checked pre-push). Catches a "stop"/takeover/supersede that landed
-    // during the gap we just slept. Fail-open if the check itself throws.
-    if (i > 0 && opts.shouldAbort) {
-      let abort = false;
-      try {
-        abort = await opts.shouldAbort();
-      } catch (err) {
-        console.error("[manychat] paced stand-down check failed; continuing", err);
-      }
-      if (abort) {
-        console.log(
-          `[manychat] paced send aborted before bubble ${i + 1}/${bubbles.length} (muted/superseded)`
-        );
-        return { aborted: true };
-      }
-    }
-
-    try {
-      await sendManychatMessage({
-        subscriberId: opts.subscriberId,
-        text: bubbles[i],
-        messageTag: opts.messageTag,
-        apiKey: opts.apiKey,
-        platform: opts.platform,
-        linkButtons: opts.linkButtons,
-      });
-    } catch (err) {
-      anyFailed = true;
-      console.error(
-        `[manychat] paced bubble ${i + 1}/${bubbles.length} failed`,
-        err
-      );
-    }
-  }
-
-  if (anyFailed) throw new Error("ManyChat paced send: one or more bubbles failed");
-  return { aborted: false };
+  // Thin wrapper over the generic sequence sender: every bubble is a text item.
+  return sendManychatSequencePaced({
+    subscriberId: opts.subscriberId,
+    items: opts.bubbles.map((text) => ({ kind: "text" as const, text })),
+    messageTag: opts.messageTag,
+    startedAt: opts.startedAt,
+    apiKey: opts.apiKey,
+    platform: opts.platform,
+    linkButtons: opts.linkButtons,
+    shouldAbort: opts.shouldAbort,
+  });
 }
 
 /**
