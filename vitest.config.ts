@@ -13,6 +13,7 @@ export default defineConfig({
       "tests/flow-state*.spec.ts",
       "tests/lead-facts*.spec.ts",
       "tests/manual-followups*.spec.ts",
+      "tests/kb-access*.spec.ts",
     ],
   },
   resolve: {

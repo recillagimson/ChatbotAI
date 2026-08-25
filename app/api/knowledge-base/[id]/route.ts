@@ -5,7 +5,8 @@
 // extraction (fix OCR noise, trim boilerplate, correct facts).
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { createClient, createServiceClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { resolveKbWriteByEntry } from "@/lib/kb-access-server";
 import { indexEntry } from "@/lib/retrieval";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 
@@ -24,11 +25,6 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const supabase = await createClient();
-  // Impersonation-aware: under admin "view as", getCurrentUser() is the CLIENT, so
-  // the ownership lookup + re-index scope to the client. auth.getUser() would be the
-  // admin and never match the client-owned entry -> silent 404, edit never saved.
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const parsed = Body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -36,18 +32,22 @@ export async function PATCH(
   }
   const { title, content } = parsed.data;
 
-  // Ownership: load the caller's own entry (RLS also enforces it).
-  const { data: entry } = await supabase
-    .from("knowledge_base")
-    .select("id, chatbot_id, user_id, content")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!entry) return NextResponse.json({ error: "entry not found" }, { status: 404 });
+  // Authorize + resolve the entry. Self (incl. impersonation) edits under RLS; a superadmin
+  // editing another user's entry from /admin writes via the service client. `entry` comes
+  // back with it so we don't re-query.
+  const access = await resolveKbWriteByEntry(id);
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.status === 401 ? "unauthorized" : "entry not found" },
+      { status: access.status }
+    );
+  }
+  const db = access.admin ? createServiceClient() : supabase;
+  const entry = access.entry;
 
   // Per-chatbot KB-size cap, counting every OTHER entry for this chatbot plus the
   // new content (so growing an edit can't blow the budget).
-  const { data: sizeRows } = await supabase
+  const { data: sizeRows } = await db
     .from("knowledge_base")
     .select("id, content")
     .eq("chatbot_id", entry.chatbot_id);
@@ -58,8 +58,8 @@ export async function PATCH(
     return NextResponse.json({ error: "knowledge base size limit reached" }, { status: 400 });
   }
 
-  // Update under RLS. Editing means the owner has curated it → clear needs_review.
-  const { error: upErr } = await supabase
+  // Update. Editing means the owner has curated it → clear needs_review.
+  const { error: upErr } = await db
     .from("knowledge_base")
     .update({ title, content, needs_review: false })
     .eq("id", id);

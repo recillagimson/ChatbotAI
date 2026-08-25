@@ -1,7 +1,8 @@
 // app/api/knowledge-base/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { createClient, createServiceClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { resolveKbWriteByChatbot } from "@/lib/kb-access-server";
 import { indexEntry } from "@/lib/retrieval";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 
@@ -17,11 +18,6 @@ const Body = z.object({
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  // Impersonation-aware: under admin "view as", getCurrentUser() is the CLIENT, so
-  // the chatbot lookup + KB insert scope to the client (auth.getUser() would be the
-  // admin and never match the client-owned chatbot -> "chatbot not found").
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const parsed = Body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -29,17 +25,19 @@ export async function POST(request: NextRequest) {
   }
   const { chatbot_id, title, content } = parsed.data;
 
-  // Ownership check (RLS also enforces it on insert).
-  const { data: chatbot } = await supabase
-    .from("chatbots")
-    .select("id")
-    .eq("id", chatbot_id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!chatbot) return NextResponse.json({ error: "chatbot not found" }, { status: 404 });
+  // Authorize + resolve whose KB this is (self/impersonation vs superadmin-on-behalf).
+  const access = await resolveKbWriteByChatbot(chatbot_id);
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.status === 401 ? "unauthorized" : "chatbot not found" },
+      { status: access.status }
+    );
+  }
+  const db = access.admin ? createServiceClient() : supabase;
+  const ownerId = access.ownerId;
 
   // Per-chatbot KB-size cap.
-  const { data: sizeRows } = await supabase
+  const { data: sizeRows } = await db
     .from("knowledge_base")
     .select("content")
     .eq("chatbot_id", chatbot_id);
@@ -48,10 +46,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "knowledge base size limit reached" }, { status: 400 });
   }
 
-  // Insert under the user's RLS context (user_id from the session, never the body).
-  const { data: inserted, error } = await supabase
+  // Insert with the resolved owner id (never from the request body).
+  const { data: inserted, error } = await db
     .from("knowledge_base")
-    .insert({ chatbot_id, user_id: user.id, title, content, source_type: "manual" })
+    .insert({ chatbot_id, user_id: ownerId, title, content, source_type: "manual" })
     .select("id, chatbot_id, user_id, content")
     .single();
   if (error || !inserted) {

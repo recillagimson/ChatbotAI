@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { getRealUser } from "@/lib/supabase/server";
+import { createClient, getRealUser } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/admin";
-import { AdminNav } from "@/components/admin/admin-nav";
+import { AdminSidebar, AdminMobileHeader } from "@/components/admin/admin-sidebar";
 
 export default async function AdminLayout({
   children,
@@ -15,10 +15,30 @@ export default async function AdminLayout({
   const admin = await requireSuperadmin();
   if (!admin) redirect("/dashboard"); // signed-in non-team users bounce to their app
 
+  // Rail badges: work waiting across all clients. Head-only counts (superadmin RLS
+  // sees every row). Best-effort - a count failure just hides the badge.
+  const supabase = await createClient();
+  const [{ count: requests }, { count: feedback }] = await Promise.all([
+    supabase
+      .from("change_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+    supabase
+      .from("feedback")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "new"),
+  ]);
+  const counts = { requests: requests ?? 0, feedback: feedback ?? 0 };
+
   return (
-    <div className="min-h-screen bg-background">
-      <AdminNav />
-      <main className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">{children}</main>
+    // Pin the shell to the viewport so the rail stays put and only the main
+    // content scrolls - the same model as the client dashboard shell.
+    <div data-app-shell className="flex h-[100dvh] overflow-hidden bg-ss-page">
+      <AdminSidebar counts={counts} />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <AdminMobileHeader counts={counts} />
+        <main className="flex-1 overflow-hidden">{children}</main>
+      </div>
     </div>
   );
 }

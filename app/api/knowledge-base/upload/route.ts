@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient, createServiceClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { resolveKbWriteByChatbot } from "@/lib/kb-access-server";
 import { indexEntry } from "@/lib/retrieval";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 import { extractTextFromFile, ALLOWED_DOC_EXT } from "@/lib/document-parser";
@@ -32,17 +33,15 @@ interface FileResult {
  * Upload one or more files for a chatbot's knowledge base. Files are parsed to
  * text server-side and stored as `knowledge_base` rows (source_type='upload').
  * The reply pipeline already reads all KB entries, so uploads need no further
- * wiring. Runs as the authenticated user under RLS ("own kb").
+ * wiring.
+ *
+ * Scoping (see lib/kb-access-server.ts): normally runs as the acting user under RLS
+ * ("own kb"), including an admin impersonating the client. When a superadmin uploads for
+ * ANOTHER user's chatbot from /admin (not impersonating), the write goes through the
+ * service client and is stamped with the chatbot OWNER's id, never the admin's.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  // Impersonation-aware: under admin "view as", getCurrentUser() is the CLIENT, so
-  // the chatbot lookup + KB insert scope to the client (auth.getUser() would be the
-  // admin and never match the client-owned chatbot -> "chatbot not found").
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
 
   const form = await request.formData();
   const chatbotId = form.get("chatbot_id");
@@ -50,16 +49,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "chatbot_id required" }, { status: 400 });
   }
 
-  // Confirm the chatbot belongs to this user (RLS also enforces this on insert).
-  const { data: chatbot } = await supabase
-    .from("chatbots")
-    .select("id")
-    .eq("id", chatbotId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!chatbot) {
-    return NextResponse.json({ error: "chatbot not found" }, { status: 404 });
+  const access = await resolveKbWriteByChatbot(chatbotId);
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.status === 401 ? "unauthorized" : "chatbot not found" },
+      { status: access.status }
+    );
   }
+  // Self writes under the caller's RLS; a superadmin acting on another user's chatbot writes
+  // via the service client (RLS-exempt), stamping the resolved owner id.
+  const db = access.admin ? createServiceClient() : supabase;
+  const ownerId = access.ownerId;
 
   const files = form
     .getAll("files")
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
   // Per-chatbot KB-size cap (mirrors the paste-text create route): bounds
   // embedding volume/cost. Tracked as a running total across this upload.
-  const { data: sizeRows } = await supabase
+  const { data: sizeRows } = await db
     .from("knowledge_base")
     .select("content")
     .eq("chatbot_id", chatbotId);
@@ -108,11 +108,11 @@ export async function POST(request: NextRequest) {
         throw new Error("Knowledge base size limit reached for this chatbot");
       }
 
-      const { data: inserted, error } = await supabase
+      const { data: inserted, error } = await db
         .from("knowledge_base")
         .insert({
           chatbot_id: chatbotId,
-          user_id: user.id,
+          user_id: ownerId,
           title: file.name,
           content: text,
           source_type: "upload",

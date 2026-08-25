@@ -54,16 +54,16 @@ export function ViewAsButton({
         onClick={start}
         disabled={busy}
         className={cn(
-          "inline-flex items-center gap-1.5 font-medium transition-colors disabled:opacity-60",
+          "inline-flex items-center justify-center gap-1.5 font-semibold leading-none transition-colors disabled:opacity-60",
           variant === "button"
-            ? "rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
-            : "text-sm text-primary hover:underline"
+            ? "rounded-[10px] bg-ss-indigo-600 px-[13px] py-2.5 text-[12.5px] text-white hover:bg-ss-indigo-700"
+            : "text-[12.5px] text-ss-indigo-600 hover:text-ss-indigo-800"
         )}
       >
         <Eye className="h-4 w-4" aria-hidden="true" />
         {busy ? "Opening…" : label}
       </button>
-      {error && <span className="text-xs text-destructive">{error}</span>}
+      {error && <span className="text-[11.5px] text-ss-rose-ink">{error}</span>}
     </span>
   );
 }

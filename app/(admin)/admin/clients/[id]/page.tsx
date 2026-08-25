@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { AdminChatbotEditForm } from "@/components/admin/admin-chatbot-edit-form";
 import { ViewAsButton } from "@/components/admin/view-as-button";
 import { GrantAccessForm } from "@/components/admin/grant-access-form";
+import { KnowledgeBaseForm } from "@/components/dashboard/kb-form";
+import { KnowledgeBaseList } from "@/components/dashboard/kb-list";
 import { hasActiveAccess, isComp } from "@/lib/access";
 import type {
   Profile,
@@ -78,6 +80,19 @@ type AdminChatbot = Pick<
   | "created_at"
 >;
 
+// Matches KnowledgeBaseList's Entry shape (its type is component-local).
+type AdminKbEntry = {
+  id: string;
+  chatbot_id: string;
+  title: string;
+  content: string;
+  source_type: string;
+  created_at: string;
+  chatbots: { name: string } | null;
+  indexed?: boolean;
+  needs_review?: boolean;
+};
+
 export default async function AdminClientDetailPage({
   params,
 }: {
@@ -104,6 +119,7 @@ export default async function AdminClientDetailPage({
     { data: chatbotsData },
     { data: requestsData },
     { data: feedbackData },
+    { data: kbData },
   ] = await Promise.all([
     supabase
       .from("subscriptions")
@@ -130,6 +146,14 @@ export default async function AdminClientDetailPage({
       .select("*")
       .eq("user_id", id)
       .order("created_at", { ascending: false }),
+    // KB entries for this client (superadmin reads them via the "admin all kb" RLS overlay).
+    supabase
+      .from("knowledge_base")
+      .select(
+        "id, chatbot_id, title, content, source_type, created_at, indexed, needs_review, chatbots(name)"
+      )
+      .eq("user_id", id)
+      .order("created_at", { ascending: false }),
   ]);
 
   const subscription = subData as Pick<
@@ -153,6 +177,22 @@ export default async function AdminClientDetailPage({
   const chatbots = (chatbotsData ?? []) as AdminChatbot[];
   const requests = (requestsData ?? []) as ChangeRequest[];
   const feedback = (feedbackData ?? []) as Feedback[];
+
+  // KB entries grouped by chatbot, so each chatbot card shows only its own. The chatbots(name)
+  // embed is a to-one object at runtime, but the untyped client infers an array type, so
+  // normalize defensively before handing entries to KnowledgeBaseList.
+  const kbByChatbot = new Map<string, AdminKbEntry[]>();
+  for (const row of (kbData ?? []) as unknown as Array<
+    Omit<AdminKbEntry, "chatbots"> & {
+      chatbots: { name: string } | { name: string }[] | null;
+    }
+  >) {
+    const chatbots = Array.isArray(row.chatbots) ? row.chatbots[0] ?? null : row.chatbots;
+    const entry: AdminKbEntry = { ...row, chatbots };
+    const list = kbByChatbot.get(entry.chatbot_id) ?? [];
+    list.push(entry);
+    kbByChatbot.set(entry.chatbot_id, list);
+  }
 
   const openRequests = requests.filter((r) => r.status === "pending").length;
 
@@ -286,7 +326,7 @@ export default async function AdminClientDetailPage({
                         <Badge variant="secondary">Paused</Badge>
                       )}
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-6">
                       <AdminChatbotEditForm
                         chatbot={{
                           id: bot.id,
@@ -300,6 +340,25 @@ export default async function AdminClientDetailPage({
                           business_description: bot.business_description,
                         }}
                       />
+
+                      {/* Knowledge base for this chatbot. Uploads/edits post to the KB
+                          routes, which stamp this client as owner (not the admin); deletes
+                          go through RLS via the "admin all kb" overlay. */}
+                      <div className="border-t pt-6">
+                        <h3 className="text-sm font-semibold">Knowledge base</h3>
+                        <p className="mb-4 mt-0.5 text-xs text-muted-foreground">
+                          Upload or paste knowledge for this chatbot. Files are parsed and
+                          indexed for retrieval, exactly as on the client&apos;s own dashboard.
+                        </p>
+                        <KnowledgeBaseForm chatbotId={bot.id} />
+                        <div className="mt-6 space-y-3">
+                          <p className="text-sm font-medium">
+                            {(kbByChatbot.get(bot.id) ?? []).length} entr
+                            {(kbByChatbot.get(bot.id) ?? []).length === 1 ? "y" : "ies"}
+                          </p>
+                          <KnowledgeBaseList entries={kbByChatbot.get(bot.id) ?? []} />
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
