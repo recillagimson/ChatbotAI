@@ -1,41 +1,15 @@
-import Link from "next/link";
+import { Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui/badge";
-import { ViewAsButton } from "@/components/admin/view-as-button";
 import type { Profile, Subscription } from "@/lib/types";
 import { hasActiveAccess, isComp, type AccessRow } from "@/lib/access";
-
-type SubStatus = Subscription["status"];
-
-function statusBadge(status: SubStatus | null) {
-  switch (status) {
-    case "active":
-      return <Badge variant="success">Active</Badge>;
-    case "trialing":
-      return <Badge variant="default">Trialing</Badge>;
-    case "past_due":
-      return <Badge variant="warning">Past due</Badge>;
-    case "canceled":
-      return <Badge variant="secondary">Canceled</Badge>;
-    case "incomplete":
-      return <Badge variant="destructive">Incomplete</Badge>;
-    default:
-      return <Badge variant="outline">No sub</Badge>;
-  }
-}
-
-// Reflect real access, not the raw status: a lapsed comp keeps status='trialing'
-// (no cron sweep), so an admin scanning this list must not see it as "Trialing".
-function accessBadge(row: AccessRow | null) {
-  if (isComp(row)) {
-    return hasActiveAccess(row) ? (
-      <Badge variant="success">Comp</Badge>
-    ) : (
-      <Badge variant="secondary">Comp expired</Badge>
-    );
-  }
-  return statusBadge(row?.status ?? null);
-}
+import { num } from "@/lib/format";
+import { PageBody, PageHeader, PageShell } from "@/components/ss/page";
+import { NavyPanel, PanelEyebrow } from "@/components/ss/panel";
+import { StatBlock } from "@/components/ss/stat";
+import {
+  AdminClientsBrowser,
+  type AdminClientRow,
+} from "@/components/admin/admin-clients-browser";
 
 export default async function AdminClientsPage() {
   const supabase = await createClient();
@@ -48,9 +22,7 @@ export default async function AdminClientsPage() {
         .order("created_at", { ascending: false }),
       supabase
         .from("subscriptions")
-        .select(
-          "user_id, status, current_period_end, comp_expires_at, stripe_subscription_id"
-        ),
+        .select("user_id, status, comp_expires_at, stripe_subscription_id"),
       supabase.from("chatbots").select("user_id"),
     ]);
 
@@ -60,11 +32,12 @@ export default async function AdminClientsPage() {
   >[];
 
   const subByUser = new Map<string, AccessRow>();
-  for (const s of (subscriptions ?? []) as Pick<
-    Subscription,
-    "user_id" | "status" | "current_period_end" | "comp_expires_at" | "stripe_subscription_id"
-  >[]) {
-    subByUser.set(s.user_id, s);
+  for (const s of (subscriptions ?? []) as (AccessRow & { user_id: string })[]) {
+    subByUser.set(s.user_id, {
+      status: s.status,
+      comp_expires_at: s.comp_expires_at,
+      stripe_subscription_id: s.stripe_subscription_id,
+    });
   }
 
   const countByUser = new Map<string, number>();
@@ -72,81 +45,59 @@ export default async function AdminClientsPage() {
     countByUser.set(c.user_id, (countByUser.get(c.user_id) ?? 0) + 1);
   }
 
-  const clients = profileRows.map((profile) => ({
-    profile,
-    access: subByUser.get(profile.id) ?? null,
+  const clients: AdminClientRow[] = profileRows.map((profile) => ({
+    id: profile.id,
+    name: profile.full_name || profile.email,
+    email: profile.email,
+    company: profile.company_name,
+    createdAt: profile.created_at,
     chatbotCount: countByUser.get(profile.id) ?? 0,
+    access: subByUser.get(profile.id) ?? null,
   }));
 
-  return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-display font-semibold tracking-tight">
-          Clients
-        </h1>
-        <p className="text-muted-foreground">
-          {clients.length} {clients.length === 1 ? "account" : "accounts"}
-        </p>
-      </div>
+  // Overview metrics, all derived from the rows already loaded - no extra query.
+  // "With access" reuses hasActiveAccess so a lapsed comp is never counted as
+  // live; "Comped" is the live-comp subset of that.
+  const total = clients.length;
+  const withAccess = clients.filter((c) => hasActiveAccess(c.access)).length;
+  const comped = clients.filter(
+    (c) => isComp(c.access) && hasActiveAccess(c.access)
+  ).length;
+  const totalChatbots = clients.reduce((n, c) => n + c.chatbotCount, 0);
 
-      {clients.length === 0 ? (
-        <p className="text-muted-foreground">No clients yet.</p>
-      ) : (
-        <div className="rounded-lg border overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/30">
-                <th className="px-4 py-3 text-left text-xs uppercase text-muted-foreground font-medium">
-                  Client
-                </th>
-                <th className="px-4 py-3 text-left text-xs uppercase text-muted-foreground font-medium">
-                  Email
-                </th>
-                <th className="px-4 py-3 text-left text-xs uppercase text-muted-foreground font-medium">
-                  Subscription
-                </th>
-                <th className="px-4 py-3 text-left text-xs uppercase text-muted-foreground font-medium">
-                  Chatbots
-                </th>
-                <th className="px-4 py-3 text-left text-xs uppercase text-muted-foreground font-medium">
-                  Joined
-                </th>
-                <th className="px-4 py-3 text-right text-xs uppercase text-muted-foreground font-medium">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map(({ profile, access, chatbotCount }) => (
-                <tr key={profile.id} className="border-b last:border-0 hover:bg-muted/50">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/clients/${profile.id}`}
-                      className="font-medium hover:underline focus-visible:outline-none focus-visible:underline"
-                    >
-                      {profile.full_name || profile.email}
-                    </Link>
-                    {profile.company_name && (
-                      <div className="text-xs text-muted-foreground">
-                        {profile.company_name}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{profile.email}</td>
-                  <td className="px-4 py-3">{accessBadge(access)}</td>
-                  <td className="px-4 py-3 tabular-nums">{chatbotCount}</td>
-                  <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                    {new Date(profile.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <ViewAsButton clientId={profile.id} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+  return (
+    <PageShell>
+      <PageHeader
+        title="Clients"
+        description="Every account, their access, and their chatbots."
+      />
+      <PageBody>
+        {/* ---- Overview hero -------------------------------------------- */}
+        <NavyPanel className="rounded-card px-[22px] py-5">
+          <PanelEyebrow icon={<Users className="h-3.5 w-3.5" />}>
+            Overview
+          </PanelEyebrow>
+          <div className="mt-[18px] flex flex-wrap gap-x-10 gap-y-5">
+            <StatBlock
+              dark
+              label="Clients"
+              value={num(total)}
+              suffix={total === 1 ? "account" : "accounts"}
+            />
+            <StatBlock dark label="With access" value={num(withAccess)} suffix="live now" />
+            <StatBlock
+              dark
+              label="Comped"
+              value={num(comped)}
+              suffix={comped === 1 ? "grant" : "grants"}
+            />
+            <StatBlock dark label="Chatbots" value={num(totalChatbots)} suffix="in total" />
+          </div>
+        </NavyPanel>
+
+        {/* ---- Browsable client list ------------------------------------ */}
+        <AdminClientsBrowser clients={clients} />
+      </PageBody>
+    </PageShell>
   );
 }

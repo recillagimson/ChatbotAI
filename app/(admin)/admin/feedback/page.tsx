@@ -1,7 +1,9 @@
-import Link from "next/link";
+import { MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { signAttachment } from "@/lib/storage";
 import { FeedbackInbox } from "@/components/admin/feedback-inbox";
+import { PageBody, PageHeader, PageShell, EmptyState } from "@/components/ss/page";
+import { SsPill } from "@/components/ss/controls";
 import type { Attachment, Feedback, Profile } from "@/lib/types";
 
 type Status = Feedback["status"];
@@ -88,48 +90,76 @@ export default async function AdminFeedbackPage({
     }))
   );
 
-  const newCount = feedback.filter((f) => f.status === "new").length;
+  // Per-status counts for the filter pills. These are only complete when nothing
+  // is filtered out (the query narrows to one status when a filter is active), so
+  // the pills carry counts on the "All" view and read as plain labels otherwise.
+  const statusCounts: Record<Status, number> = {
+    new: feedback.filter((f) => f.status === "new").length,
+    read: feedback.filter((f) => f.status === "read").length,
+    resolved: feedback.filter((f) => f.status === "resolved").length,
+  };
+  const newCount = statusCounts.new;
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-3xl font-display font-semibold tracking-tight">
-          Feedback
-        </h1>
-        <p className="text-muted-foreground">
-          {feedback.length} {feedback.length === 1 ? "item" : "items"}
-          {status === null && newCount > 0 && (
-            <>
-              {" · "}
-              <span className="font-medium text-foreground">
-                {newCount} new
-              </span>
-            </>
-          )}
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Feedback"
+        description={
+          <>
+            {feedback.length} {feedback.length === 1 ? "item" : "items"}
+            {status === null && newCount > 0 && (
+              <>
+                {" · "}
+                <span className="font-semibold text-ss-body">{newCount} new</span>
+              </>
+            )}
+          </>
+        }
+      />
 
-      <nav aria-label="Filter by status" className="mb-6 flex flex-wrap gap-2">
-        {FILTERS.map((f) => {
-          const active = status === f.value;
-          return (
-            <Link
-              key={f.label}
-              href={f.value ? `/admin/feedback?status=${f.value}` : "/admin/feedback"}
-              aria-current={active ? "page" : undefined}
-              className={
-                active
-                  ? "rounded-full bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  : "rounded-full border border-input bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              }
-            >
-              {f.label}
-            </Link>
-          );
-        })}
-      </nav>
+      <PageBody>
+        <nav
+          aria-label="Filter by status"
+          className="flex flex-wrap items-center gap-2"
+        >
+          {FILTERS.map((f) => {
+            const active = status === f.value;
+            const count =
+              status === null
+                ? f.value === null
+                  ? feedback.length
+                  : statusCounts[f.value]
+                : null;
+            return (
+              <SsPill
+                key={f.label}
+                href={
+                  f.value
+                    ? `/admin/feedback?status=${f.value}`
+                    : "/admin/feedback"
+                }
+                active={active}
+                count={count}
+              >
+                {f.label}
+              </SsPill>
+            );
+          })}
+        </nav>
 
-      <FeedbackInbox items={items} />
-    </div>
+        {items.length === 0 ? (
+          <EmptyState
+            icon={<MessageSquare className="h-8 w-8" />}
+            title={status ? `No ${status} feedback` : "No feedback yet"}
+          >
+            {status
+              ? "Nothing in this status right now."
+              : "Client feedback lands here as it comes in, with any screenshots attached."}
+          </EmptyState>
+        ) : (
+          <FeedbackInbox items={items} />
+        )}
+      </PageBody>
+    </PageShell>
   );
 }

@@ -50,21 +50,28 @@ export function SsCardHead({
   description,
   icon,
   action,
+  titleAs: TitleTag = "div",
   className,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   icon?: React.ReactNode;
   action?: React.ReactNode;
+  /**
+   * Element for the title. Defaults to "div" (the design's card titles are not
+   * document headings). Pass a heading tag ("h2"/"h3"/"h4") when the card is a real
+   * section of the page so it stays reachable by screen-reader heading navigation.
+   */
+  titleAs?: "div" | "h2" | "h3" | "h4";
   className?: string;
 }) {
   return (
     <div className={cn("flex items-start gap-2.5", className)}>
       {icon}
       <div className="min-w-0">
-        <div className="font-display text-[15px] font-bold leading-tight text-ss-ink">
+        <TitleTag className="font-display text-[15px] font-bold leading-tight text-ss-ink">
           {title}
-        </div>
+        </TitleTag>
         {description ? (
           <div className="mt-0.5 text-xs leading-snug text-ss-muted">
             {description}

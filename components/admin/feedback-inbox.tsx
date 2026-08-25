@@ -2,13 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Paperclip } from "lucide-react";
+import { SsCard } from "@/components/ss/card";
+import { SsButton, SsChip, SsStatus } from "@/components/ss/controls";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CLAUDE_IMAGE_TYPES } from "@/lib/storage";
@@ -37,7 +33,7 @@ function AttachmentView({ att }: { att: SignedAttachment }) {
 
   if (!att.url) {
     return (
-      <span className="inline-flex items-center rounded border bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+      <span className="inline-flex items-center rounded-full border border-ss-line bg-ss-page px-2.5 py-1 text-[11px] text-ss-muted">
         {att.name}
       </span>
     );
@@ -49,10 +45,14 @@ function AttachmentView({ att }: { att: SignedAttachment }) {
         href={att.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="inline-block rounded-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-2"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={att.url} alt={att.name} className="max-h-24 rounded border" />
+        <img
+          src={att.url}
+          alt={att.name}
+          className="max-h-24 rounded-chip border border-ss-line"
+        />
       </a>
     );
   }
@@ -62,9 +62,9 @@ function AttachmentView({ att }: { att: SignedAttachment }) {
       href={att.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="inline-flex items-center gap-1.5 rounded-full border border-ss-line bg-ss-page px-3 py-1 text-[11px] font-medium text-ss-body transition-colors hover:border-ss-dash hover:bg-ss-page-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-2"
     >
-      <span aria-hidden="true">📎</span>
+      <Paperclip className="h-3 w-3 shrink-0" aria-hidden="true" />
       <span className="max-w-[16rem] truncate">{att.name}</span>
     </a>
   );
@@ -73,20 +73,20 @@ function AttachmentView({ att }: { att: SignedAttachment }) {
 function statusBadge(status: FeedbackStatus) {
   switch (status) {
     case "new":
-      return <Badge variant="default">New</Badge>;
+      return <SsStatus tone="indigo">New</SsStatus>;
     case "read":
-      return <Badge variant="secondary">Read</Badge>;
+      return <SsChip tone="neutral">Read</SsChip>;
     case "resolved":
-      return <Badge variant="success">Resolved</Badge>;
+      return <SsStatus tone="green">Resolved</SsStatus>;
   }
 }
 
 export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
   if (items.length === 0) {
-    return <p className="text-muted-foreground">No feedback here yet.</p>;
+    return <p className="text-[12.5px] text-ss-muted">No feedback here yet.</p>;
   }
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-3">
       {items.map((item) => (
         <FeedbackCard key={item.id} item={item} />
       ))}
@@ -94,7 +94,7 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
   );
 }
 
-function FeedbackCard({ item }: { item: FeedbackItem }) {
+export function FeedbackCard({ item }: { item: FeedbackItem }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -132,120 +132,122 @@ function FeedbackCard({ item }: { item: FeedbackItem }) {
   const noteId = `feedback-note-${item.id}`;
 
   return (
-    <Card>
-      <CardHeader className="space-y-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          {statusBadge(item.status)}
-          <span className="text-sm font-medium">{client}</span>
-          {item.botName && (
-            <span className="text-xs text-muted-foreground">{item.botName}</span>
-          )}
-          <time
-            dateTime={item.created_at}
-            className="text-xs text-muted-foreground tabular-nums"
-          >
-            {new Date(item.created_at).toLocaleDateString()}
-          </time>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="whitespace-pre-wrap text-sm">{item.message}</p>
-
-        {item.attachments.length > 0 && (
-          <ul className="flex flex-wrap items-center gap-3">
-            {item.attachments.map((att) => (
-              <li key={att.path}>
-                <AttachmentView att={att} />
-              </li>
-            ))}
-          </ul>
+    <SsCard className="p-[22px]">
+      <div className="flex flex-wrap items-center gap-2">
+        {statusBadge(item.status)}
+        <span className="text-[13px] font-semibold text-ss-ink">{client}</span>
+        {item.botName && (
+          <span className="text-[11.5px] text-ss-muted">{item.botName}</span>
         )}
+        <time
+          dateTime={item.created_at}
+          className="ml-auto text-[11.5px] tabular-nums text-ss-muted"
+        >
+          {new Date(item.created_at).toLocaleDateString()}
+        </time>
+      </div>
 
-        <div className="space-y-2">
-          <Label htmlFor={noteId}>Internal note</Label>
-          <Textarea
-            id={noteId}
-            rows={2}
-            placeholder="Optional note for the team."
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            disabled={busy !== null}
-          />
-        </div>
+      <p className="mt-3 whitespace-pre-wrap text-[13px] leading-relaxed text-ss-body">
+        {item.message}
+      </p>
 
-        {error && (
-          <p
-            role="alert"
-            className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          >
-            {error}
-          </p>
-        )}
+      {item.attachments.length > 0 && (
+        <ul className="mt-3.5 flex flex-wrap items-center gap-3">
+          {item.attachments.map((att) => (
+            <li key={att.path}>
+              <AttachmentView att={att} />
+            </li>
+          ))}
+        </ul>
+      )}
 
-        <div className="flex flex-wrap gap-3">
-          {item.status === "new" && (
-            <>
-              <Button
-                type="button"
-                size="lg"
-                onClick={() => run("read", "read")}
-                disabled={busy !== null}
-              >
-                {busy === "read" ? "Saving…" : "Mark read"}
-              </Button>
-              <Button
-                type="button"
-                size="lg"
-                onClick={() => run("resolved", "resolved")}
-                disabled={busy !== null}
-              >
-                {busy === "resolved" ? "Saving…" : "Mark resolved"}
-              </Button>
-            </>
-          )}
-          {item.status === "read" && (
-            <>
-              <Button
-                type="button"
-                size="lg"
-                onClick={() => run("resolved", "resolved")}
-                disabled={busy !== null}
-              >
-                {busy === "resolved" ? "Saving…" : "Mark resolved"}
-              </Button>
-              <Button
-                type="button"
-                size="lg"
-                variant="outline"
-                onClick={() => run("reopen", "new")}
-                disabled={busy !== null}
-              >
-                {busy === "reopen" ? "Saving…" : "Reopen"}
-              </Button>
-            </>
-          )}
-          {item.status === "resolved" && (
-            <Button
+      <div className="mt-4 space-y-2">
+        <Label htmlFor={noteId}>Internal note</Label>
+        <Textarea
+          id={noteId}
+          rows={2}
+          placeholder="Optional note for the team."
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          disabled={busy !== null}
+        />
+      </div>
+
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 rounded-ctl-lg bg-ss-rose-bg px-3 py-2 text-[12.5px] text-ss-rose-ink"
+        >
+          {error}
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2.5">
+        {item.status === "new" && (
+          <>
+            <SsButton
               type="button"
-              size="lg"
+              variant="primary"
+              size="md"
+              onClick={() => run("read", "read")}
+              disabled={busy !== null}
+            >
+              {busy === "read" ? "Saving…" : "Mark read"}
+            </SsButton>
+            <SsButton
+              type="button"
               variant="outline"
+              size="md"
+              onClick={() => run("resolved", "resolved")}
+              disabled={busy !== null}
+            >
+              {busy === "resolved" ? "Saving…" : "Mark resolved"}
+            </SsButton>
+          </>
+        )}
+        {item.status === "read" && (
+          <>
+            <SsButton
+              type="button"
+              variant="primary"
+              size="md"
+              onClick={() => run("resolved", "resolved")}
+              disabled={busy !== null}
+            >
+              {busy === "resolved" ? "Saving…" : "Mark resolved"}
+            </SsButton>
+            <SsButton
+              type="button"
+              variant="outline"
+              size="md"
               onClick={() => run("reopen", "new")}
               disabled={busy !== null}
             >
               {busy === "reopen" ? "Saving…" : "Reopen"}
-            </Button>
-          )}
-          <Button
+            </SsButton>
+          </>
+        )}
+        {item.status === "resolved" && (
+          <SsButton
             type="button"
-            size="lg"
-            variant="secondary"
-            onClick={() => run("save-note", item.status)}
+            variant="outline"
+            size="md"
+            onClick={() => run("reopen", "new")}
             disabled={busy !== null}
           >
-            {busy === "save-note" ? "Saving…" : "Save note"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+            {busy === "reopen" ? "Saving…" : "Reopen"}
+          </SsButton>
+        )}
+        <SsButton
+          type="button"
+          variant="soft"
+          size="md"
+          onClick={() => run("save-note", item.status)}
+          disabled={busy !== null}
+        >
+          {busy === "save-note" ? "Saving…" : "Save note"}
+        </SsButton>
+      </div>
+    </SsCard>
   );
 }

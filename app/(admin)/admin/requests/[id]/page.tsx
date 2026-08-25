@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui/badge";
+import { PageBody, PageHeader, PageShell, Callout } from "@/components/ss/page";
+import { SsChip, SsStatus } from "@/components/ss/controls";
 import { ChangeRequestReview } from "@/components/admin/change-request-review";
 import { signAttachment } from "@/lib/storage";
 import { sectionColumnFor } from "@/lib/change-categories";
@@ -15,15 +17,15 @@ import type {
 function statusBadge(status: ChangeRequest["status"]) {
   switch (status) {
     case "draft":
-      return <Badge variant="secondary">Draft</Badge>;
+      return <SsChip tone="neutral">Draft</SsChip>;
     case "pending":
-      return <Badge variant="secondary">Pending</Badge>;
+      return <SsStatus tone="amber">Pending</SsStatus>;
     case "approved":
-      return <Badge variant="warning">Approved</Badge>;
+      return <SsStatus tone="indigo">Approved</SsStatus>;
     case "applied":
-      return <Badge variant="success">Applied</Badge>;
+      return <SsStatus tone="green">Applied</SsStatus>;
     case "rejected":
-      return <Badge variant="destructive">Rejected</Badge>;
+      return <SsStatus tone="rose">Rejected</SsStatus>;
   }
 }
 
@@ -115,59 +117,59 @@ export default async function AdminRequestReviewPage({
   const botName = chatbot?.name ?? "Unknown bot";
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-8">
-        <Link
-          href="/admin/requests"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← All change requests
-        </Link>
-        <h1 className="mt-2 text-3xl font-display font-semibold tracking-tight">
-          {botName}
-        </h1>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          {clientEmail && <span>{clientEmail}</span>}
-          {clientEmail && <span>·</span>}
-          {statusBadge(cr.status)}
-          <span>·</span>
-          <span className="tabular-nums">
-            Submitted {new Date(cr.created_at).toLocaleDateString()}
-          </span>
-          {cr.reviewed_at && (
-            <>
-              <span>·</span>
-              <span className="tabular-nums">
+    <PageShell>
+      <PageHeader
+        title={botName}
+        description={clientEmail ?? undefined}
+        leading={
+          <Link
+            href="/admin/requests"
+            className="inline-flex items-center gap-1 text-[12px] font-semibold leading-none text-ss-muted transition-colors hover:text-ss-ink"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            All requests
+          </Link>
+        }
+        actions={
+          <>
+            {statusBadge(cr.status)}
+            <span className="text-[11.5px] leading-none text-ss-muted tabular-nums">
+              Submitted {new Date(cr.created_at).toLocaleDateString()}
+            </span>
+            {cr.reviewed_at && (
+              <span className="text-[11.5px] leading-none text-ss-muted tabular-nums">
                 Reviewed {new Date(cr.reviewed_at).toLocaleDateString()}
               </span>
-            </>
-          )}
-        </div>
-      </div>
+            )}
+          </>
+        }
+      />
 
-      {cr.status === "draft" ? (
-        <p className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          This request is still a draft - the client hasn&apos;t submitted it for
-          review yet. It will appear in the queue once they submit it.
-        </p>
-      ) : chatbot ? (
-        <ChangeRequestReview
-          request={cr}
-          chatbot={{
-            id: chatbot.id,
-            name: chatbot.name,
-            system_prompt: chatbot.system_prompt,
-          }}
-          currentSection={currentSection}
-          currentSections={currentSections}
-          clientEmail={clientEmail}
-          transcript={transcriptView}
-        />
-      ) : (
-        <p className="text-destructive">
-          The chatbot for this request no longer exists.
-        </p>
-      )}
-    </div>
+      <PageBody center maxWidth={768}>
+        {cr.status === "draft" ? (
+          <Callout tone="indigo" title="Still a draft">
+            The client hasn&apos;t submitted this request for review yet. It will
+            appear in the queue once they submit it.
+          </Callout>
+        ) : chatbot ? (
+          <ChangeRequestReview
+            request={cr}
+            chatbot={{
+              id: chatbot.id,
+              name: chatbot.name,
+              system_prompt: chatbot.system_prompt,
+            }}
+            currentSection={currentSection}
+            currentSections={currentSections}
+            clientEmail={clientEmail}
+            transcript={transcriptView}
+          />
+        ) : (
+          <Callout tone="rose" title="Chatbot missing">
+            The chatbot for this request no longer exists.
+          </Callout>
+        )}
+      </PageBody>
+    </PageShell>
   );
 }

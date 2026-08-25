@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { SsButton } from "@/components/ss/controls";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -106,18 +106,18 @@ export function KnowledgeBaseForm({
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Add knowledge in <b>one</b> of two ways - you only need to do one.
+      <p className="text-sm text-ss-muted">
+        Add knowledge in <b className="font-semibold text-ss-body">one</b> of two ways - you only need to do one.
       </p>
 
       {/* Option 1 - Upload files */}
       <form
         onSubmit={handleUpload}
-        className="rounded-lg border bg-card p-5 space-y-3"
+        className="space-y-3 rounded-ctl-lg border border-ss-line bg-ss-page-alt p-5"
       >
         <div>
-          <h3 className="font-semibold">Option 1 · Upload files</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <h3 className="font-display font-bold text-ss-ink">Option 1 · Upload files</h3>
+          <p className="mt-0.5 text-xs text-ss-muted">
             PDF, DOCX, TXT, MD, or CSV (max 10 MB each). We extract the text for
             you - no title needed.
           </p>
@@ -131,35 +131,33 @@ export function KnowledgeBaseForm({
           className="cursor-pointer"
         />
         {uploadErr && (
-          <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded">
+          <p className="rounded-ctl bg-ss-rose-tint px-3 py-2 text-sm text-ss-rose-ink">
             {uploadErr}
           </p>
         )}
         {uploadMsg && (
-          <p className="text-sm bg-muted px-3 py-2 rounded">{uploadMsg}</p>
+          <p className="rounded-ctl bg-ss-hair px-3 py-2 text-sm text-ss-body">{uploadMsg}</p>
         )}
-        <Button type="submit" disabled={uploading}>
+        <SsButton type="submit" variant="primary" size="md" disabled={uploading}>
           {uploading ? "Processing..." : "Upload files"}
-        </Button>
+        </SsButton>
       </form>
 
       {/* OR divider */}
       <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          or
-        </span>
-        <div className="h-px flex-1 bg-border" />
+        <div className="h-px flex-1 bg-ss-line" />
+        <span className="ss-eyebrow text-ss-muted">or</span>
+        <div className="h-px flex-1 bg-ss-line" />
       </div>
 
       {/* Option 2 - Paste text */}
       <form
         onSubmit={handleSubmit}
-        className="rounded-lg border bg-card p-5 space-y-4"
+        className="space-y-4 rounded-ctl-lg border border-ss-line bg-ss-page-alt p-5"
       >
         <div>
-          <h3 className="font-semibold">Option 2 · Paste text</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <h3 className="font-display font-bold text-ss-ink">Option 2 · Paste text</h3>
+          <p className="mt-0.5 text-xs text-ss-muted">
             Type or paste one entry - a single FAQ, policy, or note. Both fields
             are required.
           </p>
@@ -186,13 +184,13 @@ export function KnowledgeBaseForm({
           />
         </div>
         {error && (
-          <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded">
+          <p className="rounded-ctl bg-ss-rose-tint px-3 py-2 text-sm text-ss-rose-ink">
             {error}
           </p>
         )}
-        <Button type="submit" disabled={loading}>
+        <SsButton type="submit" variant="primary" size="md" disabled={loading}>
           {loading ? "Saving..." : "Add entry"}
-        </Button>
+        </SsButton>
       </form>
     </div>
   );

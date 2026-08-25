@@ -1,6 +1,8 @@
-import Link from "next/link";
+import { Inbox } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui/badge";
+import { PageBody, PageHeader, PageShell, EmptyState } from "@/components/ss/page";
+import { SsCard } from "@/components/ss/card";
+import { SsChip, SsLinkButton, SsPill, SsStatus } from "@/components/ss/controls";
 import type { ChangeRequest, Profile } from "@/lib/types";
 
 type Status = ChangeRequest["status"];
@@ -9,13 +11,13 @@ const VALID_STATUSES: Status[] = ["pending", "approved", "applied", "rejected"];
 function statusBadge(status: Status) {
   switch (status) {
     case "pending":
-      return <Badge variant="secondary">Pending</Badge>;
+      return <SsStatus tone="amber">Pending</SsStatus>;
     case "approved":
-      return <Badge variant="warning">Approved</Badge>;
+      return <SsStatus tone="indigo">Approved</SsStatus>;
     case "applied":
-      return <Badge variant="success">Applied</Badge>;
+      return <SsStatus tone="green">Applied</SsStatus>;
     case "rejected":
-      return <Badge variant="destructive">Rejected</Badge>;
+      return <SsStatus tone="rose">Rejected</SsStatus>;
   }
 }
 
@@ -80,85 +82,86 @@ export default async function AdminRequestsPage({
   const pendingCount = requests.filter((r) => r.status === "pending").length;
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-3xl font-display font-semibold tracking-tight">
-          Change requests
-        </h1>
-        <p className="text-muted-foreground">
-          {requests.length} {requests.length === 1 ? "request" : "requests"}
-          {status === null && pendingCount > 0 && (
-            <>
-              {" · "}
-              <span className="font-medium text-foreground">
-                {pendingCount} pending
-              </span>
-            </>
-          )}
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Change requests"
+        description={
+          <>
+            {requests.length} {requests.length === 1 ? "request" : "requests"}
+            {status === null && pendingCount > 0 ? (
+              <>
+                {" · "}
+                <span className="font-semibold text-ss-body">
+                  {pendingCount} pending
+                </span>
+              </>
+            ) : null}
+          </>
+        }
+      />
 
-      <nav
-        aria-label="Filter by status"
-        className="mb-6 flex flex-wrap gap-2"
-      >
-        {FILTERS.map((f) => {
-          const active = status === f.value;
-          return (
-            <Link
+      <PageBody>
+        <nav
+          aria-label="Filter by status"
+          className="flex flex-wrap items-center gap-2"
+        >
+          {FILTERS.map((f) => (
+            <SsPill
               key={f.label}
               href={f.value ? `/admin/requests?status=${f.value}` : "/admin/requests"}
-              aria-current={active ? "page" : undefined}
-              className={
-                active
-                  ? "rounded-full bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  : "rounded-full border border-input bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              }
+              active={status === f.value}
             >
               {f.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {requests.length === 0 ? (
-        <p className="text-muted-foreground">
-          No {status ? `${status} ` : ""}requests.
-        </p>
-      ) : (
-        <div className="rounded-lg border divide-y">
-          {requests.map((cr) => (
-            <div
-              key={cr.id}
-              className="flex items-start justify-between gap-4 p-4"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  {statusBadge(cr.status)}
-                  <span className="text-sm font-medium">
-                    {clientLabel.get(cr.user_id) ?? "Unknown client"}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {botName.get(cr.chatbot_id) ?? "Unknown bot"}
-                  </span>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {new Date(cr.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                  {cr.request_text}
-                </p>
-              </div>
-              <Link
-                href={`/admin/requests/${cr.id}`}
-                className="shrink-0 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:underline"
-              >
-                Review →
-              </Link>
-            </div>
+            </SsPill>
           ))}
-        </div>
-      )}
-    </div>
+        </nav>
+
+        {requests.length === 0 ? (
+          <EmptyState
+            icon={<Inbox className="h-8 w-8" />}
+            title={`No ${status ? `${status} ` : ""}requests`}
+          >
+            {status
+              ? "Nothing is sitting in this status right now."
+              : "Client change requests land here the moment they are submitted for review."}
+          </EmptyState>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {requests.map((cr) => (
+              <SsCard
+                key={cr.id}
+                className="flex items-start gap-4 px-5 py-4"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {statusBadge(cr.status)}
+                    <span className="text-[13px] font-semibold leading-none text-ss-ink">
+                      {clientLabel.get(cr.user_id) ?? "Unknown client"}
+                    </span>
+                    <SsChip tone="neutral">
+                      {botName.get(cr.chatbot_id) ?? "Unknown bot"}
+                    </SsChip>
+                    <span className="text-[11.5px] leading-none text-ss-muted tabular-nums">
+                      {new Date(cr.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-[12.5px] leading-relaxed text-ss-muted">
+                    {cr.request_text}
+                  </p>
+                </div>
+                <SsLinkButton
+                  href={`/admin/requests/${cr.id}`}
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                >
+                  Review
+                </SsLinkButton>
+              </SsCard>
+            ))}
+          </div>
+        )}
+      </PageBody>
+    </PageShell>
   );
 }

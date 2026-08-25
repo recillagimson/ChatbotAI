@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
+import { SsButton } from "@/components/ss/controls";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -82,15 +83,15 @@ export function AdminChatbotEditForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs leading-snug text-ss-muted">
         You&apos;re editing this on the client&apos;s behalf. Changes save directly
         to the live bot - no review needed.
       </p>
 
-      <div className="flex items-center justify-between rounded-md border p-3">
+      <div className="flex items-center justify-between gap-3 rounded-ctl-lg border border-ss-line bg-ss-page px-4 py-3">
         <div>
           <Label htmlFor={`active-${chatbot.id}`}>Bot active</Label>
-          <p className="text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-ss-muted">
             Pause or activate this client&apos;s bot.
           </p>
         </div>
@@ -171,15 +172,20 @@ export function AdminChatbotEditForm({
       />
 
       {error && (
-        <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded">
+        <p className="rounded-ctl-lg border border-ss-rose-line bg-ss-rose-tint px-3 py-2 text-[13px] text-ss-rose-ink">
           {error}
         </p>
       )}
       <div className="flex items-center gap-3">
-        <Button type="submit" disabled={saving}>
+        <SsButton type="submit" variant="primary" size="md" disabled={saving}>
           {saving ? "Saving..." : "Save changes"}
-        </Button>
-        {saved && <span className="text-sm text-green-600">Saved ✓</span>}
+        </SsButton>
+        {saved && (
+          <span className="inline-flex items-center gap-1 text-[13px] font-medium text-ss-green">
+            <Check className="h-4 w-4" aria-hidden="true" />
+            Saved
+          </span>
+        )}
       </div>
     </form>
   );

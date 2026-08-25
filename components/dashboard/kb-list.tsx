@@ -3,14 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { SsCard } from "@/components/ss/card";
+import { SsButton, SsChip } from "@/components/ss/controls";
 import { Trash2, Pencil, Check, X, Loader2 } from "lucide-react";
 
 type Entry = {
@@ -106,11 +100,9 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
 
   if (!visible.length) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          No knowledge entries yet. Add your first one above.
-        </CardContent>
-      </Card>
+      <SsCard className="px-5 py-8 text-center text-sm text-ss-muted">
+        No knowledge entries yet. Add your first one above.
+      </SsCard>
     );
   }
 
@@ -119,8 +111,8 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
       {visible.map((e) => {
         const editing = editingId === e.id;
         return (
-          <Card key={e.id}>
-            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+          <SsCard key={e.id} className="p-4">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 {editing ? (
                   <input
@@ -129,24 +121,28 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
                     maxLength={200}
                     disabled={saving}
                     aria-label="Entry title"
-                    className="w-full rounded-md border bg-background px-2 py-1 text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="w-full rounded-ctl border border-ss-line bg-white px-2 py-1 font-display text-[15px] font-bold text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
                   />
                 ) : (
-                  <CardTitle className="text-base">{e.title}</CardTitle>
+                  <h3 className="font-display text-[15px] font-bold leading-tight text-ss-ink">
+                    {e.title}
+                  </h3>
                 )}
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="secondary">{e.chatbots?.name ?? "-"}</Badge>
-                  <Badge variant="outline">{e.source_type}</Badge>
-                  {e.needs_review && (
-                    <Badge variant="destructive">needs review</Badge>
-                  )}
-                  {e.indexed && <Badge variant="outline">indexed</Badge>}
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {e.chatbots?.name ? (
+                    <span className="text-[11.5px] font-medium leading-none text-ss-muted">
+                      {e.chatbots.name}
+                    </span>
+                  ) : null}
+                  <SsChip tone="neutral">{e.source_type}</SsChip>
+                  {e.needs_review && <SsChip tone="rose">needs review</SsChip>}
+                  {e.indexed && <SsChip tone="green">indexed</SsChip>}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 {editing ? (
                   <>
-                    <Button
+                    <SsButton
                       variant="ghost"
                       size="icon"
                       onClick={() => saveEdit(e.id)}
@@ -156,10 +152,10 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
                       {saving ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <Check className="h-4 w-4 text-green-600" />
+                        <Check className="h-4 w-4 text-ss-green" />
                       )}
-                    </Button>
-                    <Button
+                    </SsButton>
+                    <SsButton
                       variant="ghost"
                       size="icon"
                       onClick={cancelEdit}
@@ -167,31 +163,32 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
                       aria-label="Cancel editing"
                     >
                       <X className="h-4 w-4" />
-                    </Button>
+                    </SsButton>
                   </>
                 ) : (
                   <>
-                    <Button
+                    <SsButton
                       variant="ghost"
                       size="icon"
                       onClick={() => startEdit(e)}
                       aria-label="Edit entry"
                     >
                       <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
+                    </SsButton>
+                    <SsButton
                       variant="ghost"
                       size="icon"
                       onClick={() => remove(e.id)}
                       aria-label="Delete entry"
                     >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                      <Trash2 className="h-4 w-4 text-ss-rose" />
+                    </SsButton>
                   </>
                 )}
               </div>
-            </CardHeader>
-            <CardContent>
+            </div>
+
+            <div className="mt-3">
               {editing ? (
                 <div className="space-y-2">
                   <textarea
@@ -200,24 +197,24 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
                     disabled={saving}
                     rows={10}
                     aria-label="Entry content"
-                    className="min-h-[160px] w-full resize-y rounded-md border bg-background px-3 py-2 text-sm leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-h-[160px] w-full resize-y rounded-ctl border border-ss-line bg-white px-3 py-2 text-sm leading-relaxed text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
                   />
                   {editError && (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p role="alert" className="text-sm text-ss-rose-ink">
                       {editError}
                     </p>
                   )}
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-ss-muted">
                     Saving re-indexes this entry so the bot uses the edited text.
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-4">
+                <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed text-ss-body">
                   {e.content}
                 </p>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </SsCard>
         );
       })}
     </div>

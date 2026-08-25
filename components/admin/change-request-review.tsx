@@ -2,13 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { AlertTriangle, Paperclip } from "lucide-react";
+import { SsCard, SsCardHead } from "@/components/ss/card";
+import { SsButton } from "@/components/ss/controls";
+import { Callout } from "@/components/ss/page";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -158,25 +155,28 @@ export function ChangeRequestReview({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-5">
       {/* 0. Reviewer reminder (color + text) */}
-      <div
-        role="note"
-        className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+      <Callout
+        tone="amber"
+        title="Reminder"
+        icon={
+          <AlertTriangle
+            className="h-[18px] w-[18px] text-ss-amber"
+            aria-hidden="true"
+          />
+        }
       >
-        <span className="font-medium">Reminder:</span> Review the full
-        conversation below before publishing - an approved + published change
-        goes live on the client&apos;s bot.
-      </div>
+        Review the full conversation below before publishing - an approved and
+        published change goes live on the client&apos;s bot.
+      </Callout>
 
       {/* 0b. Conversation (client ↔ assistant transcript + attachments) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Conversation</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SsCard className="p-[22px]">
+        <SsCardHead titleAs="h3" title="Conversation" />
+        <div className="mt-4 space-y-4">
           {transcript.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-ss-muted">
               No conversation captured (submitted directly).
             </p>
           ) : (
@@ -190,15 +190,17 @@ export function ChangeRequestReview({
                   <div
                     className={
                       isClient
-                        ? "max-w-[85%] rounded-lg border bg-muted/50 px-3 py-2"
-                        : "max-w-[85%] rounded-lg border bg-background px-3 py-2"
+                        ? "max-w-[85%] rounded-ctl-lg border border-ss-line bg-ss-page px-3 py-2"
+                        : "max-w-[85%] rounded-ctl-lg border border-ss-line bg-white px-3 py-2"
                     }
                   >
-                    <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-ss-muted">
                       {isClient ? "Client" : "Assistant"}
                     </p>
                     {m.content && (
-                      <p className="whitespace-pre-wrap text-sm">{m.content}</p>
+                      <p className="whitespace-pre-wrap text-sm text-ss-body">
+                        {m.content}
+                      </p>
                     )}
                     {m.images && m.images.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -214,13 +216,13 @@ export function ChangeRequestReview({
                               <img
                                 src={img.url}
                                 alt={img.name}
-                                className="max-h-32 rounded border"
+                                className="max-h-32 rounded border border-ss-line"
                               />
                             </a>
                           ) : (
                             <span
                               key={j}
-                              className="text-xs text-muted-foreground"
+                              className="text-xs text-ss-muted"
                             >
                               {img.name} (unavailable)
                             </span>
@@ -237,12 +239,13 @@ export function ChangeRequestReview({
                               href={f.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs text-primary underline underline-offset-2"
+                              className="inline-flex items-center gap-1.5 text-xs text-ss-indigo-600 underline underline-offset-2"
                             >
-                              📎 {f.name}
+                              <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                              {f.name}
                             </a>
                           ) : (
-                            <span key={j} className="text-xs text-muted-foreground">
+                            <span key={j} className="text-xs text-ss-muted">
                               {f.name} (unavailable)
                             </span>
                           )
@@ -254,40 +257,38 @@ export function ChangeRequestReview({
               );
             })
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SsCard>
 
       {/* 1. Client request (read-only) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Client request</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="whitespace-pre-wrap text-sm">{request.request_text}</p>
-          <p className="text-xs text-muted-foreground">
+      <SsCard className="p-[22px]">
+        <SsCardHead titleAs="h3" title="Client request" />
+        <div className="mt-4 space-y-3">
+          <p className="whitespace-pre-wrap text-sm text-ss-body">
+            {request.request_text}
+          </p>
+          <p className="text-xs text-ss-muted">
             from {clientEmail ?? "unknown client"}
           </p>
           {request.proposed?.summary && (
-            <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
-              <span className="font-medium">AI summary:</span>{" "}
+            <p className="rounded-ctl-lg bg-ss-page px-3 py-2 text-sm text-ss-body">
+              <span className="font-semibold text-ss-ink">AI summary:</span>{" "}
               {request.proposed.summary}
             </p>
           )}
           {request.draft_error && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <p className="rounded-ctl-lg border border-ss-amber-line bg-ss-amber-bg px-3 py-2 text-[12.5px] text-ss-amber-ink">
               The AI draft failed: {request.draft_error} - use Regenerate.
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SsCard>
 
       {/* 2. Proposed section / system prompt (before & after). Hidden for KB-only "other". */}
       {showPromptCard && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Proposed {sectionLabel}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <SsCard className="p-[22px]">
+          <SsCardHead titleAs="h3" title={`Proposed ${sectionLabel}`} />
+          <div className="mt-4 space-y-3">
             {isSingleSection && (
               <DiffView
                 label={sectionLabel}
@@ -295,7 +296,7 @@ export function ChangeRequestReview({
                 after={systemPrompt}
               />
             )}
-            <Label htmlFor="proposed-system-prompt" className={isSingleSection ? "text-xs font-medium uppercase tracking-wide text-muted-foreground" : "sr-only"}>
+            <Label htmlFor="proposed-system-prompt" className={isSingleSection ? "text-xs font-medium uppercase tracking-wide text-ss-muted" : "sr-only"}>
               {isSingleSection ? "Revised (after) - editable" : "Proposed system prompt"}
             </Label>
             <Textarea
@@ -307,32 +308,30 @@ export function ChangeRequestReview({
             />
             {!isSingleSection && (
               <details className="text-sm">
-                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                <summary className="cursor-pointer text-ss-muted hover:text-ss-ink">
                   Current live prompt
                 </summary>
-                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs">
+                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-ctl-lg bg-ss-page px-3 py-2 text-xs text-ss-body">
                   {chatbot.system_prompt || "(none - generic mode)"}
                 </pre>
               </details>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </SsCard>
       )}
 
       {/* 2b. "Overall" - one editable before/after per affected section. */}
       {isOverall && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Proposed section changes</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
+        <SsCard className="p-[22px]">
+          <SsCardHead titleAs="h3" title="Proposed section changes" />
+          <div className="mt-4 space-y-6">
             {sections.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-ss-muted">
                 No section changes proposed - this request only adds knowledge (below).
               </p>
             ) : (
               sections.map((s, i) => (
-                <div key={s.section} className="space-y-3 border-b pb-6 last:border-b-0 last:pb-0">
+                <div key={s.section} className="space-y-3 border-b border-ss-hair pb-6 last:border-b-0 last:pb-0">
                   <DiffView
                     label={SECTION_LABELS[s.section]}
                     before={currentSections[s.section] ?? ""}
@@ -340,7 +339,7 @@ export function ChangeRequestReview({
                   />
                   <Label
                     htmlFor={`section-${s.section}`}
-                    className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                    className="text-xs font-medium uppercase tracking-wide text-ss-muted"
                   >
                     {SECTION_LABELS[s.section]} - revised (after), editable
                   </Label>
@@ -354,18 +353,16 @@ export function ChangeRequestReview({
                 </div>
               ))
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </SsCard>
       )}
 
       {/* 3. Knowledge-base additions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Knowledge-base additions</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SsCard className="p-[22px]">
+        <SsCardHead titleAs="h3" title="Knowledge-base additions" />
+        <div className="mt-4 space-y-4">
           {kbEntries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-ss-muted">
               No new knowledge-base entries proposed.
             </p>
           ) : (
@@ -373,7 +370,7 @@ export function ChangeRequestReview({
               {kbEntries.map((entry, i) => (
                 <div
                   key={i}
-                  className="space-y-3 rounded-md border p-4"
+                  className="space-y-3 rounded-ctl-lg border border-ss-line p-4"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <Label htmlFor={`kb-title-${i}`} className="text-sm">
@@ -382,7 +379,7 @@ export function ChangeRequestReview({
                     <div className="flex items-center gap-2">
                       <Label
                         htmlFor={`kb-include-${i}`}
-                        className="text-xs text-muted-foreground"
+                        className="text-xs text-ss-muted"
                       >
                         Include
                       </Label>
@@ -415,20 +412,18 @@ export function ChangeRequestReview({
                   />
                 </div>
               ))}
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-ss-muted">
                 Only included entries are published.
               </p>
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SsCard>
 
       {/* 4. Team note */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Team note</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
+      <SsCard className="p-[22px]">
+        <SsCardHead titleAs="h3" title="Team note" />
+        <div className="mt-4 space-y-2">
           <Label htmlFor="admin-note" className="sr-only">
             Team note
           </Label>
@@ -440,16 +435,16 @@ export function ChangeRequestReview({
             onChange={(e) => setAdminNote(e.target.value)}
             disabled={readOnly}
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-ss-muted">
             Shown to the client on applied / rejected requests.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </SsCard>
 
       {error && (
         <p
           role="alert"
-          className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          className="rounded-ctl-lg border border-ss-rose-line bg-ss-rose-bg px-3 py-2 text-sm text-ss-rose-ink"
         >
           {error}
         </p>
@@ -457,31 +452,30 @@ export function ChangeRequestReview({
 
       {/* 5. Actions (gated by status) */}
       {status === "pending" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Review</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
+        <SsCard className="p-[22px]">
+          <SsCardHead titleAs="h3" title="Review" />
+          <div className="mt-4 space-y-5">
             <div className="flex flex-wrap gap-3">
-              <Button
+              <SsButton
                 type="button"
                 size="lg"
+                variant="primary"
                 onClick={handleApprove}
                 disabled={busy !== null}
               >
                 {busy === "approve" ? "Approving…" : "Approve"}
-              </Button>
-              <Button
+              </SsButton>
+              <SsButton
                 type="button"
                 size="lg"
-                variant="destructive"
+                variant="danger-outline"
                 onClick={handleReject}
                 disabled={busy !== null}
               >
                 {busy === "reject" ? "Rejecting…" : "Reject"}
-              </Button>
+              </SsButton>
             </div>
-            <div className="space-y-2 border-t pt-4">
+            <div className="space-y-2 border-t border-ss-hair pt-4">
               <Label htmlFor="guidance">Regenerate the draft (optional guidance)</Label>
               <div className="flex flex-wrap gap-3">
                 <Input
@@ -492,8 +486,9 @@ export function ChangeRequestReview({
                   disabled={busy !== null}
                   className="max-w-md"
                 />
-                <Button
+                <SsButton
                   type="button"
+                  size="md"
                   variant="outline"
                   onClick={handleRegenerate}
                   disabled={busy !== null}
@@ -501,33 +496,32 @@ export function ChangeRequestReview({
                   {busy === "regenerate"
                     ? "Regenerating…"
                     : "Regenerate with Sonnet"}
-                </Button>
+                </SsButton>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </SsCard>
       )}
 
       {status === "approved" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Approved</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+        <SsCard className="p-[22px]">
+          <SsCardHead titleAs="h3" title="Approved" />
+          <div className="mt-4 space-y-5">
+            <p className="rounded-ctl-lg border border-ss-green-line bg-ss-green-bg px-3 py-2 text-[12.5px] text-ss-green-ink">
               Approved - not live yet. Publish to apply these changes to the
               client&apos;s bot.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button
+              <SsButton
                 type="button"
                 size="lg"
+                variant="primary"
                 onClick={handlePublish}
                 disabled={busy !== null}
               >
                 {busy === "publish" ? "Publishing…" : "Publish to live bot"}
-              </Button>
-              <Button
+              </SsButton>
+              <SsButton
                 type="button"
                 size="lg"
                 variant="outline"
@@ -535,28 +529,26 @@ export function ChangeRequestReview({
                 disabled={busy !== null}
               >
                 {busy === "approve" ? "Saving…" : "Re-approve (save edits)"}
-              </Button>
-              <Button
+              </SsButton>
+              <SsButton
                 type="button"
                 size="lg"
-                variant="destructive"
+                variant="danger-outline"
                 onClick={handleReject}
                 disabled={busy !== null}
               >
                 {busy === "reject" ? "Rejecting…" : "Reject"}
-              </Button>
+              </SsButton>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </SsCard>
       )}
 
       {status === "applied" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Applied</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+        <SsCard className="p-[22px]">
+          <SsCardHead titleAs="h3" title="Applied" />
+          <div className="mt-4 space-y-3">
+            <p className="rounded-ctl-lg border border-ss-green-line bg-ss-green-bg px-3 py-2 text-[12.5px] text-ss-green-ink">
               Applied
               {request.applied_at
                 ? ` ${new Date(request.applied_at).toLocaleString()}`
@@ -565,63 +557,61 @@ export function ChangeRequestReview({
             </p>
             {request.final?.section_content && (
               <div>
-                <p className="text-sm font-medium">{sectionLabel} that went live</p>
-                <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs">
+                <p className="text-sm font-semibold text-ss-ink">{sectionLabel} that went live</p>
+                <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-ctl-lg bg-ss-page px-3 py-2 text-xs text-ss-body">
                   {request.final.section_content}
                 </pre>
               </div>
             )}
             {request.final?.sections?.map((s) => (
               <div key={s.section}>
-                <p className="text-sm font-medium">{SECTION_LABELS[s.section]} that went live</p>
-                <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs">
+                <p className="text-sm font-semibold text-ss-ink">{SECTION_LABELS[s.section]} that went live</p>
+                <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-ctl-lg bg-ss-page px-3 py-2 text-xs text-ss-body">
                   {s.section_content}
                 </pre>
               </div>
             ))}
             {request.final?.system_prompt && (
               <div>
-                <p className="text-sm font-medium">System prompt that went live</p>
-                <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs">
+                <p className="text-sm font-semibold text-ss-ink">System prompt that went live</p>
+                <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-ctl-lg bg-ss-page px-3 py-2 text-xs text-ss-body">
                   {request.final.system_prompt}
                 </pre>
               </div>
             )}
             {request.final?.kb_entries && request.final.kb_entries.length > 0 && (
               <div>
-                <p className="text-sm font-medium">
+                <p className="text-sm font-semibold text-ss-ink">
                   Knowledge-base entries added
                 </p>
-                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-ss-muted">
                   {request.final.kb_entries.map((e, i) => (
                     <li key={i}>{e.title}</li>
                   ))}
                 </ul>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </SsCard>
       )}
 
       {status === "rejected" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Rejected</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <SsCard className="p-[22px]">
+          <SsCardHead titleAs="h3" title="Rejected" />
+          <div className="mt-4 space-y-3">
+            <p className="rounded-ctl-lg border border-ss-rose-line bg-ss-rose-bg px-3 py-2 text-[12.5px] text-ss-rose-ink">
               Rejected.
             </p>
             {request.admin_note && (
               <div>
-                <p className="text-sm font-medium">Team note</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                <p className="text-sm font-semibold text-ss-ink">Team note</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-ss-muted">
                   {request.admin_note}
                 </p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </SsCard>
       )}
     </div>
   );

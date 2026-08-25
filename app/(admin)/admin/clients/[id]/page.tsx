@@ -1,18 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft, Paperclip } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { AdminChatbotEditForm } from "@/components/admin/admin-chatbot-edit-form";
 import { ViewAsButton } from "@/components/admin/view-as-button";
 import { GrantAccessForm } from "@/components/admin/grant-access-form";
 import { KnowledgeBaseForm } from "@/components/dashboard/kb-form";
 import { KnowledgeBaseList } from "@/components/dashboard/kb-list";
+import { PageBody, PageHeader, PageShell, EmptyState } from "@/components/ss/page";
+import { SsCard, SsCardHead } from "@/components/ss/card";
+import { SsChip, SsLinkButton, SsStatus } from "@/components/ss/controls";
+import { StatCard } from "@/components/ss/stat";
+import { num } from "@/lib/format";
 import { hasActiveAccess, isComp } from "@/lib/access";
 import type {
   Profile,
@@ -27,43 +26,45 @@ type SubStatus = Subscription["status"];
 function subBadge(status: SubStatus | null) {
   switch (status) {
     case "active":
-      return <Badge variant="success">Active</Badge>;
+      return <SsStatus tone="green">Active</SsStatus>;
     case "trialing":
-      return <Badge variant="default">Trialing</Badge>;
+      return <SsStatus tone="indigo">Trialing</SsStatus>;
     case "past_due":
-      return <Badge variant="warning">Past due</Badge>;
+      return <SsStatus tone="amber">Past due</SsStatus>;
     case "canceled":
-      return <Badge variant="secondary">Canceled</Badge>;
+      return <SsChip tone="neutral">Canceled</SsChip>;
     case "incomplete":
-      return <Badge variant="destructive">Incomplete</Badge>;
+      return <SsStatus tone="rose">Incomplete</SsStatus>;
     default:
-      return <Badge variant="outline">No sub</Badge>;
+      return <SsChip tone="neutral">No sub</SsChip>;
   }
 }
 
 function crBadge(status: ChangeRequest["status"]) {
   switch (status) {
     case "pending":
-      return <Badge variant="secondary">Pending</Badge>;
+      return <SsStatus tone="amber">Pending</SsStatus>;
     case "approved":
-      return <Badge variant="warning">Approved</Badge>;
+      return <SsStatus tone="indigo">Approved</SsStatus>;
     case "applied":
-      return <Badge variant="success">Applied</Badge>;
+      return <SsStatus tone="green">Applied</SsStatus>;
     case "rejected":
-      return <Badge variant="destructive">Rejected</Badge>;
+      return <SsStatus tone="rose">Rejected</SsStatus>;
   }
 }
 
 function feedbackBadge(status: Feedback["status"]) {
   switch (status) {
     case "new":
-      return <Badge variant="default">New</Badge>;
+      return <SsStatus tone="indigo">New</SsStatus>;
     case "read":
-      return <Badge variant="secondary">Read</Badge>;
+      return <SsChip tone="neutral">Read</SsChip>;
     case "resolved":
-      return <Badge variant="success">Resolved</Badge>;
+      return <SsStatus tone="green">Resolved</SsStatus>;
   }
 }
+
+const SECTION_HEADING = "font-display text-[17px] font-bold leading-tight text-ss-ink";
 
 type AdminChatbot = Pick<
   Chatbot,
@@ -196,240 +197,232 @@ export default async function AdminClientDetailPage({
 
   const openRequests = requests.filter((r) => r.status === "pending").length;
 
+  // The subscription/comp badge shown in the header, mirroring the access state.
+  const subStatus = compRow ? (
+    accessActive ? (
+      <SsStatus tone="green">Comp</SsStatus>
+    ) : (
+      <SsChip tone="neutral">Comp expired</SsChip>
+    )
+  ) : (
+    subBadge(subscription?.status ?? null)
+  );
+
   return (
-    <div>
-      <Link
-        href="/admin"
-        className="text-sm text-muted-foreground hover:text-foreground"
-      >
-        ← All clients
-      </Link>
+    <PageShell>
+      <PageHeader
+        title={profile.full_name || profile.email}
+        description={
+          <>
+            {profile.email}
+            {profile.company_name ? <> &middot; {profile.company_name}</> : null}{" "}
+            &middot; Joined{" "}
+            {new Date(profile.created_at).toLocaleDateString()}
+          </>
+        }
+        leading={
+          <Link
+            href="/admin"
+            className="mb-1 flex w-full items-center gap-1.5 text-[12px] font-semibold leading-none text-ss-muted transition-colors hover:text-ss-ink"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            All clients
+          </Link>
+        }
+        actions={
+          <>
+            {subStatus}
+            <ViewAsButton
+              clientId={profile.id}
+              label="Open client dashboard"
+              variant="button"
+            />
+          </>
+        }
+      />
 
-      <div className="mt-4 lg:grid lg:grid-cols-[300px_1fr] lg:gap-8">
-        {/* Identifier - pinned to the side so it's always clear whose account this is. */}
-        <aside className="mb-8 lg:mb-0 lg:sticky lg:top-8 lg:self-start">
-          <Card>
-            <CardHeader>
-              <CardTitle className="break-words">
-                {profile.full_name || profile.email}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Email</p>
-                <p className="break-words">{profile.email}</p>
-              </div>
-              {profile.company_name && (
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Company</p>
-                  <p className="break-words">{profile.company_name}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Subscription</p>
-                <div className="mt-1">
-                  {compRow ? (
-                    accessActive ? (
-                      <Badge variant="success">Comp</Badge>
-                    ) : (
-                      <Badge variant="secondary">Comp expired</Badge>
-                    )
-                  ) : (
-                    subBadge(subscription?.status ?? null)
-                  )}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Joined</p>
-                <p className="tabular-nums">
-                  {new Date(profile.created_at).toLocaleDateString()}
+      <PageBody>
+        {/* Snapshot counters, replacing the old identity aside's stat trio. */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard label="Chatbots" value={num(chatbots.length)} />
+          <StatCard
+            label="Open requests"
+            value={num(openRequests)}
+            valueTone={openRequests > 0 ? "amber" : "ink"}
+          />
+          <StatCard label="Feedback" value={num(feedback.length)} />
+        </div>
+
+        {/* ---- Access ---------------------------------------------------- */}
+        <section>
+          <h2 className={SECTION_HEADING}>Access</h2>
+          <div className="mt-3">
+            {paidActive ? (
+              <SsCard tone="soft" className="px-5 py-4">
+                <p className="text-[13px] font-semibold text-ss-ink">
+                  Active paid subscription
                 </p>
-              </div>
-              <div className="border-t pt-3">
-                <ViewAsButton clientId={profile.id} label="Open client dashboard" variant="button" />
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  See and act in their dashboard as them.
+                <p className="mt-1 text-[12.5px] leading-snug text-ss-muted">
+                  {paidRenews
+                    ? `Renews on ${paidRenews.toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}.`
+                    : "Managed by Stripe."}{" "}
+                  No comp needed.
                 </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t pt-3 text-center">
-                <div>
-                  <p className="text-lg font-semibold tabular-nums">{chatbots.length}</p>
-                  <p className="text-xs text-muted-foreground">Chatbots</p>
-                </div>
-                <div>
-                  <p className="text-lg font-semibold tabular-nums">{openRequests}</p>
-                  <p className="text-xs text-muted-foreground">Open req.</p>
-                </div>
-                <div>
-                  <p className="text-lg font-semibold tabular-nums">{feedback.length}</p>
-                  <p className="text-xs text-muted-foreground">Feedback</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </aside>
+              </SsCard>
+            ) : (
+              <SsCard className="p-[22px]">
+                <GrantAccessForm
+                  userId={profile.id}
+                  compExpiresAt={subscription?.comp_expires_at ?? null}
+                  compNote={subscription?.comp_note ?? null}
+                />
+              </SsCard>
+            )}
+          </div>
+        </section>
 
-        {/* Main column */}
-        <div className="min-w-0">
-          <h1 className="mb-6 text-3xl font-display font-semibold tracking-tight lg:sr-only">
-            {profile.full_name || profile.email}
-          </h1>
+        {/* ---- Chatbots ------------------------------------------------- */}
+        <section>
+          <h2 className={SECTION_HEADING}>Chatbots ({chatbots.length})</h2>
+          {chatbots.length === 0 ? (
+            <div className="mt-3">
+              <EmptyState variant="inline" title="No chatbots yet">
+                This client has no chatbots yet.
+              </EmptyState>
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-col gap-5">
+              {chatbots.map((bot) => (
+                <SsCard key={bot.id} className="p-[22px]">
+                  <SsCardHead
+                    titleAs="h3"
+                    title={bot.name}
+                    action={
+                      bot.is_active ? (
+                        <SsStatus tone="green">Active</SsStatus>
+                      ) : (
+                        <SsChip tone="neutral">Paused</SsChip>
+                      )
+                    }
+                  />
 
-          <section className="mb-10">
-            <h2 className="mb-4 text-xl font-display font-semibold tracking-tight">
-              Access
-            </h2>
-            <Card>
-              <CardContent className="py-6">
-                {paidActive ? (
-                  <div className="text-sm">
-                    <p className="font-medium">Active paid subscription</p>
-                    <p className="mt-1 text-muted-foreground">
-                      {paidRenews
-                        ? `Renews on ${paidRenews.toLocaleDateString(undefined, {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })}.`
-                        : "Managed by Stripe."}{" "}
-                      No comp needed.
+                  <div className="mt-5">
+                    <AdminChatbotEditForm
+                      chatbot={{
+                        id: bot.id,
+                        name: bot.name,
+                        instagram_username: bot.instagram_username,
+                        is_active: bot.is_active,
+                        persona_section: bot.persona_section,
+                        offers_section: bot.offers_section,
+                        rebuttals_section: bot.rebuttals_section,
+                        system_prompt: bot.system_prompt,
+                        business_description: bot.business_description,
+                      }}
+                    />
+                  </div>
+
+                  {/* Knowledge base for this chatbot. Uploads/edits post to the KB
+                      routes, which stamp this client as owner (not the admin); deletes
+                      go through RLS via the "admin all kb" overlay. */}
+                  <div className="mt-6 border-t border-ss-hair pt-6">
+                    <h3 className="font-display text-[14px] font-bold leading-tight text-ss-ink">
+                      Knowledge base
+                    </h3>
+                    <p className="mb-4 mt-1 text-xs leading-snug text-ss-muted">
+                      Upload or paste knowledge for this chatbot. Files are parsed and
+                      indexed for retrieval, exactly as on the client&apos;s own dashboard.
+                    </p>
+                    <KnowledgeBaseForm chatbotId={bot.id} />
+                    <div className="mt-6 space-y-3">
+                      <p className="text-[13px] font-semibold text-ss-ink">
+                        {(kbByChatbot.get(bot.id) ?? []).length} entr
+                        {(kbByChatbot.get(bot.id) ?? []).length === 1 ? "y" : "ies"}
+                      </p>
+                      <KnowledgeBaseList entries={kbByChatbot.get(bot.id) ?? []} />
+                    </div>
+                  </div>
+                </SsCard>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ---- Change requests ------------------------------------------ */}
+        <section>
+          <h2 className={SECTION_HEADING}>Change requests ({requests.length})</h2>
+          {requests.length === 0 ? (
+            <div className="mt-3">
+              <EmptyState variant="inline" title="No change requests" />
+            </div>
+          ) : (
+            <SsCard className="mt-3 divide-y divide-ss-hair">
+              {requests.map((cr) => (
+                <div
+                  key={cr.id}
+                  className="flex items-start justify-between gap-4 p-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      {crBadge(cr.status)}
+                      <span className="text-[11.5px] leading-none text-ss-muted tabular-nums">
+                        {new Date(cr.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 line-clamp-2 text-[13px] leading-snug text-ss-body">
+                      {cr.request_text}
                     </p>
                   </div>
-                ) : (
-                  <GrantAccessForm
-                    userId={profile.id}
-                    compExpiresAt={subscription?.comp_expires_at ?? null}
-                    compNote={subscription?.comp_note ?? null}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </section>
+                  <SsLinkButton
+                    href={`/admin/requests/${cr.id}`}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Review
+                  </SsLinkButton>
+                </div>
+              ))}
+            </SsCard>
+          )}
+        </section>
 
-          <section className="mb-10">
-            <h2 className="mb-4 text-xl font-display font-semibold tracking-tight">
-              Chatbots ({chatbots.length})
-            </h2>
-            {chatbots.length === 0 ? (
-              <p className="text-muted-foreground">
-                This client has no chatbots yet.
-              </p>
-            ) : (
-              <div className="space-y-6">
-                {chatbots.map((bot) => (
-                  <Card key={bot.id}>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                      <CardTitle>{bot.name}</CardTitle>
-                      {bot.is_active ? (
-                        <Badge variant="success">Active</Badge>
-                      ) : (
-                        <Badge variant="secondary">Paused</Badge>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <AdminChatbotEditForm
-                        chatbot={{
-                          id: bot.id,
-                          name: bot.name,
-                          instagram_username: bot.instagram_username,
-                          is_active: bot.is_active,
-                          persona_section: bot.persona_section,
-                          offers_section: bot.offers_section,
-                          rebuttals_section: bot.rebuttals_section,
-                          system_prompt: bot.system_prompt,
-                          business_description: bot.business_description,
-                        }}
-                      />
-
-                      {/* Knowledge base for this chatbot. Uploads/edits post to the KB
-                          routes, which stamp this client as owner (not the admin); deletes
-                          go through RLS via the "admin all kb" overlay. */}
-                      <div className="border-t pt-6">
-                        <h3 className="text-sm font-semibold">Knowledge base</h3>
-                        <p className="mb-4 mt-0.5 text-xs text-muted-foreground">
-                          Upload or paste knowledge for this chatbot. Files are parsed and
-                          indexed for retrieval, exactly as on the client&apos;s own dashboard.
-                        </p>
-                        <KnowledgeBaseForm chatbotId={bot.id} />
-                        <div className="mt-6 space-y-3">
-                          <p className="text-sm font-medium">
-                            {(kbByChatbot.get(bot.id) ?? []).length} entr
-                            {(kbByChatbot.get(bot.id) ?? []).length === 1 ? "y" : "ies"}
-                          </p>
-                          <KnowledgeBaseList entries={kbByChatbot.get(bot.id) ?? []} />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="mb-10">
-        <h2 className="mb-4 text-xl font-display font-semibold tracking-tight">
-          Change requests ({requests.length})
-        </h2>
-        {requests.length === 0 ? (
-          <p className="text-muted-foreground">No change requests.</p>
-        ) : (
-          <div className="rounded-lg border divide-y">
-            {requests.map((cr) => (
-              <div
-                key={cr.id}
-                className="flex items-start justify-between gap-4 p-4"
-              >
-                <div className="min-w-0 flex-1">
+        {/* ---- Feedback ------------------------------------------------- */}
+        <section>
+          <h2 className={SECTION_HEADING}>Feedback ({feedback.length})</h2>
+          {feedback.length === 0 ? (
+            <div className="mt-3">
+              <EmptyState variant="inline" title="No feedback" />
+            </div>
+          ) : (
+            <SsCard className="mt-3 divide-y divide-ss-hair">
+              {feedback.map((fb) => (
+                <div key={fb.id} className="p-4">
                   <div className="flex items-center gap-2">
-                    {crBadge(cr.status)}
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {new Date(cr.created_at).toLocaleDateString()}
+                    {feedbackBadge(fb.status)}
+                    <span className="text-[11.5px] leading-none text-ss-muted tabular-nums">
+                      {new Date(fb.created_at).toLocaleDateString()}
                     </span>
+                    {fb.attachments?.length ? (
+                      <span className="inline-flex items-center gap-1 text-[11.5px] leading-none text-ss-muted">
+                        <Paperclip className="h-3 w-3" aria-hidden="true" />
+                        {fb.attachments.length}{" "}
+                        {fb.attachments.length === 1 ? "file" : "files"}
+                      </span>
+                    ) : null}
                   </div>
-                  <p className="mt-1 line-clamp-2 text-sm">{cr.request_text}</p>
+                  <p className="mt-1.5 line-clamp-2 text-[13px] leading-snug text-ss-body">
+                    {fb.message}
+                  </p>
                 </div>
-                <Link
-                  href={`/admin/requests/${cr.id}`}
-                  className="shrink-0 text-sm font-medium text-primary hover:underline"
-                >
-                  Review →
-                </Link>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-4 text-xl font-display font-semibold tracking-tight">
-          Feedback ({feedback.length})
-        </h2>
-        {feedback.length === 0 ? (
-          <p className="text-muted-foreground">No feedback.</p>
-        ) : (
-          <div className="rounded-lg border divide-y">
-            {feedback.map((fb) => (
-              <div key={fb.id} className="p-4">
-                <div className="flex items-center gap-2">
-                  {feedbackBadge(fb.status)}
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {new Date(fb.created_at).toLocaleDateString()}
-                  </span>
-                  {fb.attachments?.length ? (
-                    <span className="text-xs text-muted-foreground">
-                      📎 {fb.attachments.length}{" "}
-                      {fb.attachments.length === 1 ? "file" : "files"}
-                    </span>
-                  ) : null}
-                </div>
-                <p className="mt-1 line-clamp-2 text-sm">{fb.message}</p>
-              </div>
-            ))}
-          </div>
-        )}
-          </section>
-        </div>
-      </div>
-    </div>
+              ))}
+            </SsCard>
+          )}
+        </section>
+      </PageBody>
+    </PageShell>
   );
 }

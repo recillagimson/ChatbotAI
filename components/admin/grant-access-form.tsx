@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { SsButton } from "@/components/ss/controls";
+import { Callout } from "@/components/ss/page";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,39 +81,35 @@ export function GrantAccessForm({
   return (
     <div className="space-y-4">
       {compActive && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+        <Callout tone="indigo">
           Comp access active until{" "}
-          <span className="font-medium">
+          <span className="font-semibold text-ss-ink">
             {new Date(compExpiresAt!).toLocaleDateString(undefined, {
               year: "numeric",
               month: "long",
               day: "numeric",
             })}
           </span>
-          {compNote ? <> · {compNote}</> : null}
-        </div>
+          {compNote ? <> &middot; {compNote}</> : null}
+        </Callout>
       )}
 
       <div className="flex flex-wrap gap-2">
         {PRESETS.map((p) => {
           const selected = amount === p.amount && unit === p.unit;
           return (
-            <button
+            <SsButton
               key={p.label}
               type="button"
+              variant={selected ? "soft" : "outline"}
+              size="sm"
               onClick={() => {
                 setAmount(p.amount);
                 setUnit(p.unit);
               }}
-              className={
-                "rounded-full border px-3 py-1 text-sm transition-colors " +
-                (selected
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-input hover:bg-muted")
-              }
             >
               {p.label}
-            </button>
+            </SsButton>
           );
         })}
       </div>
@@ -142,7 +139,7 @@ export function GrantAccessForm({
               // Re-clamp so switching to Months can't leave an over-cap amount.
               setAmount((a) => Math.min(next === "months" ? 120 : 3650, a));
             }}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="flex h-10 w-full rounded-ctl-lg border border-ss-line bg-white px-3 py-2 text-[13px] text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-1"
           >
             <option value="days">Days</option>
             <option value="months">Months</option>
@@ -162,32 +159,40 @@ export function GrantAccessForm({
         />
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-[13px] text-ss-rose-ink">{error}</p>}
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={() => send("grant")} disabled={busy !== null}>
+        <SsButton
+          type="button"
+          variant="primary"
+          size="md"
+          onClick={() => send("grant")}
+          disabled={busy !== null}
+        >
           {busy === "grant" ? "Granting…" : compActive ? "Reset to this duration" : "Grant access"}
-        </Button>
+        </SsButton>
         {compActive && (
           <>
-            <Button
+            <SsButton
               type="button"
-              variant="secondary"
+              variant="outline"
+              size="md"
               onClick={() => send("extend")}
               disabled={busy !== null}
             >
               {busy === "extend" ? "Extending…" : "Extend"}
-            </Button>
-            <Button
+            </SsButton>
+            <SsButton
               type="button"
-              variant="destructive"
+              variant="danger-outline"
+              size="md"
               onClick={() => {
                 if (confirm("Revoke this client's comp access now?")) send("revoke");
               }}
               disabled={busy !== null}
             >
               {busy === "revoke" ? "Revoking…" : "Revoke"}
-            </Button>
+            </SsButton>
           </>
         )}
       </div>
