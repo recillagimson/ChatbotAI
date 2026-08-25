@@ -246,16 +246,28 @@ export function cleanLiveChatUrl(value: string | null | undefined): string | nul
 }
 
 /**
+ * Channels the `fb{pageId}/chat/{subscriberId}` link shape is verbatim-confirmed for:
+ * Facebook Messenger and Instagram connected through a Facebook Page. For any other channel
+ * (WhatsApp/Telegram/standalone Instagram) the ManyChat Live Chat URL may use a different
+ * shape, so a built link there could be wrong - those channels must rely on a stored
+ * `live_chat_url` (channel-safe) or fall back to the account root, never a guessed link.
+ */
+const FB_DEEPLINK_PLATFORMS = new Set(["instagram", "messenger"]);
+
+/**
  * The "Open in ManyChat" target for one conversation, best source first:
  *
  *  1. ManyChat's own per-subscriber `live_chat_url`, captured verbatim from the webhook.
  *     Channel-safe (Instagram/Messenger/WhatsApp/Telegram) with no URL-format assumption -
- *     the preferred source when the owner maps the "Live Chat URL" system field.
+ *     the preferred source when the owner maps the "Live Chat URL" system field. Wins on
+ *     EVERY channel.
  *  2. The Live Chat deep link built from the ManyChat page id + subscriber id:
  *     `https://app.manychat.com/fb{pageId}/chat/{subscriberId}`. The trailing id is the
  *     `manychat_subscriber_id` we already store; `{pageId}` is the inbound webhook's
- *     `page_id`. Verbatim-confirmed for Facebook Messenger and Instagram-via-Facebook
- *     (LGF's channels); ids are URL-encoded defensively though ManyChat sends them numeric.
+ *     `page_id`. Only built for FB_DEEPLINK_PLATFORMS (Messenger / Instagram-via-Facebook,
+ *     where the shape is confirmed) - a WhatsApp/Telegram thread with a stored page_id does
+ *     NOT get a guessed fb-link, it falls through to (3). Ids are URL-encoded defensively
+ *     though ManyChat sends them numeric.
  *  3. The account root (`MANYCHAT_LIVE_CHAT_URL`) - opens ManyChat but not the thread.
  *     Guarantees the button is never a dead link before the owner maps either field.
  *
@@ -265,12 +277,14 @@ export function manychatConversationUrl(opts: {
   liveChatUrl?: string | null;
   pageId?: string | null;
   subscriberId?: string | null;
+  /** The conversation's channel; gates the built fb-link to the confirmed platforms. */
+  platform?: string | null;
 }): string {
   const live = cleanLiveChatUrl(opts.liveChatUrl);
   if (live) return live;
   const pageId = opts.pageId?.trim();
   const subscriberId = opts.subscriberId?.trim();
-  if (pageId && subscriberId) {
+  if (pageId && subscriberId && opts.platform && FB_DEEPLINK_PLATFORMS.has(opts.platform)) {
     return `https://app.manychat.com/fb${encodeURIComponent(pageId)}/chat/${encodeURIComponent(subscriberId)}`;
   }
   return MANYCHAT_LIVE_CHAT_URL;

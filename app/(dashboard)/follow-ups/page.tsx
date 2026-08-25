@@ -234,11 +234,13 @@ async function FollowUpsQueue({
       nativeUrl: nativeInboxUrl(platform),
       nativeLabel: nativeInboxLabel(platform),
       // Deep-link straight to this thread in ManyChat when we can (stored live_chat_url,
-      // else built from page_id + subscriber_id); falls back to the account root otherwise.
+      // else the fb-link built from page_id + subscriber_id on the confirmed channels);
+      // falls back to the account root otherwise. platform gates the built fb-link.
       manychatUrl: manychatConversationUrl({
         liveChatUrl: c.manychat_live_chat_url,
         pageId: c.manychat_page_id,
         subscriberId: c.manychat_subscriber_id,
+        platform,
       }),
     };
   });

@@ -138,10 +138,12 @@ const BodySchema = z.object({
   messenger_id: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
   // ManyChat's own per-subscriber Live Chat deep link (the "Live Chat URL" system field).
   // OPTIONAL: when a flow maps it we store it verbatim so the Follow-ups queue's "Open in
-  // ManyChat" opens the exact thread on any channel (see manychatConversationUrl). Kept a
-  // loose string on purpose - an un-rendered merge field or blank must never fail-validate
-  // the whole inbound; cleanLiveChatUrl decides what is actually a usable link.
-  live_chat_url: z.string().optional().nullable(),
+  // ManyChat" opens the exact thread on any channel (see manychatConversationUrl). Coerced
+  // like the sibling system-field ids (page_id/psid/ig_id/...) rather than a strict string:
+  // a cosmetic field must NEVER fail-validate the whole inbound, so a stray non-string token
+  // (a mis-mapped numeric/boolean merge field) stringifies to a harmless value that
+  // cleanLiveChatUrl then discards, instead of 400-ing the lead's real message.
+  live_chat_url: z.union([z.string(), z.number(), z.boolean()]).transform(String).optional().nullable(),
   // Optional now: a photo/voice-only DM has no text. Either text or media is required.
   message: z.string().max(4000).optional().nullable(),
   // Inbound media. ManyChat flows map the attachment URL under different field
@@ -229,6 +231,39 @@ async function logPushFailure(
   } catch {
     /* never throw from observability */
   }
+}
+
+/**
+ * Best-effort stamp of the ManyChat deep-link ids (used by the Follow-ups queue's
+ * "Open in ManyChat" link) on a conversation, as a SEPARATE write from the core
+ * upsert/update - the same two-write idiom as the BOT_ON handler below.
+ *
+ * PostgREST rejects an UPDATE/INSERT that references an un-migrated column ATOMICALLY, so
+ * folding these into the core write would, in any deploy-before-migrate window, drop the
+ * WHOLE core write: a brand-new lead would get no conversation row and no reply, and an
+ * existing thread's last_message_at / unread_count / identity backfill would silently stop.
+ * Kept separate + best-effort (errors swallowed) so a missing column fails only THIS write
+ * and the deep link simply stays unpopulated until 2026-08-25-conversation-manychat-deeplink
+ * .sql lands. Writes only columns that have a value and (when `existing` is supplied) aren't
+ * already set - backfill-only, exactly like external_user_id.
+ */
+async function stampManychatDeepLink(
+  supabase: ReturnType<typeof createServiceClient>,
+  conversationId: string,
+  vals: { pageId: string | null; liveChatUrl: string | null },
+  existing?: { manychat_page_id?: string | null; manychat_live_chat_url?: string | null }
+): Promise<void> {
+  const patch: Record<string, string> = {};
+  if (vals.pageId && !existing?.manychat_page_id) patch.manychat_page_id = vals.pageId;
+  if (vals.liveChatUrl && !existing?.manychat_live_chat_url) {
+    patch.manychat_live_chat_url = vals.liveChatUrl;
+  }
+  if (Object.keys(patch).length === 0) return;
+  await supabase
+    .from("conversations")
+    .update(patch)
+    .eq("id", conversationId)
+    .then(() => {}, () => {});
 }
 
 /**
@@ -522,8 +557,6 @@ export async function POST(request: NextRequest) {
               contact_name: displayName,
               contact_username: username,
               external_user_id: externalId,
-              manychat_page_id: pageId,
-              manychat_live_chat_url: liveChatUrl,
             },
             { onConflict: "chatbot_id,manychat_subscriber_id" }
           )
@@ -542,6 +575,10 @@ export async function POST(request: NextRequest) {
     }
     conversationId = created.id;
     conversationStatus = created.status;
+
+    // Deep-link ids in a separate best-effort write (see stampManychatDeepLink) so a
+    // pre-migration deploy can never cost this new lead their conversation row or reply.
+    await stampManychatDeepLink(supabase, conversationId, { pageId, liveChatUrl });
 
     // Returning contact: a deleted+recreated ManyChat contact arrives as a BRAND-NEW
     // subscriber_id, so this fresh row has none of the prior thread's silence state and
@@ -611,16 +648,16 @@ export async function POST(request: NextRequest) {
         // Backfill the stable identity once so a FUTURE contact deletion can carry this
         // thread's pause. Only set when currently empty (never overwrite a good value).
         ...(existing.external_user_id || !externalId ? {} : { external_user_id: externalId }),
-        // Backfill the ManyChat deep-link ids the same way: old rows predate these columns,
-        // so fill them on the next inbound. Both are stable per subscriber/channel, so once
-        // set they never need to change - backfill-only avoids needless writes.
-        ...(existing.manychat_page_id || !pageId ? {} : { manychat_page_id: pageId }),
-        ...(existing.manychat_live_chat_url || !liveChatUrl
-          ? {}
-          : { manychat_live_chat_url: liveChatUrl }),
         ...(muted ? {} : { last_followup_at: null }),
       })
       .eq("id", existing.id);
+
+    // The ManyChat deep-link ids are stamped SEPARATELY (backfill-only) rather than folded
+    // into the update above: an un-migrated column would otherwise fail that whole update
+    // ATOMICALLY, silently freezing last_message_at / unread_count / identity backfill. Old
+    // rows predate these columns and fill in here on their next inbound. See
+    // stampManychatDeepLink.
+    await stampManychatDeepLink(supabase, existing.id, { pageId, liveChatUrl }, existing);
   }
 
   // Reset keyword (testing tool). A universal, admin-set control word (RESET_KEYWORD
