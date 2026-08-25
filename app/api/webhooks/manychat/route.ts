@@ -84,6 +84,7 @@ import {
 import { splitBurst, combineBurstText, remainingDebounceMs, clampDebounceSeconds, shouldStandDown } from "@/lib/debounce";
 import { suppressionCarry, resolveExternalId } from "@/lib/returning-contact";
 import { flattenManychatContact } from "@/lib/manychat-contact";
+import { cleanLiveChatUrl } from "@/lib/manual-followups";
 import type { Chatbot, Message } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -135,6 +136,12 @@ const BodySchema = z.object({
   psid: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
   ig_id: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
   messenger_id: z.union([z.string(), z.number()]).transform(String).optional().nullable(),
+  // ManyChat's own per-subscriber Live Chat deep link (the "Live Chat URL" system field).
+  // OPTIONAL: when a flow maps it we store it verbatim so the Follow-ups queue's "Open in
+  // ManyChat" opens the exact thread on any channel (see manychatConversationUrl). Kept a
+  // loose string on purpose - an un-rendered merge field or blank must never fail-validate
+  // the whole inbound; cleanLiveChatUrl decides what is actually a usable link.
+  live_chat_url: z.string().optional().nullable(),
   // Optional now: a photo/voice-only DM has no text. Either text or media is required.
   message: z.string().max(4000).optional().nullable(),
   // Inbound media. ManyChat flows map the attachment URL under different field
@@ -457,13 +464,19 @@ export async function POST(request: NextRequest) {
   // mapped a stable id into it (Messenger PSID / Instagram @handle) - the single-token
   // guard in resolveExternalId keeps a free-text display name from being used as an id.
   // Null = we cannot re-identify a returning contact (no carry-over, behaves as new).
+  // ManyChat routing ids, stored on the conversation so the Follow-ups queue can deep-link
+  // "Open in ManyChat" straight to the thread (manychatConversationUrl). pageId is reused
+  // by resolveExternalId below; liveChatUrl is ManyChat's ready-made per-contact link.
+  const pageId = cleanContactField(body.page_id);
+  const liveChatUrl = cleanLiveChatUrl(body.live_chat_url);
+
   const externalId = resolveExternalId({
     externalUserId: cleanContactField(body.external_user_id),
     psid: cleanContactField(body.psid),
     igId: cleanContactField(body.ig_id),
     messengerId: cleanContactField(body.messenger_id),
     username,
-    pageId: cleanContactField(body.page_id),
+    pageId,
   });
 
   const { data: existing } = await supabase
@@ -509,6 +522,8 @@ export async function POST(request: NextRequest) {
               contact_name: displayName,
               contact_username: username,
               external_user_id: externalId,
+              manychat_page_id: pageId,
+              manychat_live_chat_url: liveChatUrl,
             },
             { onConflict: "chatbot_id,manychat_subscriber_id" }
           )
@@ -596,6 +611,13 @@ export async function POST(request: NextRequest) {
         // Backfill the stable identity once so a FUTURE contact deletion can carry this
         // thread's pause. Only set when currently empty (never overwrite a good value).
         ...(existing.external_user_id || !externalId ? {} : { external_user_id: externalId }),
+        // Backfill the ManyChat deep-link ids the same way: old rows predate these columns,
+        // so fill them on the next inbound. Both are stable per subscriber/channel, so once
+        // set they never need to change - backfill-only avoids needless writes.
+        ...(existing.manychat_page_id || !pageId ? {} : { manychat_page_id: pageId }),
+        ...(existing.manychat_live_chat_url || !liveChatUrl
+          ? {}
+          : { manychat_live_chat_url: liveChatUrl }),
         ...(muted ? {} : { last_followup_at: null }),
       })
       .eq("id", existing.id);

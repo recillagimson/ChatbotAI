@@ -1234,6 +1234,24 @@ create index if not exists conversations_ext_user_idx
 -- drop index if exists conversations_ext_user_idx;
 -- alter table public.conversations drop column if exists external_user_id;
 
+-- ManyChat Live Chat deep link (2026-08-25-conversation-manychat-deeplink.sql) - the
+-- Follow-ups queue's "Open in ManyChat" button used to point at the account root; these
+-- two columns let it open the actual thread. Either alone is enough (manychatConversationUrl
+-- in lib/manual-followups.ts): manychat_live_chat_url is ManyChat's own per-contact link,
+-- captured verbatim from the webhook (Add Full Subscriber Data / "Live Chat URL" field) and
+-- channel-safe; manychat_page_id is the inbound page_id, from which the link is built as
+-- https://app.manychat.com/fb{page_id}/chat/{subscriber_id} (Messenger / Instagram-via-FB).
+-- Both nullable; when neither is set the button falls back to the account root as before, so
+-- nothing regresses. No index: read only alongside the conversation row. Existing rows
+-- backfill on the contact's next inbound message.
+alter table public.conversations
+  add column if not exists manychat_page_id text;
+alter table public.conversations
+  add column if not exists manychat_live_chat_url text;
+-- Teardown:
+-- alter table public.conversations drop column if exists manychat_page_id;
+-- alter table public.conversations drop column if exists manychat_live_chat_url;
+
 -- Workspace shell performance (2026-08-17-workspace-perf.sql) - the dashboard
 -- shell used to page every conversation into app memory just to count them.
 -- This index serves the shell/follow-up/tag-mix user_id + last_message_at range

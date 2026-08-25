@@ -51,5 +51,10 @@ export function flattenManychatContact(raw: unknown): unknown {
     first_name: pick(r.first_name, cc.first_name),
     last_name: pick(r.last_name, cc.last_name),
     page_id: pick(r.page_id, cc.page_id),
+    // ManyChat's own per-contact Live Chat deep link, part of Full Contact Data. Hoisted
+    // so the "Add Full Subscriber Data" path (the robust, channel-safe way to capture it)
+    // surfaces it for storage - the Follow-ups queue deep-links to it. See
+    // manychatConversationUrl in lib/manual-followups.ts.
+    live_chat_url: pick(r.live_chat_url, cc.live_chat_url),
   };
 }

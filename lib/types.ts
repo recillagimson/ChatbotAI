@@ -187,6 +187,8 @@ export interface Conversation {
   contact_name: string | null;
   contact_username: string | null;
   external_user_id: string | null;   // stable platform user id (Messenger PSID / IG id / @handle) that survives a ManyChat contact deletion; re-identifies a returning contact so an owner-set pause carries over
+  manychat_page_id: string | null;    // ManyChat page_id for THIS conversation's channel; used to build the Live Chat deep link app.manychat.com/fb{page_id}/chat/{subscriber_id}
+  manychat_live_chat_url: string | null; // ManyChat's own per-contact Live Chat deep link, captured verbatim from the webhook (Add Full Subscriber Data); preferred, channel-safe source for "Open in ManyChat"
   status: "active" | "ai_paused" | "closed";
   last_message_at: string;
   last_followup_at: string | null;

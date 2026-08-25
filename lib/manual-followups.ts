@@ -226,11 +226,52 @@ export function nativeInboxLabel(platform: Platform): string {
 }
 
 /**
- * ManyChat Live Chat - where the owner sends the drafted follow-up by hand. Every
- * connected channel (Instagram/Messenger/WhatsApp/Telegram) routes through ManyChat,
- * so this button is channel-agnostic and shows on every card. A generic account URL,
- * like `nativeInboxUrl`: ManyChat exposes no public per-contact deep link we can build
- * from the ids we store. (A future upgrade could capture `live_chat_url` from the
- * ManyChat "Full Contact Data" payload to deep-link straight to the thread.)
+ * ManyChat Live Chat account root - the fallback "Open in ManyChat" target when we
+ * cannot build a per-conversation deep link (see `manychatConversationUrl`). Opens the
+ * app's inbox but not the specific thread, so it is only used when neither a stored
+ * `live_chat_url` nor a `page_id` is known for the conversation.
  */
 export const MANYCHAT_LIVE_CHAT_URL = "https://app.manychat.com/";
+
+/**
+ * A ManyChat Live Chat deep link, or null. Accepts ONLY an absolute https URL on a
+ * manychat.com host, so an un-rendered merge field ("{{live_chat_url}}"), a blank, a
+ * placeholder, or any off-domain value is rejected rather than stored or turned into a
+ * clickable button. Shared by the inbound webhook (what to persist) and the URL builder
+ * (what to trust) so both agree on what counts as a real link. Pure.
+ */
+export function cleanLiveChatUrl(value: string | null | undefined): string | null {
+  const t = value?.trim();
+  return t && /^https:\/\/([a-z0-9-]+\.)*manychat\.com\//i.test(t) ? t : null;
+}
+
+/**
+ * The "Open in ManyChat" target for one conversation, best source first:
+ *
+ *  1. ManyChat's own per-subscriber `live_chat_url`, captured verbatim from the webhook.
+ *     Channel-safe (Instagram/Messenger/WhatsApp/Telegram) with no URL-format assumption -
+ *     the preferred source when the owner maps the "Live Chat URL" system field.
+ *  2. The Live Chat deep link built from the ManyChat page id + subscriber id:
+ *     `https://app.manychat.com/fb{pageId}/chat/{subscriberId}`. The trailing id is the
+ *     `manychat_subscriber_id` we already store; `{pageId}` is the inbound webhook's
+ *     `page_id`. Verbatim-confirmed for Facebook Messenger and Instagram-via-Facebook
+ *     (LGF's channels); ids are URL-encoded defensively though ManyChat sends them numeric.
+ *  3. The account root (`MANYCHAT_LIVE_CHAT_URL`) - opens ManyChat but not the thread.
+ *     Guarantees the button is never a dead link before the owner maps either field.
+ *
+ * Pure; safe to call per row while rendering the queue.
+ */
+export function manychatConversationUrl(opts: {
+  liveChatUrl?: string | null;
+  pageId?: string | null;
+  subscriberId?: string | null;
+}): string {
+  const live = cleanLiveChatUrl(opts.liveChatUrl);
+  if (live) return live;
+  const pageId = opts.pageId?.trim();
+  const subscriberId = opts.subscriberId?.trim();
+  if (pageId && subscriberId) {
+    return `https://app.manychat.com/fb${encodeURIComponent(pageId)}/chat/${encodeURIComponent(subscriberId)}`;
+  }
+  return MANYCHAT_LIVE_CHAT_URL;
+}

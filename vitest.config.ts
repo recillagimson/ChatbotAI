@@ -8,7 +8,12 @@ import path from "path";
 // (tests/inbound-media.spec.ts, tests/memory.spec.ts) or lib/sanitize.test.mts.
 export default defineConfig({
   test: {
-    include: ["tests/link-flow*.spec.ts", "tests/flow-state*.spec.ts", "tests/lead-facts*.spec.ts"],
+    include: [
+      "tests/link-flow*.spec.ts",
+      "tests/flow-state*.spec.ts",
+      "tests/lead-facts*.spec.ts",
+      "tests/manual-followups*.spec.ts",
+    ],
   },
   resolve: {
     alias: {

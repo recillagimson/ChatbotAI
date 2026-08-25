@@ -11,7 +11,7 @@ import {
   CLOSING_SOON_HOURS,
   countWindows,
   leadLastMessageAt,
-  MANYCHAT_LIVE_CHAT_URL,
+  manychatConversationUrl,
   MAX_REACH_HOURS,
   nativeInboxLabel,
   nativeInboxUrl,
@@ -125,6 +125,9 @@ async function FollowUpsQueue({
       id: string;
       contact_name: string | null;
       contact_username: string | null;
+      manychat_subscriber_id: string;
+      manychat_page_id: string | null;
+      manychat_live_chat_url: string | null;
       chatbots: unknown;
     }
   >(
@@ -132,7 +135,7 @@ async function FollowUpsQueue({
       let q = supabase
         .from("conversations")
         .select(
-          "id, contact_name, contact_username, platform, last_message_at, status, confirmed_at, user_muted_at, bot_off_at, tag, chatbot_id, chatbots(name)"
+          "id, contact_name, contact_username, platform, last_message_at, status, confirmed_at, user_muted_at, bot_off_at, tag, chatbot_id, manychat_subscriber_id, manychat_page_id, manychat_live_chat_url, chatbots(name)"
         )
         .eq("user_id", user!.id)
         .order("last_message_at", { ascending: true })
@@ -230,7 +233,13 @@ async function FollowUpsQueue({
       botName: null,
       nativeUrl: nativeInboxUrl(platform),
       nativeLabel: nativeInboxLabel(platform),
-      manychatUrl: MANYCHAT_LIVE_CHAT_URL,
+      // Deep-link straight to this thread in ManyChat when we can (stored live_chat_url,
+      // else built from page_id + subscriber_id); falls back to the account root otherwise.
+      manychatUrl: manychatConversationUrl({
+        liveChatUrl: c.manychat_live_chat_url,
+        pageId: c.manychat_page_id,
+        subscriberId: c.manychat_subscriber_id,
+      }),
     };
   });
 
