@@ -288,6 +288,15 @@ export async function generateReply(opts: {
   // default (MODELS.reply()). The override is a REACTIVE-reply lever only; the
   // follow-up drip (generateFollowupText) sets this so it never inherits it.
   ignoreReplyModel?: boolean;
+  // Transient-error retry budget for the OpenAI reply call. The webhook sets this
+  // (2 on the background push path, 1 on the ~10s synchronous response path) so a
+  // single provider blip (429 / 5xx overload / request timeout) no longer cans a live
+  // reply into the "a teammate will follow up" fallback. Absent => 0 (single attempt,
+  // unchanged) so the preview / follow-up callers behave exactly as before.
+  retries?: number;
+  // Per-attempt timeout (ms) for that call; the sync path tightens it so both tries
+  // stay within ManyChat's ~10s budget. Absent => the openaiChat default (20s).
+  timeoutMs?: number;
 }) {
   // Continuing conversation if there's any prior history - drives the
   // continuity directive so the bot doesn't restart the intro or re-ask.
@@ -344,6 +353,10 @@ export async function generateReply(opts: {
       system: systemText,
       messages: [...trimmed, currentTurn],
       maxTokens: 400,
+      // Ride out a transient provider blip instead of falling straight to the canned
+      // fallback; absent => 0, single attempt (unchanged for preview/follow-up).
+      retries: opts.retries,
+      timeoutMs: opts.timeoutMs,
     });
     return {
       text: sanitizeReply(text),

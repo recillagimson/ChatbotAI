@@ -64,6 +64,12 @@ describe("isBenignShortReply — floor never disqualifies engaged one-liners", (
     expect(isBenignShortReply("File clean. Not interested in getting credit. Just clean up")).toBe(false);
   });
 
+  it("an impatient 'no I don't have time, just tell me how long' line is NOT floored (model + carve-out handle it)", () => {
+    // Ferrari lead: "No I don't have time" = urgency/high intent, not rejection. Reaches the
+    // model (impatience carve-out); the two-strike backstop keeps an engaged lead alive.
+    expect(isBenignShortReply("No I don't have time I just need to know how long it's going to take")).toBe(false);
+  });
+
   it("a hostile emoji on a benign word forces the model (not floored)", () => {
     expect(isBenignShortReply("ok 🤡")).toBe(false);
     expect(isBenignShortReply("no 🖕")).toBe(false);

@@ -1625,6 +1625,14 @@ export async function POST(request: NextRequest) {
         knownFacts,
         // Which questions this bot has already asked and what is still owed.
         flowStateBlock,
+        // Retry a transient provider blip (429 / 5xx overload / request timeout)
+        // before falling back to the canned "a teammate will follow up" line below:
+        // 2 extra tries on the background push path (300s maxDuration), 1 on the
+        // synchronous response path - whose tighter 8s per-attempt timeout keeps both
+        // tries inside ManyChat's ~10s window. A permanent 4xx/quota error still fails
+        // fast to the fallback (see isTransientOpenAIError).
+        retries: synchronous ? 1 : 2,
+        timeoutMs: synchronous ? 8_000 : undefined,
       });
       if (text) {
         replyText = text;
