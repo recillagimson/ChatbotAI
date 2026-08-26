@@ -200,7 +200,11 @@ export function RequestChat({
     : `Tell me what you'd like to change about ${projectName ?? "your bot"} - you can type, attach a screenshot or knowledge file (PDF/DOCX/TXT), or use the mic.`;
 
   return (
-    <div className="flex min-h-[100dvh] flex-col">
+    // Fill the pinned shell's <main> EXACTLY (h-full), never 100dvh: the dashboard
+    // shell is height-capped + overflow-hidden, so a taller-than-container column
+    // pushed the composer off the bottom (clipped, unreachable). h-full + min-h-0
+    // keeps the header and composer in view and lets the middle region scroll.
+    <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
       <header className="flex items-center justify-between gap-3 border-b px-6 py-4">
         <div className="min-w-0">
@@ -217,48 +221,52 @@ export function RequestChat({
       </header>
 
       {empty ? (
-        // New / greeting state
-        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-          <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-            {greeting}
-          </h1>
-          <p className="mt-3 max-w-md text-sm text-muted-foreground">{hint}</p>
+        // New / greeting state. The outer region scrolls (min-h-0 + overflow) and the
+        // inner block is m-auto: it centers when there's room and scrolls from the top
+        // when the viewport is short - so the composer below is always reachable.
+        <div className="flex flex-1 min-h-0 flex-col overflow-y-auto px-6 py-8">
+          <div className="m-auto w-full max-w-xl text-center">
+            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+              {greeting}
+            </h1>
+            <p className="mx-auto mt-3 max-w-md text-sm text-muted-foreground">{hint}</p>
 
-          {!noProject && (
-            <div className="mt-8 w-full max-w-xl text-left">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                What do you want to change?
-              </p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {CATEGORY_ORDER.map((c) => {
-                  const active = category === c;
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setCategory(c)}
-                      aria-pressed={active}
-                      className={cn(
-                        "rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                        active
-                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                          : "hover:bg-accent hover:text-accent-foreground"
-                      )}
-                    >
-                      <span className="block text-sm font-medium">{CATEGORY_LABELS[c]}</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {CATEGORY_BLURB[c]}
-                      </span>
-                    </button>
-                  );
-                })}
+            {!noProject && (
+              <div className="mt-8 text-left">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  What do you want to change?
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {CATEGORY_ORDER.map((c) => {
+                    const active = category === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setCategory(c)}
+                        aria-pressed={active}
+                        className={cn(
+                          "rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                          active
+                            ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                            : "hover:bg-accent hover:text-accent-foreground"
+                        )}
+                      >
+                        <span className="block text-sm font-medium">{CATEGORY_LABELS[c]}</span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {CATEGORY_BLURB[c]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       ) : (
         // Thread state
-        <ChatScroll className="flex-1 px-4 py-6 sm:px-6">
+        <ChatScroll className="min-h-0 flex-1 px-4 py-6 sm:px-6">
           <div className="mx-auto max-w-2xl space-y-4">
             {messages.map((m, i) =>
               m.role === "user" ? (
