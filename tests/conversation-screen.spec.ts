@@ -57,6 +57,13 @@ describe("isBenignShortReply — floor never disqualifies engaged one-liners", (
     expect(isBenignShortReply("ive tried fixing it before. no success")).toBe(false);
   });
 
+  it("a 'not interested in [outcome], want a different service' line is NOT floored (model + prompt carve-out handle it)", () => {
+    // Tony Groves: answering "get funded or clean the file first?" by CHOOSING cleanup over
+    // credit-building - not a rejection. Reaches the model, where the not_interested carve-out
+    // applies; the two-strike backstop (below) is the deterministic net.
+    expect(isBenignShortReply("File clean. Not interested in getting credit. Just clean up")).toBe(false);
+  });
+
   it("a hostile emoji on a benign word forces the model (not floored)", () => {
     expect(isBenignShortReply("ok 🤡")).toBe(false);
     expect(isBenignShortReply("no 🖕")).toBe(false);
@@ -86,6 +93,15 @@ describe("parseScreen — one-word verdict mapping (unchanged)", () => {
 describe("decideDisqualify — two-strike backstop", () => {
   it("engaged lead's FIRST disqualify is a soft strike (no tag, keep replying)", () => {
     // This is exactly the motivating regression: an engaged lead, first disqualify signal.
+    expect(decideDisqualify({ outcome: "disqualified", engaged: true, strikes: 0 })).toEqual({
+      kind: "soft",
+      strikes: 1,
+    });
+  });
+
+  it("Tony Groves regression: an engaged lead reading as not_interested is a soft strike, not a silence", () => {
+    // Even if the model still fires not_interested on "...Not interested in getting credit...",
+    // the backstop keeps this engaged, qualified lead replying (no tag, no silence).
     expect(decideDisqualify({ outcome: "disqualified", engaged: true, strikes: 0 })).toEqual({
       kind: "soft",
       strikes: 1,
