@@ -53,6 +53,9 @@ export const FRESH_CONVERSATION_RESET: Record<string, unknown> = {
   link_sent_at: null,
   start_on: null,
   start_note: null,
+  // Two-strike disqualify counter (lib/conversation-screen.ts). A reset thread is a
+  // fresh first-contact, so any half-accumulated strike must be cleared too.
+  disqualify_strikes: 0,
   memory_summary: null,
   memory_summary_at: null,
   known_facts: null,

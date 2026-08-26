@@ -51,7 +51,7 @@ import { retrySupabase } from "@/lib/retry";
 import { shouldSendWelcome, coerceKeywords } from "@/lib/welcome";
 import { matchesResetKeyword } from "@/lib/reset-keyword";
 import { resetConversation } from "@/lib/reset-conversation";
-import { screenDisqualify } from "@/lib/conversation-screen";
+import { screenDisqualify, decideDisqualify } from "@/lib/conversation-screen";
 import { syncNoFollowupFlag } from "@/lib/followup-flag";
 import { followupBlocked } from "@/lib/followup";
 import { resolveTagWrite, CONVERSATION_TAGS, TAG_RANK, type ConversationTag } from "@/lib/conversation-tags";
@@ -1486,15 +1486,52 @@ export async function POST(request: NextRequest) {
       // reply exists), they are a human, not a spam bot - so a late `bot` flag is almost
       // always a false positive (e.g. they shared their website or re-sent a message
       // after getting no reply). Downgrade it to none. `disqualified` (abuse / clear
-      // rejection) CAN legitimately happen mid-conversation, so it is left untouched.
+      // rejection) and `spam` (a promotional/scam-advertisement blast, e.g. a crypto-
+      // casino "claim your bonus" screenshot) CAN legitimately arrive mid-conversation,
+      // so they are deliberately NOT downgraded here - only the `bot` automation verdict is.
       if (outcome === "bot" && lastBotMessage) {
         console.warn("[manychat-webhook] suppressed late 'bot' screen verdict for an engaged lead", { conversationId });
         outcome = "none";
       }
-      if (outcome !== "none") {
+
+      // Two-strike backstop for the TERMINAL `disqualified` tag. A false disqualify
+      // silences a good lead forever, and the one-word screen model can misfire on an
+      // ENGAGED lead venting or describing a past failure ("I've tried before, no
+      // success"). So an engaged lead's FIRST disqualify signal is a soft strike (no
+      // tag, keep replying); only a SECOND consecutive one silences. First-contact
+      // abuse/rejection and `bot` still stop immediately. Pre-migration (no
+      // disqualify_strikes column) → immediate silence, identical to before, so this
+      // is safe to deploy before the migration lands (decideDisqualify).
+      const engaged = Boolean(lastBotMessage);
+      const priorStrikes =
+        typeof existing?.disqualify_strikes === "number" ? existing.disqualify_strikes : undefined;
+      const action = decideDisqualify({ outcome, engaged, strikes: priorStrikes });
+
+      if (action.kind === "clear") {
+        // The lead re-engaged after an earlier lone strike - forgive it (best-effort;
+        // a missing column just no-ops). Strikes must be CONSECUTIVE to silence.
+        await supabase
+          .from("conversations")
+          .update({ disqualify_strikes: 0 })
+          .eq("id", conversationId!)
+          .is("confirmed_at", null)
+          .then(() => {}, () => {});
+      } else if (action.kind === "soft") {
+        // Engaged lead's 1st disqualify signal: DO NOT tag, DO NOT stand down - one
+        // model misfire must never be terminal. Record the strike (best-effort) and
+        // reply as normal; a 2nd consecutive signal silences. Drip left running, not
+        // mirrored to ManyChat - the thread is still a live lead.
+        console.warn("[manychat-webhook] soft disqualify (engaged lead, strike 1) - replying anyway", { conversationId });
+        await supabase
+          .from("conversations")
+          .update({ disqualify_strikes: action.strikes })
+          .eq("id", conversationId!)
+          .is("confirmed_at", null)
+          .then(() => {}, () => {});
+      } else if (action.kind === "silence") {
         const { error: tagErr } = await supabase
           .from("conversations")
-          .update({ tag: outcome, start_on: null, start_note: null })
+          .update({ tag: action.tag, start_on: null, start_note: null })
           .eq("id", conversationId!)
           .is("confirmed_at", null); // never overwrite a just-confirmed customer
         if (tagErr) {

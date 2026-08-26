@@ -201,6 +201,7 @@ export interface Conversation {
   quality_tag: QualityTag | null;    // owner-set quality rating (good | bad), orthogonal to `tag`; null = unrated
   start_on: string | null;           // starting_later: the date (YYYY-MM-DD) the lead wants to begin; pauses the drip
   start_note: string | null;         // starting_later: the human phrase ("Wednesday", "in a week")
+  disqualify_strikes: number;        // consecutive pre-reply "disqualified" screen signals from an ENGAGED lead; the terminal disqualify tag only fires on the 2nd (two-strike false-positive backstop, lib/conversation-screen.ts decideDisqualify). Default 0.
   rn_opt_in_at: string | null;       // Recurring Notifications opt-in (Phase 6, multi-day reach)
   rn_topic_id: string | null;
   reply_claimed_for: string | null;  // inbound message id of the newest AI-bound run (debounce single-flight claim)

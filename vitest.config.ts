@@ -14,6 +14,7 @@ export default defineConfig({
       "tests/lead-facts*.spec.ts",
       "tests/manual-followups*.spec.ts",
       "tests/kb-access*.spec.ts",
+      "tests/conversation-screen*.spec.ts",
     ],
   },
   resolve: {

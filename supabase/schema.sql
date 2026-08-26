@@ -1287,3 +1287,22 @@ grant execute on function public.workspace_conversation_rollup(uuid) to authenti
 -- Teardown:
 -- drop function if exists public.workspace_conversation_rollup(uuid);
 -- drop index if exists conversations_user_last_msg_idx;
+
+-- ===========================================================================
+-- Disqualify two-strike backstop (2026-08-26)
+-- ===========================================================================
+-- A false `disqualified` tag silences a good lead forever, and the one-word screen
+-- model (step 7b) can misfire on an ENGAGED lead who is merely venting or describing
+-- a past failure ("I've tried before, no success"). This counter lets the webhook
+-- require TWO consecutive disqualify signals from an already-engaged lead before it
+-- writes the terminal tag: the first signal is a soft strike (bumps this counter, bot
+-- keeps replying), the second silences (lib/conversation-screen.ts decideDisqualify).
+-- A non-disqualify turn resets it to 0 (strikes must be consecutive).
+-- Best-effort writes + default-0 reads keep the webhook fail-open either side of this
+-- migration: with the column absent there is no soft path and behaviour is exactly as
+-- before (immediate silence), so it is safe to deploy before OR after applying this.
+alter table public.conversations
+  add column if not exists disqualify_strikes int not null default 0;
+
+-- Teardown:
+-- alter table public.conversations drop column if exists disqualify_strikes;
