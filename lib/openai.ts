@@ -29,10 +29,15 @@ export interface OpenAIChatMessage {
  */
 export class OpenAIChatError extends Error {
   status?: number;
-  constructor(message: string, status?: number) {
+  /** True when the call returned 2xx but EMPTY content with finish_reason "length" -
+   *  a reasoning model spent the whole max_completion_tokens budget on hidden reasoning.
+   *  Retryable, but only usefully so with a bigger token budget (see the retry loop). */
+  truncated?: boolean;
+  constructor(message: string, status?: number, truncated?: boolean) {
     super(message);
     this.name = "OpenAIChatError";
     this.status = status;
+    this.truncated = truncated;
   }
 }
 
@@ -44,6 +49,7 @@ export class OpenAIChatError extends Error {
  */
 export function isTransientOpenAIError(err: unknown): boolean {
   if (err instanceof OpenAIChatError) {
+    if (err.truncated) return true; // empty-because-truncated: retry with a bigger budget
     const s = err.status;
     if (s === undefined) return true; // no status parsed - bias toward one retry
     // A rate-limit is transient, EXCEPT quota exhaustion (billing, not load): a retry
@@ -95,10 +101,23 @@ async function openaiChatOnce(
       );
     }
     const data = (await res.json()) as {
-      choices?: { message?: { content?: string | null } }[];
+      choices?: { message?: { content?: string | null }; finish_reason?: string }[];
       usage?: { total_tokens?: number };
     };
-    const text = (data.choices?.[0]?.message?.content ?? "").trim();
+    const choice = data.choices?.[0];
+    const text = (choice?.message?.content ?? "").trim();
+    // A reasoning model (gpt-5.x) can spend the WHOLE max_completion_tokens budget on
+    // hidden reasoning and return empty visible content with finish_reason "length".
+    // That is a truncation, not a real reply - surface it as a retryable error (the
+    // retry loop raises the budget) instead of returning "" and letting the DM caller
+    // fall through to the canned "a teammate will follow up shortly." fallback.
+    if (!text && choice?.finish_reason === "length") {
+      throw new OpenAIChatError(
+        "OpenAI returned empty content (finish_reason=length): the token budget was consumed by reasoning",
+        undefined,
+        true
+      );
+    }
     return { text, tokensUsed: data.usage?.total_tokens ?? 0 };
   } finally {
     clearTimeout(timer);
@@ -134,13 +153,20 @@ export async function openaiChat(opts: {
   const backoff = opts.backoffMs ?? [400, 800];
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
+  let attemptMax = opts.maxTokens ?? 400;
   let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await openaiChatOnce(opts, apiKey);
+      return await openaiChatOnce({ ...opts, maxTokens: attemptMax }, apiKey);
     } catch (err) {
       lastErr = err;
       if (attempt >= maxAttempts || !isTransientOpenAIError(err)) throw err;
+      // A truncation (empty, finish_reason=length) won't fix itself on a same-size retry -
+      // the reasoning consumes the same budget again. Give the next attempt materially more
+      // room so the visible reply can actually land (capped so a runaway can't balloon).
+      if (err instanceof OpenAIChatError && err.truncated) {
+        attemptMax = Math.min(Math.round(attemptMax * 2), 4000);
+      }
       await sleep(backoff[Math.min(attempt - 1, backoff.length - 1)]);
     }
   }

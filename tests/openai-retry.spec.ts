@@ -31,6 +31,17 @@ function errResponse(status: number, detail = ""): Response {
   } as unknown as Response;
 }
 
+// 2xx but empty content + finish_reason "length": a reasoning model consumed the whole
+// max_completion_tokens budget on hidden reasoning. Treated as a retryable truncation.
+function emptyLengthResponse(): Response {
+  return {
+    ok: true,
+    status: 200,
+    text: async () => "",
+    json: async () => ({ choices: [{ message: { content: "" }, finish_reason: "length" }], usage: { total_tokens: 400 } }),
+  } as unknown as Response;
+}
+
 // A fetch that plays a scripted sequence of Responses or thrown Errors, one per call.
 function scriptedFetch(seq: Array<Response | Error>) {
   let i = 0;
@@ -72,6 +83,10 @@ describe("isTransientOpenAIError - what is worth retrying", () => {
 
   it("does not retry an arbitrary non-transient error", () => {
     expect(isTransientOpenAIError(new Error("something else"))).toBe(false);
+  });
+
+  it("retries an empty-because-truncated result (finish_reason=length)", () => {
+    expect(isTransientOpenAIError(new OpenAIChatError("empty (length)", undefined, true))).toBe(true);
   });
 });
 
@@ -128,5 +143,37 @@ describe("openaiChat - bounded retry loop", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(openaiChat({ ...args, sleep: noSleep })).rejects.toThrow(/500/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("an empty finish_reason=length reply is a retryable truncation", async () => {
+    const fetchMock = scriptedFetch([emptyLengthResponse(), okResponse("recovered")]);
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await openaiChat({ ...args, retries: 1, sleep: noSleep });
+    expect(res.text).toBe("recovered");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("with retries:0 a truncated reply throws (no silent empty return to the canned fallback)", async () => {
+    const fetchMock = scriptedFetch([emptyLengthResponse()]);
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(openaiChat({ ...args, sleep: noSleep })).rejects.toThrow(/finish_reason=length/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("doubles the token budget on a truncation retry so the reply can actually land", async () => {
+    const bodies: Array<{ max_completion_tokens: number }> = [];
+    let i = 0;
+    const seq = [emptyLengthResponse(), okResponse("recovered")];
+    const fetchMock = vi.fn(async (_url: unknown, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body));
+      const item = seq[Math.min(i, seq.length - 1)];
+      i++;
+      return item;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await openaiChat({ ...args, maxTokens: 1200, retries: 1, sleep: noSleep });
+    expect(res.text).toBe("recovered");
+    expect(bodies[0].max_completion_tokens).toBe(1200);
+    expect(bodies[1].max_completion_tokens).toBe(2400);
   });
 });

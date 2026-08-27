@@ -254,6 +254,15 @@ ${CONVERSION_CONFIRM}
 ${CONFIDENTIALITY}`;
 }
 
+// Reply completion-token budget. Raised from the old hard-coded 400: reasoning models
+// (gpt-5.x, e.g. LGF Pro's gpt-5.6-terra) spend part of max_completion_tokens on hidden
+// reasoning, and on a complex question at 400 the reasoning consumed the WHOLE budget and
+// the visible content came back EMPTY (finish_reason=length) - which fell through to the
+// canned "a teammate will follow up shortly." reply. 1200 leaves room for reasoning + a
+// full DM reply; it's a ceiling (the model still stops when done, so replies don't get
+// longer) and costs nothing on non-reasoning models. Env-overridable for tuning.
+const REPLY_MAX_TOKENS = Number(process.env.REPLY_MAX_COMPLETION_TOKENS) || 1200;
+
 export async function generateReply(opts: {
   chatbot: Chatbot;
   kbBlock: string;
@@ -352,9 +361,12 @@ export async function generateReply(opts: {
       model: replyModel,
       system: systemText,
       messages: [...trimmed, currentTurn],
-      maxTokens: 400,
-      // Ride out a transient provider blip instead of falling straight to the canned
-      // fallback; absent => 0, single attempt (unchanged for preview/follow-up).
+      // Enough headroom that reasoning tokens can't starve the visible reply to empty
+      // (the "teammate will follow up" bug on gpt-5.x). See REPLY_MAX_TOKENS above.
+      maxTokens: REPLY_MAX_TOKENS,
+      // Ride out a transient provider blip - and an empty-because-truncated reply, which
+      // the retry re-attempts with a doubled budget - instead of falling straight to the
+      // canned fallback; absent => 0, single attempt (unchanged for preview/follow-up).
       retries: opts.retries,
       timeoutMs: opts.timeoutMs,
     });
