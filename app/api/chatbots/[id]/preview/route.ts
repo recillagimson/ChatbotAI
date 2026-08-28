@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { resolveChatbotAccess, ownerScope } from "@/lib/chatbot-access";
 import { buildKbBlock, isEmptyKbBlock } from "@/lib/retrieval";
 import { generateReply } from "@/lib/anthropic";
 import { renderTrainedResponses, isUsableTrainingPair } from "@/lib/training";
@@ -24,8 +24,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const access = await resolveChatbotAccess();
+  if (!access.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => null);
   const userMessage = typeof body?.userMessage === "string" ? body.userMessage.trim() : "";
@@ -47,13 +47,10 @@ export async function POST(
         }))
     : [];
 
-  const supabase = await createClient();
-  const { data: chatbot, error } = await supabase
-    .from("chatbots")
-    .select("*")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .single<Chatbot>();
+  const { data: chatbot, error } = await ownerScope(
+    access.db.from("chatbots").select("*").eq("id", id),
+    access
+  ).single<Chatbot>();
   if (error || !chatbot) return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
 
   // Optional unsaved working set so the owner can "try" a correction before saving.
@@ -81,7 +78,7 @@ export async function POST(
   const trainingSkipped = enabledPairs.length - trainingActive;
 
   try {
-    const kb = await buildKbBlock({ supabase, chatbot, history, userMessage });
+    const kb = await buildKbBlock({ supabase: access.db, chatbot, history, userMessage });
     const { text } = await generateReply({
       chatbot,
       kbBlock: kb.block,

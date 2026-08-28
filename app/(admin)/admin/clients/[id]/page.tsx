@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Paperclip } from "lucide-react";
+import { ArrowLeft, ArrowRight, Paperclip } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { AdminChatbotEditForm } from "@/components/admin/admin-chatbot-edit-form";
 import { ViewAsButton } from "@/components/admin/view-as-button";
@@ -353,6 +353,21 @@ export default async function AdminClientDetailPage({
                       )
                     }
                   />
+
+                  <div className="mt-4">
+                    <SsLinkButton
+                      href={`/admin/clients/${id}/bots/${activeBot.id}`}
+                      variant="primary"
+                      size="md"
+                    >
+                      Open full settings
+                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </SsLinkButton>
+                    <p className="mt-2 text-xs leading-snug text-ss-muted">
+                      Prompt, keywords, training sandbox, follow-ups, media and
+                      connection - the client&apos;s full chatbot tabs, managed here.
+                    </p>
+                  </div>
 
                   <div className="mt-5">
                     <AdminChatbotEditForm

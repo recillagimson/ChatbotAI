@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { resolveChatbotAccess, ownerScope } from "@/lib/chatbot-access";
 import { encryptSecret } from "@/lib/crypto";
 import { validateManychatApiKey } from "@/lib/manychat";
 
@@ -23,8 +23,8 @@ export async function PUT(
   const { id } = await params;
 
   // Auth
-  const user = await getCurrentUser();
-  if (!user) {
+  const access = await resolveChatbotAccess();
+  if (!access.ok) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
@@ -36,13 +36,10 @@ export async function PUT(
   }
 
   // Ownership check - RLS also enforces this; the explicit filter gives a clean 404
-  const supabase = await createClient();
-  const { data: chatbot, error: ownershipError } = await supabase
-    .from("chatbots")
-    .select("id")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const { data: chatbot, error: ownershipError } = await ownerScope(
+    access.db.from("chatbots").select("id").eq("id", id),
+    access
+  ).maybeSingle();
   if (ownershipError) return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   if (!chatbot) {
     return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
@@ -70,11 +67,10 @@ export async function PUT(
   }
 
   // Store - key and ciphertext never leave the server
-  const { error } = await supabase
-    .from("chatbots")
-    .update({ manychat_api_key_enc: enc })
-    .eq("id", id)
-    .eq("user_id", user.id);
+  const { error } = await ownerScope(
+    access.db.from("chatbots").update({ manychat_api_key_enc: enc }).eq("id", id),
+    access
+  );
   if (error) {
     return NextResponse.json({ error: "Failed to save the API key." }, { status: 500 });
   }
@@ -89,30 +85,26 @@ export async function DELETE(
   const { id } = await params;
 
   // Auth
-  const user = await getCurrentUser();
-  if (!user) {
+  const access = await resolveChatbotAccess();
+  if (!access.ok) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   // Ownership check
-  const supabase = await createClient();
-  const { data: chatbot, error: ownershipError } = await supabase
-    .from("chatbots")
-    .select("id")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const { data: chatbot, error: ownershipError } = await ownerScope(
+    access.db.from("chatbots").select("id").eq("id", id),
+    access
+  ).maybeSingle();
   if (ownershipError) return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   if (!chatbot) {
     return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
   }
 
   // Clear - NULL (not "") so the resolver treats it as "not set"
-  const { error } = await supabase
-    .from("chatbots")
-    .update({ manychat_api_key_enc: null })
-    .eq("id", id)
-    .eq("user_id", user.id);
+  const { error } = await ownerScope(
+    access.db.from("chatbots").update({ manychat_api_key_enc: null }).eq("id", id),
+    access
+  );
   if (error) {
     return NextResponse.json({ error: "Failed to clear the API key." }, { status: 500 });
   }

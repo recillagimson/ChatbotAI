@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { resolveChatbotAccess, ownerScope } from "@/lib/chatbot-access";
 import { randomBytes } from "crypto";
 
 export const runtime = "nodejs";
@@ -21,19 +21,17 @@ export async function POST(
   const { id } = await params;
 
   // Auth
-  const user = await getCurrentUser();
-  if (!user) {
+  const access = await resolveChatbotAccess();
+  if (!access.ok) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  // Ownership check - RLS also enforces this; the explicit filter gives a clean 404
-  const supabase = await createClient();
-  const { data: chatbot, error: ownershipError } = await supabase
-    .from("chatbots")
-    .select("id")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // Ownership check - ownerScope adds the user_id filter for a non-superadmin; a
+  // superadmin from /admin matches by id alone. RLS/service still enforces access.
+  const { data: chatbot, error: ownershipError } = await ownerScope(
+    access.db.from("chatbots").select("id").eq("id", id),
+    access
+  ).maybeSingle();
   if (ownershipError) return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   if (!chatbot) {
     return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
@@ -44,11 +42,10 @@ export async function POST(
   const webhookSecret = randomBytes(24).toString("hex");
 
   // Persist
-  const { error } = await supabase
-    .from("chatbots")
-    .update({ webhook_secret: webhookSecret })
-    .eq("id", id)
-    .eq("user_id", user.id);
+  const { error } = await ownerScope(
+    access.db.from("chatbots").update({ webhook_secret: webhookSecret }).eq("id", id),
+    access
+  );
   if (error) {
     return NextResponse.json({ error: "Failed to rotate the webhook secret." }, { status: 500 });
   }

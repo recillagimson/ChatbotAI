@@ -13,7 +13,15 @@ import { CHATBOT_TABS, type ChatbotTabKey } from "@/lib/chatbot-tabs";
  * switching sections doesn't throw you back to the top of a long form. The
  * server page reads and validates the param.
  */
-export function ChatbotTabsBar({ active }: { active: ChatbotTabKey }) {
+export function ChatbotTabsBar({
+  active,
+  tabs = CHATBOT_TABS,
+}: {
+  active: ChatbotTabKey;
+  /** The tab set to render. Defaults to all; the admin per-bot route passes the
+   *  editing subset (EDITING_CHATBOT_TABS) so Overview isn't offered there. */
+  tabs?: readonly { key: ChatbotTabKey; label: string }[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -31,7 +39,7 @@ export function ChatbotTabsBar({ active }: { active: ChatbotTabKey }) {
       role="tablist"
       aria-label="Chatbot settings sections"
     >
-      {CHATBOT_TABS.map(({ key, label }) => {
+      {tabs.map(({ key, label }) => {
         const isActive = active === key;
         return (
           <button

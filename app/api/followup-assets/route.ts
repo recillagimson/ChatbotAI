@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { resolveChatbotAccess, ownerScope } from "@/lib/chatbot-access";
 import { publicAssetUrl, removePublicAsset } from "@/lib/storage";
 import type { FollowupAsset, FollowupAssetKind } from "@/lib/types";
 
@@ -73,8 +74,8 @@ export async function GET(request: NextRequest) {
  *  - kind link: an external https `url`.
  */
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const access = await resolveChatbotAccess();
+  if (!access.ok) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   let body: Record<string, unknown>;
   try {
@@ -97,17 +98,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const supabase = await createClient();
-
-  // Ownership is enforced by RLS on insert (with check user_id = auth.uid()) and
-  // the chatbot FK; we also pre-check for a friendly error.
-  const { data: owned } = await supabase
-    .from("chatbots")
-    .select("id")
-    .eq("id", chatbotId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // Resolve the bot AND its owner. Assets always belong to the CLIENT (owner), never
+  // the admin - so a superadmin creating one from /admin stamps user_id = the owner,
+  // and the storage-path guard below is checked against the owner's folder.
+  const { data: owned } = await ownerScope(
+    access.db.from("chatbots").select("id, user_id").eq("id", chatbotId),
+    access
+  ).maybeSingle();
   if (!owned) return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
+  const ownerId = (owned as { user_id: string }).user_id;
 
   let storage_path: string | null = null;
   let assetUrl: string;
@@ -124,14 +123,14 @@ export async function POST(request: NextRequest) {
     // The object must live under the caller's OWN folder - same guard as the
     // request-uploads paths elsewhere. (Bucket RLS already enforces this on
     // write; this stops metadata rows pointing at someone else's objects.)
-    if (!storage_path.startsWith(`${user.id}/`)) {
+    if (!storage_path.startsWith(`${ownerId}/`)) {
       return NextResponse.json({ error: "Invalid storage path." }, { status: 400 });
     }
     if (!mimeAllowed(kind, mime)) {
       const allowed = kind === "audio" ? "MP3, M4A, or WAV" : `a ${kind} file`;
       return NextResponse.json({ error: `File must be ${allowed}.` }, { status: 400 });
     }
-    assetUrl = publicAssetUrl(supabase, storage_path);
+    assetUrl = publicAssetUrl(access.db, storage_path);
     // Confirm the object actually exists (the client uploads first) so we never
     // save a row whose public URL 404s when ManyChat fetches it.
     try {
@@ -155,11 +154,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "kind must be image, video, audio, or link." }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await access.db
     .from("followup_assets")
     .insert({
       chatbot_id: chatbotId,
-      user_id: user.id,
+      user_id: ownerId,
       key,
       label,
       description,
@@ -192,15 +191,17 @@ export async function POST(request: NextRequest) {
  * removing an already-gone object succeeds), so no orphaned public files.
  */
 export async function DELETE(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const access = await resolveChatbotAccess();
+  if (!access.ok) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const id = request.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Missing id." }, { status: 400 });
 
-  const supabase = await createClient();
-  // RLS restricts this select to the caller's own assets.
-  const { data: asset } = await supabase
+  // access.db = the owner's RLS client (own assets only), or the service client for a
+  // superadmin - which both reads any asset AND can remove the storage object. The
+  // followup-assets bucket has NO admin storage-DELETE policy, so a user-scoped client
+  // would 500 removing a client's media; the service client bypasses that.
+  const { data: asset } = await access.db
     .from("followup_assets")
     .select("id, storage_path")
     .eq("id", id)
@@ -209,7 +210,7 @@ export async function DELETE(request: NextRequest) {
 
   if (asset.storage_path) {
     try {
-      await removePublicAsset(supabase, asset.storage_path);
+      await removePublicAsset(access.db, asset.storage_path);
     } catch (err) {
       console.error("[followup-assets] storage remove failed", asset.storage_path, err);
       return NextResponse.json(
@@ -219,7 +220,7 @@ export async function DELETE(request: NextRequest) {
     }
   }
 
-  const { error } = await supabase.from("followup_assets").delete().eq("id", id);
+  const { error } = await access.db.from("followup_assets").delete().eq("id", id);
   if (error) {
     console.error("[followup-assets] delete failed", error);
     return NextResponse.json({ error: "Could not delete asset." }, { status: 500 });
