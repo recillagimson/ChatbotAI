@@ -7,6 +7,9 @@ import { ViewAsButton } from "@/components/admin/view-as-button";
 import { GrantAccessForm } from "@/components/admin/grant-access-form";
 import { KnowledgeBaseForm } from "@/components/dashboard/kb-form";
 import { KnowledgeBaseList } from "@/components/dashboard/kb-list";
+import { RetrainBotButton } from "@/components/dashboard/retrain-bot-button";
+import { ModelControls } from "@/components/dashboard/model-controls";
+import { cn } from "@/lib/utils";
 import { PageBody, PageHeader, PageShell, EmptyState } from "@/components/ss/page";
 import { SsCard, SsCardHead } from "@/components/ss/card";
 import { SsChip, SsLinkButton, SsStatus } from "@/components/ss/controls";
@@ -79,6 +82,8 @@ type AdminChatbot = Pick<
   | "instagram_username"
   | "is_active"
   | "created_at"
+  | "reply_model"
+  | "force_retrieval"
 >;
 
 // Matches KnowledgeBaseList's Entry shape (its type is component-local).
@@ -96,10 +101,13 @@ type AdminKbEntry = {
 
 export default async function AdminClientDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ bot?: string }>;
 }) {
   const { id } = await params;
+  const { bot: activeBotParam } = await searchParams;
   const supabase = await createClient();
 
   const { data: profileData } = await supabase
@@ -132,7 +140,7 @@ export default async function AdminClientDetailPage({
     supabase
       .from("chatbots")
       .select(
-        "id, name, business_description, tone, system_prompt, persona_section, offers_section, rebuttals_section, instagram_username, is_active, created_at"
+        "id, name, business_description, tone, system_prompt, persona_section, offers_section, rebuttals_section, instagram_username, is_active, created_at, reply_model, force_retrieval"
       )
       .eq("user_id", id)
       .order("created_at", { ascending: false }),
@@ -176,6 +184,10 @@ export default async function AdminClientDetailPage({
     ? new Date(subscription.current_period_end)
     : null;
   const chatbots = (chatbotsData ?? []) as AdminChatbot[];
+  // Which chatbot's card is shown. With more than one bot they're split into tabs
+  // (?bot=<id> links); default to the first. A stale/unknown id falls back to the first.
+  const activeBot =
+    chatbots.find((b) => b.id === activeBotParam) ?? chatbots[0] ?? null;
   const requests = (requestsData ?? []) as ChangeRequest[];
   const feedback = (feedbackData ?? []) as Feedback[];
 
@@ -288,21 +300,53 @@ export default async function AdminClientDetailPage({
         {/* ---- Chatbots ------------------------------------------------- */}
         <section>
           <h2 className={SECTION_HEADING}>Chatbots ({chatbots.length})</h2>
-          {chatbots.length === 0 ? (
+          {chatbots.length === 0 || !activeBot ? (
             <div className="mt-3">
               <EmptyState variant="inline" title="No chatbots yet">
                 This client has no chatbots yet.
               </EmptyState>
             </div>
           ) : (
-            <div className="mt-3 flex flex-col gap-5">
-              {chatbots.map((bot) => (
-                <SsCard key={bot.id} className="p-[22px]">
+            <>
+              {/* Tabs - one per bot when the client has more than one, so their cards
+                  don't stack into a wall. Server-driven via ?bot=<id> (deep-linkable);
+                  scroll={false} keeps the page from jumping to the top on switch. */}
+              {chatbots.length > 1 && (
+                <div
+                  className="mt-3 flex flex-wrap gap-2"
+                  role="tablist"
+                  aria-label="Chatbots"
+                >
+                  {chatbots.map((b) => {
+                    const active = b.id === activeBot.id;
+                    return (
+                      <Link
+                        key={b.id}
+                        href={`/admin/clients/${id}?bot=${b.id}`}
+                        scroll={false}
+                        role="tab"
+                        aria-selected={active}
+                        className={cn(
+                          "inline-flex items-center rounded-full border px-3.5 py-2 text-[12.5px] font-semibold leading-none transition-colors",
+                          active
+                            ? "border-ss-indigo-200 bg-ss-indigo-25 text-ss-indigo-700"
+                            : "border-ss-line bg-white text-ss-muted hover:border-ss-dash hover:text-ss-ink"
+                        )}
+                      >
+                        {b.name}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="mt-3">
+                <SsCard key={activeBot.id} className="p-[22px]">
                   <SsCardHead
                     titleAs="h3"
-                    title={bot.name}
+                    title={activeBot.name}
                     action={
-                      bot.is_active ? (
+                      activeBot.is_active ? (
                         <SsStatus tone="green">Active</SsStatus>
                       ) : (
                         <SsChip tone="neutral">Paused</SsChip>
@@ -313,16 +357,27 @@ export default async function AdminClientDetailPage({
                   <div className="mt-5">
                     <AdminChatbotEditForm
                       chatbot={{
-                        id: bot.id,
-                        name: bot.name,
-                        instagram_username: bot.instagram_username,
-                        is_active: bot.is_active,
-                        persona_section: bot.persona_section,
-                        offers_section: bot.offers_section,
-                        rebuttals_section: bot.rebuttals_section,
-                        system_prompt: bot.system_prompt,
-                        business_description: bot.business_description,
+                        id: activeBot.id,
+                        name: activeBot.name,
+                        instagram_username: activeBot.instagram_username,
+                        is_active: activeBot.is_active,
+                        persona_section: activeBot.persona_section,
+                        offers_section: activeBot.offers_section,
+                        rebuttals_section: activeBot.rebuttals_section,
+                        system_prompt: activeBot.system_prompt,
+                        business_description: activeBot.business_description,
                       }}
+                    />
+                  </div>
+
+                  {/* Admin cost controls: per-bot reply model + force KB retrieval. Both are
+                      superadmin-only (RLS "admin all chatbots" + the admin-only column trigger),
+                      so the write goes through the admin's own client here - no "view as" needed. */}
+                  <div className="mt-6">
+                    <ModelControls
+                      chatbotId={activeBot.id}
+                      initialReplyModel={activeBot.reply_model}
+                      initialForceRetrieval={activeBot.force_retrieval}
                     />
                   </div>
 
@@ -337,18 +392,30 @@ export default async function AdminClientDetailPage({
                       Upload or paste knowledge for this chatbot. Files are parsed and
                       indexed for retrieval, exactly as on the client&apos;s own dashboard.
                     </p>
-                    <KnowledgeBaseForm chatbotId={bot.id} />
+                    <KnowledgeBaseForm chatbotId={activeBot.id} />
                     <div className="mt-6 space-y-3">
                       <p className="text-[13px] font-semibold text-ss-ink">
-                        {(kbByChatbot.get(bot.id) ?? []).length} entr
-                        {(kbByChatbot.get(bot.id) ?? []).length === 1 ? "y" : "ies"}
+                        {(kbByChatbot.get(activeBot.id) ?? []).length} entr
+                        {(kbByChatbot.get(activeBot.id) ?? []).length === 1 ? "y" : "ies"}
                       </p>
-                      <KnowledgeBaseList entries={kbByChatbot.get(bot.id) ?? []} />
+                      <KnowledgeBaseList entries={kbByChatbot.get(activeBot.id) ?? []} />
+                    </div>
+
+                    {/* Retrain: rebuild the vector index (re-embed every KB entry) + clear
+                        the short-lived reply caches so edits made here take effect right
+                        away. Reuses the client dashboard's button; the reindex route now
+                        authorizes superadmins directly (no "view as" needed). */}
+                    <div className="mt-5 border-t border-ss-hair pt-4">
+                      <p className="mb-2.5 text-xs leading-snug text-ss-muted">
+                        After editing this bot&apos;s knowledge base, retrain to rebuild the
+                        search index so replies use the latest content.
+                      </p>
+                      <RetrainBotButton chatbotId={activeBot.id} variant="outline" size="sm" />
                     </div>
                   </div>
                 </SsCard>
-              ))}
-            </div>
+              </div>
+            </>
           )}
         </section>
 

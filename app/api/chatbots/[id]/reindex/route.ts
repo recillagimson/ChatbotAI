@@ -5,6 +5,7 @@
 // refreshes the vector index + makes an immediate re-ask get a fresh answer.
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, createServiceClient, getCurrentUser } from "@/lib/supabase/server";
+import { requireSuperadmin } from "@/lib/admin";
 import { indexEntry } from "@/lib/retrieval";
 import { clearReplyCaches } from "@/lib/limits";
 
@@ -18,22 +19,40 @@ export async function POST(
 ) {
   const { id } = await params;
   const supabase = await createClient();
-  // Impersonation-aware: under admin "view as", getCurrentUser() is the CLIENT, so
-  // ownership + the KB fetch scope to the client's bot (the is_superadmin() overlays
-  // let the admin operate it). auth.getUser() would never match a client-owned bot.
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  // Ownership check (RLS also enforces it on the reads below).
-  const { data: chatbot } = await supabase
-    .from("chatbots")
-    .select("id")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!chatbot) return NextResponse.json({ error: "chatbot not found" }, { status: 404 });
+  // Authorize for THIS bot, and pick the client that reads its KB entries:
+  //  - Owner path (client dashboard, or an admin under "view as" where getCurrentUser()
+  //    is the CLIENT): scope to their own RLS client + user_id, exactly as before.
+  //  - Superadmin path (operating from /admin/clients, NOT impersonating): they don't own
+  //    the bot, so the user_id filter would 404. Authorize via requireSuperadmin() (which
+  //    keys off the REAL user) and read the bot + KB with the service client (RLS-exempt).
+  // indexEntry already runs on the service client either way.
+  const svc = createServiceClient();
+  const superadmin = !!(await requireSuperadmin());
 
-  const { data: entries } = await supabase
+  let entriesClient;
+  if (superadmin) {
+    const { data: chatbot } = await svc
+      .from("chatbots")
+      .select("id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!chatbot) return NextResponse.json({ error: "chatbot not found" }, { status: 404 });
+    entriesClient = svc;
+  } else {
+    const { data: chatbot } = await supabase
+      .from("chatbots")
+      .select("id")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!chatbot) return NextResponse.json({ error: "chatbot not found" }, { status: 404 });
+    entriesClient = supabase;
+  }
+
+  const { data: entries } = await entriesClient
     .from("knowledge_base")
     .select("id, chatbot_id, user_id, content")
     .eq("chatbot_id", id);
@@ -41,7 +60,6 @@ export async function POST(
   // Re-index with the service client (indexEntry writes kb_chunks, RLS-exempt).
   // indexEntry is idempotent (deletes old chunks, re-embeds). A no-op when
   // embeddings are disabled (no OPENAI_API_KEY) - the DM path reads KB live anyway.
-  const svc = createServiceClient();
   let indexed = 0;
   let chunks = 0;
   for (const entry of entries ?? []) {
