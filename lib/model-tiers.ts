@@ -68,6 +68,7 @@ export const ALLOWED_REPLY_MODELS = [
   "gpt-5.4-mini",
   "gpt-5.4-nano",
   "gpt-5.6-terra",
+  "gpt-5.6-luna",
   "gpt-4.1-mini",
 ] as const;
 
