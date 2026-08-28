@@ -8,8 +8,19 @@ import mammoth from "mammoth";
 /** File extensions we can extract text from (PDF, Word, plain text family). */
 export const ALLOWED_DOC_EXT = /\.(pdf|docx|txt|md|csv)$/i;
 
-/** Per-attachment text cap when folding a file into a chat turn (token budget). */
+/** Per-attachment text cap when folding a file into a chat turn (token budget).
+ *  This is a CHAT-TURN budget - do NOT reuse it as a stored-section cap. */
 export const MAX_DOC_CHARS = 20_000;
+
+/**
+ * Cap for a document uploaded to FILL A PROMPT SECTION (persona / offers / rebuttals).
+ * Deliberately far larger than MAX_DOC_CHARS: pasting a section has no cap and real
+ * personas already run ~100k chars, so the old 20k cut sections mid-word (dropping whole
+ * rules). Still bounded - a section is injected into every reply, so a runaway file
+ * shouldn't land whole - and env-overridable for tuning.
+ */
+export const MAX_SECTION_EXTRACT_CHARS =
+  Number(process.env.MAX_SECTION_EXTRACT_CHARS) || 200_000;
 
 /**
  * Extract plain text from a supported document buffer. `name` drives the parser

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/supabase/server";
 import {
   ALLOWED_DOC_EXT,
-  MAX_DOC_CHARS,
+  MAX_SECTION_EXTRACT_CHARS,
   extractTextFromFile,
 } from "@/lib/document-parser";
 
@@ -62,6 +62,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No readable text found in this file." }, { status: 422 });
   }
 
-  // Cap to keep textareas and the stored section sane.
-  return NextResponse.json({ text: text.slice(0, MAX_DOC_CHARS) });
+  // A prompt section can be large (pasting one is uncapped, personas run ~100k chars),
+  // so cap only at a large, section-appropriate ceiling - NOT the 20k chat-turn budget
+  // that used to cut uploads mid-word. Return `truncated` so the client can warn instead
+  // of silently dropping text when a file genuinely exceeds the ceiling.
+  const truncated = text.length > MAX_SECTION_EXTRACT_CHARS;
+  return NextResponse.json({ text: text.slice(0, MAX_SECTION_EXTRACT_CHARS), truncated });
 }

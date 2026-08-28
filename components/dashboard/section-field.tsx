@@ -37,12 +37,14 @@ export function SectionField({
   const fileRef = useRef<HTMLInputElement>(null);
   const [extracting, setExtracting] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (e.target) e.target.value = ""; // allow re-uploading the same file
     if (!file) return;
     setUploadError(null);
+    setNotice(null);
     setExtracting(true);
     try {
       const form = new FormData();
@@ -54,6 +56,10 @@ export function SectionField({
         return;
       }
       onChange(value.trim() ? `${value.trim()}\n\n${data.text}` : data.text);
+      // A cut should never be silent (the old 20k limit dropped rules mid-section).
+      if (data.truncated) {
+        setNotice("This file was very long and was trimmed to fit. Review the section and edit if anything important was cut.");
+      }
     } catch {
       setUploadError("Could not read this file. Please try again.");
     } finally {
@@ -93,6 +99,7 @@ export function SectionField({
         onChange={(e) => onChange(e.target.value)}
       />
       {uploadError && <p className="text-xs text-destructive">{uploadError}</p>}
+      {notice && <p className="text-xs text-amber-600">{notice}</p>}
       {helper && <p className="text-xs text-muted-foreground">{helper}</p>}
     </div>
   );

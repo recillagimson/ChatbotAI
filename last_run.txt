@@ -1,32 +1,53 @@
-$63/mo, completely done for you, cancel anytime
-yeah i see this all the time, and i can get both of those removed
+yoo what's good, appreciate you reaching out
+
+so what kind of negatives are we looking at on your report? late payments, collections, charge offs, anything like that?
+yeah i see this a lot, and i can get the late payments and inquiries removed
 
 [[SEND_ASSET: proof_late_payments_1]]
-[[SEND_ASSET: proof_late_payments_2]]
-[[SEND_ASSET: proof_collections_1]]
-[[SEND_ASSET: proof_collections_2]]
 
-have you ever tried fixing any of this stuff before, or is this your first time tackling it?
+[[SEND_ASSET: proof_late_payments_2]]
+
+[[SEND_ASSET: proof_inquiries]]
+
+have you tried fixing any of it before?
 yeah that's because you didn't have the right process, not because it can't be removed
 
-how'd you dispute them?
+how'd you go about disputing them?
 you were on the right track honestly, mail is the right channel
 
-the issue is a generic template gets flagged as frivolous and they toss it. it's the consumer law and metro2 angle in the letter that forces them to actually work it
+generic templates get flagged and tossed, it’s the consumer law and metro2 angle that forces them to actually work it
 
-and did anything actually come off?
-so real quick, what's been making it a priority to get fixed?
-not only do you wanna qualify, you want to be approved at the best rates. an approval with some crazy interest rate is basically worthless
+did any of it come off?
+yeah, that’s exactly what happens when they treat it like a template instead of a real dispute
 
-is your credit the only thing holding you back, or is there other stuff in play?
+i handwrite and certified-mail consumer law, factual data and metro2 disputes so a real human at the bureau has to actually investigate it
+
+so what’s making it a priority to get this handled now?
+that’s the play, get your file right so you can put the business in position for funding
+
+is your credit the only thing holding that up, or is there something else?
+bet, credit is the piece i can actually control here
+
 my company is letsgetfunded.com
 
-primarily i do funding, so my team is trained & incentivized to fix files. the more files i fix, the more opportunities i have to fund clients
+primarily i do funding, so my team is trained & incentivized to fix files. the more files i fix, the more opportunities i have to fund clients. i’m managing 1,800+ clients right now
 
 [[SEND_ASSET: proof_reviews_1]]
+
 [[SEND_ASSET: proof_reviews_2]]
+
 https://share.google/DvFrDtcSMOg0knZI9
 
-i can tell you more about my process & how i get the results i do. have you checked out my reviews?
-Thanks for the message, a teammate will follow up shortly.
-all good, take care
+i can tell you more about my process and how i get the results i do. have you had a look at my reviews?
+bet
+
+the $63/mo pro plan is the repair-only option, and you’ll need Smart Credit at $47/mo if you don’t already have a monitor so i can watch the file daily
+
+use this link so my team can track your file
+
+once you’re in, you’ll get my calendar in skool to book a quick onboarding call and we fire disputes out then
+
+(sent link: Skool signup)
+bet, it’s right up there
+
+once you’re in, you’ll get the welcome message in skool with my calendar for onboarding
