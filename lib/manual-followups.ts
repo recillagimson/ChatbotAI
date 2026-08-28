@@ -102,6 +102,56 @@ export function queueLookbackIso(nowMs: number = Date.now()): string {
 }
 
 /**
+ * The manual window [24h, 7d) split into age bands so the coldest leads can be
+ * worked first. Hours are since the LEAD's last message; the bands partition the
+ * whole manual window and every manual thread lands in exactly one. Shared by the
+ * Follow-ups page AND the resolve endpoint so "a band" means one thing in both.
+ */
+export const DAY_BANDS = [
+  { key: "d1", label: "1 day", loHours: 24, hiHours: 72 },
+  { key: "d3", label: "3 days", loHours: 72, hiHours: 120 },
+  { key: "d5", label: "5 days", loHours: 120, hiHours: 144 },
+  { key: "d7", label: "7 days", loHours: 144, hiHours: 168 },
+] as const;
+export type DayBandKey = (typeof DAY_BANDS)[number]["key"];
+
+/** The upper edge (hours) of a day band, or null for an unknown key. Stored as
+ *  conversations.followup_resolved_hi when a band is resolved: the thread returns to
+ *  the queue once its age crosses this edge (i.e. it enters the next band). */
+export function dayBandHiFor(key: string): number | null {
+  return DAY_BANDS.find((b) => b.key === key)?.hiHours ?? null;
+}
+
+/**
+ * Is this manual thread currently HIDDEN because the user marked its band
+ * "resolved" (did the follow-up by hand in ManyChat)? Pure + unit-tested.
+ *
+ * Hidden only while ALL hold:
+ *  - a resolve exists (resolvedAt + resolvedHi both set), AND
+ *  - it is still fresh: the resolve happened AFTER the lead's last message. A reply
+ *    from the lead is a newer inbound, so leadLastMessageAt moves past resolvedAt and
+ *    the thread returns to the queue for a fresh sequence - no webhook write needed, AND
+ *  - the thread has not yet aged past the resolved band's upper edge, so it reappears
+ *    in the NEXT band (resolve at 1-day -> back at 3-day) once it crosses it.
+ */
+export function followupResolvedHidden(opts: {
+  resolvedAt: string | null | undefined;
+  resolvedHi: number | null | undefined;
+  leadLastMessageAt: string;
+  nowMs?: number;
+}): boolean {
+  const { resolvedAt, resolvedHi } = opts;
+  if (!resolvedAt || resolvedHi == null) return false;
+  const now = opts.nowMs ?? Date.now();
+  const leadTs = new Date(opts.leadLastMessageAt).getTime();
+  const resolvedTs = new Date(resolvedAt).getTime();
+  if (!Number.isFinite(leadTs) || !Number.isFinite(resolvedTs)) return false;
+  if (resolvedTs <= leadTs) return false; // the lead replied after the resolve - stale
+  const ageHours = (now - leadTs) / HOUR_MS;
+  return ageHours < resolvedHi;
+}
+
+/**
  * Which side of the messaging window is this thread on right now?
  *
  * Returns "n/a" for channels with no window concept rather than pretending they

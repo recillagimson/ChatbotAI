@@ -202,6 +202,8 @@ export interface Conversation {
   start_on: string | null;           // starting_later: the date (YYYY-MM-DD) the lead wants to begin; pauses the drip
   start_note: string | null;         // starting_later: the human phrase ("Wednesday", "in a week")
   disqualify_strikes: number;        // consecutive pre-reply "disqualified" screen signals from an ENGAGED lead; the terminal disqualify tag only fires on the 2nd (two-strike false-positive backstop, lib/conversation-screen.ts decideDisqualify). Default 0.
+  followup_resolved_at: string | null; // manual follow-up: when the user marked the current band "done by hand in ManyChat"; a later lead reply auto-invalidates it (lib/manual-followups.ts followupResolvedHidden)
+  followup_resolved_hi: number | null; // the resolved band's upper edge in hours (72/120/144/168); the thread reappears in the next band once its lead-silence age crosses this
   rn_opt_in_at: string | null;       // Recurring Notifications opt-in (Phase 6, multi-day reach)
   rn_topic_id: string | null;
   reply_claimed_for: string | null;  // inbound message id of the newest AI-bound run (debounce single-flight claim)

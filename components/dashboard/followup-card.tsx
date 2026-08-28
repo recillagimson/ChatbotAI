@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, Copy, ExternalLink, Hourglass, RotateCcw, Sparkles } from "lucide-react";
+import { Check, CheckCheck, Copy, ExternalLink, Hourglass, RotateCcw, Sparkles } from "lucide-react";
 import { SsAvatar, SsButton, SsChip } from "@/components/ss/controls";
 import { ChannelChip } from "@/components/ss/channel";
 
@@ -21,6 +22,9 @@ export interface FollowupItem {
   nativeLabel: string;
   /** ManyChat Live Chat - the primary manual-send surface for these threads. */
   manychatUrl: string | null;
+  /** The day band this card is shown in (d1/d3/d5/d7), when the view is a day band.
+   *  Drives the "Resolved" button; absent on the Closing-soon / reachable views. */
+  band?: string;
 }
 
 /**
@@ -38,10 +42,40 @@ export interface FollowupItem {
  * then hands it to you to copy and send by hand.
  */
 export function FollowupCard({ item }: { item: FollowupItem }) {
+  const router = useRouter();
   const [draft, setDraft] = useState("");
   const [suggesting, setSuggesting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const [resolved, setResolved] = useState(false);
+
+  // "Resolved" = the user did this follow-up by hand in ManyChat. It hides the card
+  // from THIS band; the server records the band so the thread re-surfaces in the next
+  // band if the lead still hasn't replied (a reply un-hides it - see the API route).
+  async function resolve() {
+    if (resolving || !item.band) return;
+    setResolving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/conversations/${item.id}/followup-resolve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ band: item.band }),
+      });
+      if (!res.ok) {
+        setError("Couldn't mark this resolved. Try again.");
+        setResolving(false);
+        return;
+      }
+      // Drop the card immediately, then re-read so the pill counts follow.
+      setResolved(true);
+      router.refresh();
+    } catch {
+      setError("Couldn't mark resolved - check your connection.");
+      setResolving(false);
+    }
+  }
 
   async function suggest() {
     if (suggesting) return;
@@ -78,6 +112,8 @@ export function FollowupCard({ item }: { item: FollowupItem }) {
       })
       .catch(() => setError("Couldn't copy - select the text and copy manually."));
   }
+
+  if (resolved) return null;
 
   return (
     <div className="rounded-card border border-ss-line bg-white px-5 py-[18px]">
@@ -176,6 +212,13 @@ export function FollowupCard({ item }: { item: FollowupItem }) {
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
             {item.nativeLabel}
           </a>
+        )}
+
+        {item.band && (
+          <SsButton onClick={resolve} disabled={resolving} variant="outline" size="md">
+            <CheckCheck className="h-4 w-4 text-ss-green" aria-hidden="true" />
+            {resolving ? "Resolving…" : "Resolved"}
+          </SsButton>
         )}
 
         <Link

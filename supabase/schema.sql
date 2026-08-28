@@ -1306,3 +1306,21 @@ alter table public.conversations
 
 -- Teardown:
 -- alter table public.conversations drop column if exists disqualify_strikes;
+
+-- ===========================================================================
+-- Manual follow-up "Resolved" (per-band dismissal) (2026-08-27)
+-- ===========================================================================
+-- A user who does a follow-up by hand in ManyChat marks the current age band resolved;
+-- the thread hides from that band and re-surfaces in the next band if the lead still
+-- hasn't replied. followup_resolved_at = when they clicked (a later lead reply, being a
+-- newer inbound, auto-invalidates it); followup_resolved_hi = the resolved band's upper
+-- edge in hours (72/120/144/168), the age at which it reappears. Both nullable, default
+-- null = never resolved. See lib/manual-followups.ts followupResolvedHidden().
+alter table public.conversations
+  add column if not exists followup_resolved_at timestamptz;
+alter table public.conversations
+  add column if not exists followup_resolved_hi smallint;
+
+-- Teardown:
+-- alter table public.conversations drop column if exists followup_resolved_at;
+-- alter table public.conversations drop column if exists followup_resolved_hi;

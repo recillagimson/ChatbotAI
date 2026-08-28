@@ -18,6 +18,9 @@ import {
   queueLookbackIso,
   waitingFor,
   windowBucket,
+  DAY_BANDS,
+  followupResolvedHidden,
+  type DayBandKey,
   type WindowConversation,
 } from "@/lib/manual-followups";
 import { countHandSendsSince, withLeadClock } from "@/lib/lead-activity";
@@ -40,14 +43,8 @@ export const dynamic = "force-dynamic";
 // age bands so the coldest leads can be worked first. Hours are since the LEAD's last
 // message; the bands partition the whole [24h, 7d) manual window and never surface
 // anything past 7 days (that stays "expired" - nothing the app or a hand-send reaches).
-const DAY_BANDS = [
-  { key: "d1", label: "1 day", loHours: 24, hiHours: 72 },
-  { key: "d3", label: "3 days", loHours: 72, hiHours: 120 },
-  { key: "d5", label: "5 days", loHours: 120, hiHours: 144 },
-  { key: "d7", label: "7 days", loHours: 144, hiHours: 168 },
-] as const;
-type DayBand = (typeof DAY_BANDS)[number]["key"];
-
+// DAY_BANDS + its key type now live in lib/manual-followups.ts, shared with the resolve
+// endpoint so a "band" means the same thing on both sides. VIEWS adds the two non-band tabs.
 const VIEWS = ["d1", "d3", "d5", "d7", "closing", "reachable"] as const;
 type View = (typeof VIEWS)[number];
 
@@ -128,6 +125,8 @@ async function FollowUpsQueue({
       manychat_subscriber_id: string;
       manychat_page_id: string | null;
       manychat_live_chat_url: string | null;
+      followup_resolved_at: string | null;
+      followup_resolved_hi: number | null;
       chatbots: unknown;
     }
   >(
@@ -135,7 +134,7 @@ async function FollowUpsQueue({
       let q = supabase
         .from("conversations")
         .select(
-          "id, contact_name, contact_username, platform, last_message_at, status, confirmed_at, user_muted_at, bot_off_at, tag, chatbot_id, manychat_subscriber_id, manychat_page_id, manychat_live_chat_url, chatbots(name)"
+          "id, contact_name, contact_username, platform, last_message_at, status, confirmed_at, user_muted_at, bot_off_at, tag, chatbot_id, manychat_subscriber_id, manychat_page_id, manychat_live_chat_url, followup_resolved_at, followup_resolved_hi, chatbots(name)"
         )
         .eq("user_id", user!.id)
         .order("last_message_at", { ascending: true })
@@ -175,9 +174,21 @@ async function FollowUpsQueue({
   // measures from the lead's last message; because bucketOf already returns "manual"
   // only inside [24h, 7d), every manual thread lands in exactly one band.
   const manual = all
-    .filter((c) => bucketOf(c, now) === "manual")
+    .filter(
+      (c) =>
+        bucketOf(c, now) === "manual" &&
+        // Hidden when the user resolved this band by hand; it reappears in the next band,
+        // and a lead reply un-hides it - followupResolvedHidden owns that whole rule so the
+        // pill counts and the list stay in step.
+        !followupResolvedHidden({
+          resolvedAt: c.followup_resolved_at,
+          resolvedHi: c.followup_resolved_hi,
+          leadLastMessageAt: leadLastMessageAt(c),
+          nowMs: now,
+        })
+    )
     .sort(byLeadClock);
-  const bandOf = (c: (typeof all)[number]): DayBand | null => {
+  const bandOf = (c: (typeof all)[number]): DayBandKey | null => {
     const h = (now - new Date(leadLastMessageAt(c)).getTime()) / (60 * 60 * 1000);
     return DAY_BANDS.find((b) => h >= b.loHours && h < b.hiHours)?.key ?? null;
   };
@@ -219,6 +230,12 @@ async function FollowUpsQueue({
 
   const oldest = manual[0] ?? null;
 
+  // Cards in a day-band view carry that band so their "Resolved" button tells the
+  // endpoint which band to dismiss. Closing/reachable views get no band (no Resolved).
+  const itemBand: DayBandKey | undefined = DAY_BANDS.some((b) => b.key === view)
+    ? (view as DayBandKey)
+    : undefined;
+
   const items: FollowupItem[] = visible.slice(0, 25).map((c) => {
     const platform = toPlatform(c.platform);
     const leadAt = leadLastMessageAt(c);
@@ -231,6 +248,7 @@ async function FollowUpsQueue({
       lastMessage: truncate(previews.get(c.id) ?? null, 160),
       lastMessageAt: leadAt,
       botName: null,
+      band: itemBand,
       nativeUrl: nativeInboxUrl(platform),
       nativeLabel: nativeInboxLabel(platform),
       // Deep-link straight to this thread in ManyChat when we can (stored live_chat_url,
