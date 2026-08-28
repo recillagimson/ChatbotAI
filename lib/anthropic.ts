@@ -186,30 +186,47 @@ ${catalog}`
   // on top of a hand-written persona); offers/rebuttals follow when present;
   // then the conversation memory, the knowledge base and the platform guardrails.
   if (hasSections) {
-    const parts: string[] = [];
-    parts.push(
+    // CACHE-ORDERED ASSEMBLY. Prompt caching (OpenAI auto-cache; the Anthropic path's
+    // cache_control breakpoint) reuses the longest IDENTICAL prefix, so a volatile block
+    // placed early breaks the cache for every stable block after it. Everything that is
+    // constant for a given bot - persona, offers, rebuttals, media catalog, link-flow
+    // rules, KB, trained corrections, platform guardrails - goes FIRST as one contiguous
+    // cacheable prefix (~40k tokens on a big bot). The per-turn/per-conversation blocks
+    // (continuity, known facts, flow-state ledger, matched-keyword instruction, memory,
+    // scheduled start) go LAST.
+    //
+    // This also IMPROVES adherence rather than trading it away: the volatile blocks now
+    // sit adjacent to the live turn, where recency makes the model weight them MORE. The
+    // job of known-facts/flow-state is to outrank any qualify-the-lead script above them,
+    // and being nearest the turn does that better than being buried ~100k chars up (the
+    // old attention problem on smaller models). Validated by the 30-turn re-ask harness
+    // (scripts/_reask-sim.py): no re-ask/looping regression vs the old order.
+    const staticParts: string[] = [
       persona ||
-        `You are the customer-service AI for "${chatbot.name}". You reply to Instagram and Messenger DMs on the business's behalf.`
-    );
-    if (continuityBlock) parts.push(continuityBlock);
-    if (knownFactsBlock) parts.push(knownFactsBlock);
-    if (flowStateBlock) parts.push(flowStateBlock);
-    if (instructionBlock) parts.push(instructionBlock);
-    if (offers) parts.push(`OFFERS, SERVICES & LINKS\n${offers}`);
-    if (rebuttals) parts.push(`REBUTTALS & FAQ HANDLING\n${rebuttals}`);
-    if (memoryBlock) parts.push(memoryBlock);
-    if (scheduledBlock) parts.push(scheduledBlock);
-    if (mediaBlock) parts.push(mediaBlock);
-    if (linkFlowBlock) parts.push(linkFlowBlock);
-    parts.push(
+        `You are the customer-service AI for "${chatbot.name}". You reply to Instagram and Messenger DMs on the business's behalf.`,
+    ];
+    if (offers) staticParts.push(`OFFERS, SERVICES & LINKS\n${offers}`);
+    if (rebuttals) staticParts.push(`REBUTTALS & FAQ HANDLING\n${rebuttals}`);
+    if (mediaBlock) staticParts.push(mediaBlock);
+    if (linkFlowBlock) staticParts.push(linkFlowBlock);
+    staticParts.push(
       `KNOWLEDGE BASE (your single source of truth - never invent facts beyond this)\n${kbBlock}`
     );
-    if (trainedBlock) parts.push(trainedBlock);
-    parts.push(GUARDRAILS);
-    parts.push(HUMANIZER_STYLE);
-    parts.push(CONVERSION_CONFIRM);
-    parts.push(CONFIDENTIALITY);
-    return parts.join("\n\n");
+    if (trainedBlock) staticParts.push(trainedBlock);
+    staticParts.push(GUARDRAILS, HUMANIZER_STYLE, CONVERSION_CONFIRM, CONFIDENTIALITY);
+
+    // Volatile tail - internal order kept identical to the pre-cache-reorder layout
+    // (continuity -> facts -> ledger -> instruction -> memory -> scheduled) so the only
+    // change is relocation, not resequencing.
+    const volatileParts: string[] = [];
+    if (continuityBlock) volatileParts.push(continuityBlock);
+    if (knownFactsBlock) volatileParts.push(knownFactsBlock);
+    if (flowStateBlock) volatileParts.push(flowStateBlock);
+    if (instructionBlock) volatileParts.push(instructionBlock);
+    if (memoryBlock) volatileParts.push(memoryBlock);
+    if (scheduledBlock) volatileParts.push(scheduledBlock);
+
+    return [...staticParts, ...volatileParts].join("\n\n");
   }
 
   // LEGACY FALLBACK - un-migrated bots whose three sections are all empty.
@@ -361,6 +378,9 @@ export async function generateReply(opts: {
       model: replyModel,
       system: systemText,
       messages: [...trimmed, currentTurn],
+      // Pin cache routing per bot so the static prompt prefix (persona/offers/rebuttals/KB/
+      // guardrails, assembled first in buildSystemPrompt) stays warm across this bot's chats.
+      promptCacheKey: opts.chatbot.id,
       // Enough headroom that reasoning tokens can't starve the visible reply to empty
       // (the "teammate will follow up" bug on gpt-5.x). See REPLY_MAX_TOKENS above.
       maxTokens: REPLY_MAX_TOKENS,

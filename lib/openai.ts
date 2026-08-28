@@ -74,6 +74,7 @@ async function openaiChatOnce(
     messages: OpenAIChatMessage[];
     maxTokens?: number;
     timeoutMs?: number;
+    promptCacheKey?: string;
   },
   apiKey: string
 ): Promise<{ text: string; tokensUsed: number }> {
@@ -90,6 +91,10 @@ async function openaiChatOnce(
         model: opts.model,
         max_completion_tokens: opts.maxTokens ?? 400,
         messages: [{ role: "system", content: opts.system }, ...opts.messages],
+        // Routing hint so a given bot's requests reuse the same cached static prefix.
+        // Purely a cache-hit optimization; ignored by models that don't cache, and it
+        // never overrides content matching (a changed prompt is still a fresh miss).
+        ...(opts.promptCacheKey ? { prompt_cache_key: opts.promptCacheKey } : {}),
       }),
       signal: controller.signal,
     });
@@ -139,6 +144,9 @@ export async function openaiChat(opts: {
   messages: OpenAIChatMessage[];
   maxTokens?: number;
   timeoutMs?: number;
+  /** Optional cache-routing key (e.g. the chatbot id) so a bot's replies reuse the same
+   *  cached static prompt prefix. Optional; unset callers (screener/classifier) unchanged. */
+  promptCacheKey?: string;
   /** Extra attempts beyond the first, on transient errors only. Default 0. Clamped to 5. */
   retries?: number;
   /** Backoff before each retry; entry i is the wait before attempt i+2. */
