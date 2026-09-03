@@ -15,6 +15,7 @@ export default defineConfig({
       "tests/manual-followups*.spec.ts",
       "tests/kb-access*.spec.ts",
       "tests/conversation-screen*.spec.ts",
+      "tests/spam-detect*.spec.ts",
       "tests/openai-retry*.spec.ts",
     ],
   },

@@ -51,7 +51,8 @@ import { retrySupabase } from "@/lib/retry";
 import { shouldSendWelcome, coerceKeywords } from "@/lib/welcome";
 import { matchesResetKeyword } from "@/lib/reset-keyword";
 import { resetConversation } from "@/lib/reset-conversation";
-import { screenDisqualify, decideDisqualify } from "@/lib/conversation-screen";
+import { screenDisqualify, decideDisqualify, type ScreenOutcome } from "@/lib/conversation-screen";
+import { detectSpam } from "@/lib/spam-detect";
 import { syncNoFollowupFlag } from "@/lib/followup-flag";
 import { followupBlocked } from "@/lib/followup";
 import { resolveTagWrite, CONVERSATION_TAGS, TAG_RANK, type ConversationTag } from "@/lib/conversation-tags";
@@ -1480,7 +1481,23 @@ export async function POST(request: NextRequest) {
     if (AUTO_TAG_ENABLED && !confirmedAt && canPushPlatform(platform)) {
       const lastBotMessage =
         [...priorHistory].reverse().find((m) => m.role === "assistant")?.content ?? "";
-      let { outcome } = await screenDisqualify({ message: effectiveMessage, lastBotMessage });
+      // Deterministic promo/referral SPAM backstop (lib/spam-detect.ts), UNDER the
+      // AI screen. The classifier misses mainstream-referral blasts - a Temu "accept
+      // my invitation to win free items" + temu.com/s/... link is not the crypto-casino
+      // archetype its prompt enumerates, so it answered `none` (or `bot`, downgraded
+      // below for an engaged lead) and the spam got a normal reply. A deterministic hit
+      // forces `spam`, which decideDisqualify silences immediately (tag `bot`) and which
+      // is exempt from the engaged-lead `bot` downgrade, so a blast is stopped even
+      // mid-conversation - and we skip the model call. Pure + fail-open (any error ->
+      // not spam -> the AI screen still runs, so a real lead is never wrongly silenced).
+      const spamHit = detectSpam(effectiveMessage);
+      let outcome: ScreenOutcome;
+      if (spamHit.isSpam) {
+        console.warn("[manychat-webhook] deterministic promo/referral spam - silencing", { conversationId, patterns: spamHit.patterns });
+        outcome = "spam";
+      } else {
+        ({ outcome } = await screenDisqualify({ message: effectiveMessage, lastBotMessage }));
+      }
       // A `bot` (automated-sender) verdict only makes sense at first contact. Once the
       // assistant has had genuine back-and-forth with this person (a prior assistant
       // reply exists), they are a human, not a spam bot - so a late `bot` flag is almost
