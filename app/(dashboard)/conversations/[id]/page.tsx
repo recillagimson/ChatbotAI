@@ -44,9 +44,19 @@ export default async function ConversationDetailPage({
   const current = readInboxFilters(await searchParams);
 
   const supabase = await createClient();
-  const user = await getCurrentUser();
-  const isAdmin = !!(await requireSuperadmin());
+  // Independent identity reads - the conversation query needs user.id, but
+  // requireSuperadmin() is independent, so resolve both together.
+  const [user, isAdmin] = await Promise.all([
+    getCurrentUser(),
+    requireSuperadmin().then((r) => !!r),
+  ]);
 
+  // Confirm the conversation exists AND belongs to this user BEFORE reading its
+  // messages: the messages query is keyed on the route id alone and carries no
+  // ownership predicate of its own, so gating it behind notFound() keeps message
+  // content read only for a conversation ownership has already confirmed - RLS is
+  // the backstop, not the sole guard. .single() resolves to {data:null} for a
+  // missing/unowned row (never rejects).
   const { data: conversation } = await supabase
     .from("conversations")
     .select("*, chatbots(name, keep_replies_when_tagged)")
@@ -65,13 +75,20 @@ export default async function ConversationDetailPage({
   // Resolve a viewable URL for each message carrying media. media_url holds a
   // storage path in the private request-uploads bucket (sign it), unless it's
   // already absolute. Signed links are short-lived but fine for this view.
+  // Signed in parallel - one round trip per media message, not sequentially.
   const mediaUrls = new Map<string, string>();
-  for (const m of messages ?? []) {
-    if (!m.media_url) continue;
-    const url = /^https?:\/\//.test(m.media_url)
-      ? m.media_url
-      : await signAttachment(supabase, m.media_url);
-    if (url) mediaUrls.set(m.id, url);
+  const signed = await Promise.all(
+    (messages ?? [])
+      .filter((m) => m.media_url)
+      .map(async (m) => {
+        const url = /^https?:\/\//.test(m.media_url)
+          ? m.media_url
+          : await signAttachment(supabase, m.media_url);
+        return [m.id, url] as const;
+      }),
+  );
+  for (const [mid, url] of signed) {
+    if (url) mediaUrls.set(mid, url);
   }
 
   if (conversation.unread_count > 0) {

@@ -85,9 +85,16 @@ export async function loadInbox(
   const page = Math.min(Math.max(1, current.page), totalPages);
   const offset = (page - 1) * CONV_PAGE_SIZE;
 
+  // Select ONLY the columns the inbox list renders (the InboxConversation
+  // contract) - not "*", which pulled all ~44 conversation columns incl. the
+  // large text blobs (memory_summary/known_facts/flow_state) and webhook-only
+  // state on every filter/search/page change. Behaviour-neutral: the renderer
+  // reads exactly these fields.
   let dataQuery = supabase
     .from("conversations")
-    .select("*, chatbots(name)")
+    .select(
+      "id, contact_name, contact_username, platform, last_message_at, unread_count, status, tag, quality_tag, extraction_attempts, chatbots(name)",
+    )
     .eq("user_id", userId);
   if (current.platform) dataQuery = dataQuery.eq("platform", current.platform);
   if (current.chatbot) dataQuery = dataQuery.eq("chatbot_id", current.chatbot);

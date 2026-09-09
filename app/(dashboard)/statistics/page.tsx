@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 import {
   AlertCircle,
   BarChart3,
@@ -168,7 +168,12 @@ export default async function StatisticsPage({
   searchParams: Promise<StatsParams>;
 }) {
   const sp = await searchParams;
-  const { rangeKey, customFrom, customTo } = resolveRange(sp);
+  // Resolve the window ONCE here and pass the same {from,to} into both Suspense
+  // branches. For every preset range resolveRange() stamps to:new Date() fresh per
+  // call, so if ExportButton and StatisticsReport each resolved their own, their
+  // millisecond-apart `to` would give getOverviewCached distinct cache keys and the
+  // analytics_overview RPC would fire twice. Sharing one snapshot makes the dedup real.
+  const { rangeKey, customFrom, customTo, from, to } = resolveRange(sp);
   const workspace = await getWorkspace(sp.bot ?? null);
   const scopeName =
     workspace?.bots.find((b) => b.id === workspace?.scopedBotId)?.name ??
@@ -194,7 +199,7 @@ export default async function StatisticsPage({
                 />
               }
             >
-              <ExportButton sp={sp} />
+              <ExportButton sp={sp} from={from} to={to} />
             </Suspense>
             <SsLinkButton href="/follow-ups" variant="navy" size="md">
               <SendHorizontal className="h-4 w-4" aria-hidden="true" />
@@ -228,7 +233,7 @@ export default async function StatisticsPage({
               comparison="Compared with the previous period of the same length"
             />
             <Suspense key={reportKey} fallback={<StatisticsReportSkeleton />}>
-              <StatisticsReport sp={sp} />
+              <StatisticsReport sp={sp} from={from} to={to} />
             </Suspense>
           </>
         )}
@@ -238,19 +243,41 @@ export default async function StatisticsPage({
 }
 
 /**
+ * Current-period analytics, React cache()-keyed on the PRIMITIVE (from,to,chatbotId)
+ * so the two sibling Suspense branches on this page (ExportButton + StatisticsReport)
+ * share ONE analytics_overview RPC per request instead of firing it twice. Both branches
+ * receive the SAME {from,to} snapshot from the page (see StatisticsPage), which is what
+ * makes the key identical - resolving the range independently in each would stamp a
+ * millisecond-apart `to` and miss. Builds its own client (cache() keys on args, so a
+ * passed client/opts object would never hit).
+ */
+const getOverviewCached = cache(
+  async (from: string, to: string, chatbotId: string | null) => {
+    const supabase = await createClient();
+    return getAnalyticsOverview(supabase, { from, to, chatbotId });
+  },
+);
+
+/**
  * The export button only exists when there's a report to export, so it has to
  * wait for the same read the body does - in its own small boundary, so it never
  * holds up the title.
  */
-async function ExportButton({ sp }: { sp: StatsParams }) {
-  const supabase = await createClient();
-  const { from, to } = resolveRange(sp);
+async function ExportButton({
+  sp,
+  from,
+  to,
+}: {
+  sp: StatsParams;
+  from: string;
+  to: string;
+}) {
   const workspace = await getWorkspace(sp.bot ?? null);
-  const { overview } = await getAnalyticsOverview(supabase, {
+  const { overview } = await getOverviewCached(
     from,
     to,
-    chatbotId: workspace?.scopedBotId ?? null,
-  });
+    workspace?.scopedBotId ?? null,
+  );
   if (!overview) return null;
 
   const params = new URLSearchParams();
@@ -270,26 +297,24 @@ async function ExportButton({ sp }: { sp: StatsParams }) {
 }
 
 /** Everything below the preset bar - the part that has to be fetched. */
-async function StatisticsReport({ sp }: { sp: StatsParams }) {
+async function StatisticsReport({
+  sp,
+  from,
+  to,
+}: {
+  sp: StatsParams;
+  from: string;
+  to: string;
+}) {
   const supabase = await createClient();
   const user = await getCurrentUser();
 
-  const { from, to, rangeKey, customFrom, customTo } = resolveRange(sp);
   const workspace = await getWorkspace(sp.bot ?? null);
   const chatbotId = workspace?.scopedBotId ?? null;
-  const { overview, problem } = await getAnalyticsOverview(supabase, {
-    from,
-    to,
-    chatbotId,
-  });
 
   // The previous window of the same length, for period-over-period deltas.
   const spanMs = new Date(to).getTime() - new Date(from).getTime();
-  const { overview: prev } = await getAnalyticsOverview(supabase, {
-    from: new Date(new Date(from).getTime() - spanMs).toISOString(),
-    to: from,
-    chatbotId,
-  });
+  const prevFrom = new Date(new Date(from).getTime() - spanMs).toISOString();
 
   // One read of the in-scope threads backs the tag mix, the status split, and
   // the sequence reach - three cards that would otherwise be three queries.
@@ -336,8 +361,23 @@ async function StatisticsReport({ sp }: { sp: StatsParams }) {
     .eq("user_id", user!.id);
   if (chatbotId) botsQuery = botsQuery.eq("id", chatbotId);
 
-  const [{ rows: scopedRows }, { count: subscribedCount }, { data: seqBots }] =
-    await Promise.all([rowsQuery, subscribedQuery, botsQuery]);
+  // Current + previous analytics run in the SAME Promise.all as the three
+  // conversation/bot queries (all independent) - one network round instead of
+  // three sequential ones. getOverviewCached dedupes the current-period RPC
+  // with ExportButton's identical call.
+  const [
+    { overview, problem },
+    { overview: prev },
+    { rows: scopedRows },
+    { count: subscribedCount },
+    { data: seqBots },
+  ] = await Promise.all([
+    getOverviewCached(from, to, chatbotId),
+    getOverviewCached(prevFrom, from, chatbotId),
+    rowsQuery,
+    subscribedQuery,
+    botsQuery,
+  ]);
 
   const rows = scopedRows;
   const sequences = buildSequenceReport(seqBots ?? [], rows);
