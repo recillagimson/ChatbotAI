@@ -74,6 +74,7 @@ import {
 } from "@/lib/inbound-media";
 import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
 import { refreshKnownFacts } from "@/lib/lead-facts";
+import { renderSentStateBlock, parseSentAssetKeys } from "@/lib/sent-state";
 import {
   flowStateEnabled,
   refreshFlowState,
@@ -1613,6 +1614,28 @@ export async function POST(request: NextRequest) {
       askCount,
     });
 
+    // Assets/link already delivered in THIS thread, read across the WHOLE conversation
+    // (not just the verbatim window) so the bot stops re-sending proof it sent dozens of
+    // turns ago once that scrolled out of view. linkAlreadySent uses link_sent_at, which
+    // is accurate once the 2026-09-09 mark_link_sent migration is applied (before it, a
+    // reviews link could set it early; the asset list is unaffected). One small indexed
+    // query, off the pacing-dominated latency path.
+    const { data: sentAssetRows } = await supabase
+      .from("messages")
+      .select("content")
+      .eq("conversation_id", conversationId!)
+      .eq("role", "assistant")
+      .not("media_url", "is", null)
+      .returns<{ content: string | null }[]>();
+    const sentStateBlock = renderSentStateBlock({
+      sentAssetKeys: parseSentAssetKeys((sentAssetRows ?? []).map((r) => r.content)),
+      linkAlreadySent: !!existing?.link_sent_at,
+    });
+    // One combined block in the flow-state slot: both are volatile-tail, model-facing
+    // "known state" blocks. Joined here so buildSystemPrompt needs no change AND a bot
+    // with the flow-state ledger OFF still receives the sent-state block.
+    const flowAndSentBlock = [flowStateBlock, sentStateBlock].filter(Boolean).join("\n\n");
+
     let replyText = "Thanks for the message, a teammate will follow up shortly.";
     let tokens = 0;
     try {
@@ -1640,8 +1663,10 @@ export async function POST(request: NextRequest) {
         // score/goals/etc. Read from the post-debounce local, not the run-start
         // snapshot, so a refresh that landed during our own sleep is honoured.
         knownFacts,
-        // Which questions this bot has already asked and what is still owed.
-        flowStateBlock,
+        // Which questions this bot has already asked + what it has already SENT
+        // (assets/link), combined into one volatile-tail block so it neither re-asks nor
+        // re-sends. See lib/flow-state.ts (questions) + lib/sent-state.ts (assets/link).
+        flowStateBlock: flowAndSentBlock,
         // Retry a transient provider blip (429 / 5xx overload / request timeout)
         // before falling back to the canned "a teammate will follow up" line below:
         // 2 extra tries on the background push path (300s maxDuration), 1 on the

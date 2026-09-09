@@ -12,6 +12,7 @@ export default defineConfig({
       "tests/link-flow*.spec.ts",
       "tests/flow-state*.spec.ts",
       "tests/lead-facts*.spec.ts",
+      "tests/sent-state*.spec.ts",
       "tests/manual-followups*.spec.ts",
       "tests/kb-access*.spec.ts",
       "tests/conversation-screen*.spec.ts",
