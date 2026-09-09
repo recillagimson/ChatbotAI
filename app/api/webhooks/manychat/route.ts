@@ -75,6 +75,7 @@ import {
 import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
 import { refreshKnownFacts } from "@/lib/lead-facts";
 import { renderSentStateBlock, parseSentAssetKeys } from "@/lib/sent-state";
+import { detectHandoff, renderHandoffBlock } from "@/lib/handoff-detect";
 import {
   flowStateEnabled,
   refreshFlowState,
@@ -1631,10 +1632,19 @@ export async function POST(request: NextRequest) {
       sentAssetKeys: parseSentAssetKeys((sentAssetRows ?? []).map((r) => r.content)),
       linkAlreadySent: !!existing?.link_sent_at,
     });
-    // One combined block in the flow-state slot: both are volatile-tail, model-facing
-    // "known state" blocks. Joined here so buildSystemPrompt needs no change AND a bot
-    // with the flow-state ledger OFF still receives the sent-state block.
-    const flowAndSentBlock = [flowStateBlock, sentStateBlock].filter(Boolean).join("\n\n");
+    // Fix E - graceful disengage. The AI disqualify screen deliberately lets a lead who is
+    // merely hesitant/deferring through as `none`, so a lead who explicitly asks for a human
+    // or who is distressed gets no stand-down and the bot re-pitches in a loop. This
+    // deterministic floor (lib/handoff-detect.ts) steers the model to stop selling and defer
+    // warmly to a person on those two cases, and flags the thread needs_human (below). Soft
+    // by design: it never silences the bot (fail-open), so a false positive is one gentle
+    // reply, not a wrongful silence.
+    const handoff = detectHandoff(effectiveMessage);
+    const handoffBlock = renderHandoffBlock(handoff.reason);
+    // One combined block in the flow-state slot: all are volatile-tail, model-facing "known
+    // state" blocks. Joined here so buildSystemPrompt needs no change AND a bot with the
+    // flow-state ledger OFF still receives the sent-state / handoff blocks.
+    const flowAndSentBlock = [flowStateBlock, sentStateBlock, handoffBlock].filter(Boolean).join("\n\n");
 
     let replyText = "Thanks for the message, a teammate will follow up shortly.";
     let tokens = 0;
@@ -1880,7 +1890,14 @@ export async function POST(request: NextRequest) {
       // when the serverless instance freezes). Never throws.
       tagWork = (async () => {
         try {
-          const { tag, startOn, startNote } = await classifyConversation({ userMessage, botReply, today });
+          // Fix E: when the handoff floor fired this turn (explicit human request or
+          // distress), deterministically flag the thread needs_human instead of asking the
+          // classifier - the DISENGAGE steer already told the bot to defer to a person.
+          // resolveTagWrite still protects terminal/stickier tags, so this never clobbers a
+          // subscribed/disqualified/bot thread.
+          const { tag, startOn, startNote } = handoff.handoff
+            ? { tag: "needs_human" as ConversationTag, startOn: null, startNote: null }
+            : await classifyConversation({ userMessage, botReply, today });
           if (tag === "subscribed") {
             await supabase
               .from("conversations")
