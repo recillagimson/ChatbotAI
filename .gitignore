@@ -24,3 +24,6 @@ docs/
 
 # temp brand preview (not for deploy)
 public/brand-preview.html
+
+# GSD planning artifacts (local-only)
+.planning/
