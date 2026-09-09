@@ -593,7 +593,13 @@ export async function updateFlowState(
       model: FLOW_STATE_MODEL,
       system,
       messages: [{ role: "user", content: user }],
-      maxTokens: 300,
+      // 700 (raised from 300, 2026-09-09): the fold window is .limit(HISTORY_TURNS), so
+      // raising HISTORY_TURNS enlarges this extractor's INPUT while the output cap is
+      // shared with gpt-5.x reasoning tokens - too small a cap returns "" (updateFlowState
+      // -> null), the ledger stops updating, goes stale, and Layer B is dropped. Ceiling
+      // only; the model still stops when done. This is the ledger the flow-state rollout
+      // relies on, so protect it. Related: REPLY_MAX_TOKENS 400 -> 1200 in lib/anthropic.ts.
+      maxTokens: 700,
       timeoutMs: 15_000,
     });
     return normalizeFlowState(text);

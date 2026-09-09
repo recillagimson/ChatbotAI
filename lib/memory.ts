@@ -95,7 +95,15 @@ export function buildSummaryPrompt(
     `the summary so a teammate could read it and instantly know where things stand. ` +
     `Capture: the lead's name, what they want / their goal, their situation and any ` +
     `details they shared, what's been offered or promised, decisions made, and any ` +
-    `open questions or next steps. PRESERVE the concrete specifics the lead gave - ` +
+    `open questions or next steps. ALSO record, from the BUSINESS side, what it has ` +
+    `already SENT or DONE so it never repeats itself later in a long chat: whether a ` +
+    `signup, checkout, or booking link has already gone out (say so plainly, e.g. ` +
+    `"Signup link already sent - do not send again"), which proof images, files, or ` +
+    `other assets have already been sent, and any introduction or scripted step ` +
+    `already completed. These "already done" notes matter as much as the lead's own ` +
+    `facts - on a long thread they are what stop the business re-introducing itself, ` +
+    `re-sending the same images, or re-sending a link. ` +
+    `PRESERVE the concrete specifics the lead gave - ` +
     `the numbers they cited, the exact goals, products, or items they named, amounts, ` +
     `and dates - verbatim; they carry over even after they scroll out of view, so a ` +
     `later summary must never drop them. Content the lead sent as a photo, voice note, ` +
@@ -126,7 +134,7 @@ export function buildSummaryPrompt(
  * failure that looked like a no-op used to advance it anyway: the messages that had
  * just scrolled out of the verbatim window ended up below the watermark, absent from
  * the summary, and out of the window - gone from every memory layer, with no recovery
- * short of a manual reset. An empty completion is not theoretical here: maxTokens 400
+ * short of a manual reset. An empty completion is not theoretical here: the maxTokens budget (raised 400 -> 700, 2026-09-09)
  * is shared with reasoning tokens on the gpt-5.x default, so a long fold-in can come
  * back with content "" and no error at all.
  */
@@ -141,7 +149,7 @@ export async function summarizeConversation(
       model: MEMORY_SUMMARY_MODEL,
       system,
       messages: [{ role: "user", content: user }],
-      maxTokens: 400,
+      maxTokens: 700,
     });
     return text.trim() || null;
   } catch (err) {

@@ -161,7 +161,11 @@ export async function updateKnownFacts(
       model: LEAD_FACTS_MODEL,
       system,
       messages: [{ role: "user", content: user }],
-      maxTokens: 350,
+      // 700 (raised from 350, 2026-09-09): the fold window is .limit(HISTORY_TURNS), so
+      // raising HISTORY_TURNS enlarges this extractor's INPUT while the output cap is
+      // shared with gpt-5.x reasoning tokens - too small a cap returns "" and the facts
+      // silently don't get written. Ceiling only; the model still stops when done.
+      maxTokens: 700,
     });
     const next = normalizeFacts(text);
     // Guard against a transient empty/garbage completion wiping a good list: only
