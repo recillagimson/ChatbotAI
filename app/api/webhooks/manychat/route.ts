@@ -58,6 +58,7 @@ import { followupBlocked } from "@/lib/followup";
 import { resolveTagWrite, CONVERSATION_TAGS, TAG_RANK, type ConversationTag } from "@/lib/conversation-tags";
 import {
   checkRateLimit,
+  checkChatbotInboundLimit,
   checkMonthlyCap,
   checkDuplicate,
   cacheLastReply,
@@ -428,9 +429,25 @@ export async function POST(request: NextRequest) {
   if (!chatbot) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const secretOk =
-    verifyManychatSecret(secret, chatbot.webhook_secret) ||
-    verifyManychatSecret(secret, process.env.MANYCHAT_WEBHOOK_SECRET);
+  let secretOk = verifyManychatSecret(secret, chatbot.webhook_secret);
+  if (!secretOk) {
+    // Legacy global fallback: the shared MANYCHAT_WEBHOOK_SECRET matches ANY
+    // chatbot_id (which is non-secret), so it is a cross-tenant surface. Kept for
+    // un-migrated bots but gated by a kill switch - once every bot uses its own
+    // webhook_secret, set MANYCHAT_ALLOW_LEGACY_SECRET=false to close it. The warn
+    // surfaces any bot still relying on it so flipping the switch is safe.
+    if (
+      process.env.MANYCHAT_ALLOW_LEGACY_SECRET !== "false" &&
+      process.env.MANYCHAT_WEBHOOK_SECRET &&
+      verifyManychatSecret(secret, process.env.MANYCHAT_WEBHOOK_SECRET)
+    ) {
+      console.warn(
+        "[manychat-webhook] authenticated via LEGACY global secret; migrate this bot to its own webhook_secret then set MANYCHAT_ALLOW_LEGACY_SECRET=false",
+        { chatbotId: chatbot.id }
+      );
+      secretOk = true;
+    }
+  }
   if (!secretOk) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -448,6 +465,20 @@ export async function POST(request: NextRequest) {
       "Thanks for your message! We'll get back to you shortly.",
       { ai_skipped: true, reason: "subscription_inactive" }
     );
+  }
+
+  // Coarse per-chatbot inbound flood cap, BEFORE any conversation/message row is
+  // created. The per-(chatbot,subscriber) limit at step 6a is bypassable by spraying
+  // new subscriber_id values (each a fresh bucket), so this caps total inbound per
+  // bot and stops a flood from creating unbounded rows / paid screens. Fail-open +
+  // generous default (RATE_LIMIT_CHATBOT_*), so real traffic never trips it.
+  const botRl = await checkChatbotInboundLimit(chatbot.id);
+  if (!botRl.ok) {
+    return manychatReply("", {
+      ai_skipped: true,
+      reason: "chatbot_rate_limited",
+      limit: botRl.limit,
+    });
   }
 
   // 3b. Resolve the ManyChat API key for this chatbot (decrypt the per-chatbot

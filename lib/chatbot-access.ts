@@ -13,7 +13,7 @@
 //     does not own the bot, so an owner-scoped filter would 404. Authorized via
 //     requireSuperadmin() (keys off the REAL user) and served the service client
 //     (RLS-exempt), scoped by chatbot id alone.
-import { createClient, createServiceClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, createServiceClient, getCurrentUser, getRealUser } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/admin";
 
 type Db = Awaited<ReturnType<typeof createClient>>;
@@ -28,9 +28,16 @@ export type ChatbotAccess =
  * stay simple; both expose the same query API. `ok:false` => 401 (no session).
  */
 export async function resolveChatbotAccess(): Promise<ChatbotAccess> {
-  const user = await getCurrentUser();
+  const [realUser, user] = await Promise.all([getRealUser(), getCurrentUser()]);
   if (!user) return { ok: false };
-  const superadmin = !!(await requireSuperadmin());
+  // A superadmin "viewing as" a client must act ONLY as that client: served the RLS
+  // client and owner-scoped, NEVER the RLS-exempt service client. Without this, a
+  // stale tab / crafted request carrying a DIFFERENT client's chatbot_id during a
+  // view-as session would write cross-tenant (requireSuperadmin keys off the real
+  // user, so it stays true while impersonating). Mirrors decideKbOwner's
+  // `isSuperadmin && !impersonating` rule (lib/kb-access.ts).
+  const impersonating = !!realUser && realUser.id !== user.id;
+  const superadmin = !impersonating && !!(await requireSuperadmin());
   const db = (superadmin ? createServiceClient() : await createClient()) as Db;
   return { ok: true, db, superadmin, userId: user.id };
 }

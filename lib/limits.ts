@@ -24,6 +24,11 @@ import { createHash } from "crypto";
 const RATE_LIMIT_REQUESTS = Number(process.env.RATE_LIMIT_REQUESTS ?? 10);
 const RATE_LIMIT_WINDOW =
   (process.env.RATE_LIMIT_WINDOW ?? "60 s") as `${number} ${"s" | "m" | "h" | "d"}`;
+// Coarse per-CHATBOT inbound flood cap (checkChatbotInboundLimit) - generous by
+// design so it never trips on real per-bot DM volume, only on an egregious spray.
+const RATE_LIMIT_CHATBOT_REQUESTS = Number(process.env.RATE_LIMIT_CHATBOT_REQUESTS ?? 600);
+const RATE_LIMIT_CHATBOT_WINDOW =
+  (process.env.RATE_LIMIT_CHATBOT_WINDOW ?? "60 s") as `${number} ${"s" | "m" | "h" | "d"}`;
 const MONTHLY_REPLY_CAP = Number(process.env.MONTHLY_REPLY_CAP ?? 10_000);
 const DEDUP_TTL_SECONDS = 30;
 const LAST_REPLY_TTL_SECONDS = 300; // 5 min
@@ -85,6 +90,47 @@ export async function checkRateLimit(
     console.error("[limits] rate-limit redis error", err);
     // Fail open - better to let the message through than block a paying customer.
     return { ok: true, limit: RATE_LIMIT_REQUESTS, remaining: RATE_LIMIT_REQUESTS, bypassed: true };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 1b) Coarse per-CHATBOT inbound limit (flood backstop, checked BEFORE any row)
+// ---------------------------------------------------------------------------
+
+let _ratelimitChatbot: Ratelimit | null = null;
+
+function getChatbotRatelimit(): Ratelimit | null {
+  if (_ratelimitChatbot) return _ratelimitChatbot;
+  const redis = getRedis();
+  if (!redis) return null;
+  _ratelimitChatbot = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(RATE_LIMIT_CHATBOT_REQUESTS, RATE_LIMIT_CHATBOT_WINDOW),
+    analytics: false,
+    prefix: "chatpilot:rlbot",
+  });
+  return _ratelimitChatbot;
+}
+
+/**
+ * Coarse per-CHATBOT inbound limit, checked BEFORE any conversation/message row is
+ * created, so a caller spraying new subscriber_id values (each a fresh per-subscriber
+ * bucket in checkRateLimit) cannot create unbounded rows or trigger unbounded paid
+ * screens. Generous, env-tunable default and fail-OPEN, so it only trips on an
+ * egregious flood - real per-bot DM volume never approaches it. Tune
+ * RATE_LIMIT_CHATBOT_REQUESTS / RATE_LIMIT_CHATBOT_WINDOW to peak traffic.
+ */
+export async function checkChatbotInboundLimit(chatbotId: string): Promise<RateLimitResult> {
+  const limiter = getChatbotRatelimit();
+  if (!limiter) {
+    return { ok: true, limit: RATE_LIMIT_CHATBOT_REQUESTS, remaining: RATE_LIMIT_CHATBOT_REQUESTS, bypassed: true };
+  }
+  try {
+    const r = await limiter.limit(chatbotId);
+    return { ok: r.success, limit: r.limit, remaining: r.remaining, bypassed: false };
+  } catch (err) {
+    console.error("[limits] chatbot inbound rate-limit redis error", err);
+    return { ok: true, limit: RATE_LIMIT_CHATBOT_REQUESTS, remaining: RATE_LIMIT_CHATBOT_REQUESTS, bypassed: true };
   }
 }
 
