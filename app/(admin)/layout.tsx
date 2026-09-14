@@ -2,6 +2,13 @@ import { redirect } from "next/navigation";
 import { createClient, getRealUser } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/admin";
 import { AdminSidebar, AdminMobileHeader } from "@/components/admin/admin-sidebar";
+import type { Metadata } from "next";
+
+// Defense in depth: /admin is already gated to superadmins, but a layout-level
+// noindex guarantees no admin page can ever be indexed by a search engine.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default async function AdminLayout({
   children,

@@ -12,7 +12,9 @@ import { Minus, Plus } from "lucide-react";
  * here stops being true, this file is the thing to fix.
  */
 
-const FAQS: { q: string; a: string[]; open?: boolean }[] = [
+// Exported so components/seo/structured-data.tsx can build the FAQPage JSON-LD
+// from the exact same Q/A pairs the accordion renders (single source of truth).
+export const FAQS: { q: string; a: string[]; open?: boolean }[] = [
   {
     q: "Will it sound like a robot?",
     open: true,

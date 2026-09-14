@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   title: "Refund & Cancellation Policy | SpeedSettr",
   description:
     "Speedsettr LLC's refund, replacement, and cancellation terms for all services and products.",
+  alternates: { canonical: "/refund-policy" },
+  openGraph: {
+    title: "Refund & Cancellation Policy | SpeedSettr",
+    url: "/refund-policy",
+  },
 };
 
 export default function RefundPolicyPage() {

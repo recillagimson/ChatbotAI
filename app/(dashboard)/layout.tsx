@@ -6,6 +6,14 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileNav } from "@/components/dashboard/mobile-nav";
 import { Topbar } from "@/components/dashboard/topbar";
 import { ImpersonationBanner } from "@/components/dashboard/impersonation-banner";
+import type { Metadata } from "next";
+
+// Defense in depth: the dashboard is already gated by getRealUser() -> /login,
+// but a layout-level noindex guarantees no authenticated tenant page can ever be
+// indexed, covering every current and future segment in this group.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default async function DashboardLayout({
   children,

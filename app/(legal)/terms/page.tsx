@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   title: "Terms of Service | SpeedSettr",
   description:
     "The legally binding terms governing your use of Speedsettr LLC's website, products, and services.",
+  alternates: { canonical: "/terms" },
+  openGraph: { title: "Terms of Service | SpeedSettr", url: "/terms" },
 };
 
 

@@ -14,6 +14,8 @@ export const metadata: Metadata = {
   title: "Privacy Policy | SpeedSettr",
   description:
     "How Speedsettr LLC collects, uses, stores, shares, and protects your personal information.",
+  alternates: { canonical: "/privacy" },
+  openGraph: { title: "Privacy Policy | SpeedSettr", url: "/privacy" },
 };
 
 

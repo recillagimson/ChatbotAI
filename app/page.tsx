@@ -21,8 +21,10 @@ import {
   ReplyMock,
   TakeoverMock,
 } from "@/components/landing/product-mocks";
+import type { Metadata } from "next";
 import { COMPANY } from "@/lib/company";
 import { PRICING } from "@/lib/pricing";
+import { HomeJsonLd } from "@/components/seo/structured-data";
 
 /**
  * speedsettr.com - the front page, option B: one dark canvas end to end, with
@@ -89,9 +91,17 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
   );
 }
 
+export const metadata: Metadata = {
+  // Self-referencing canonical for the homepage, resolved to an absolute URL via
+  // metadataBase in app/layout.tsx. Inherited title/description/openGraph from
+  // the root layout are preserved - this only adds alternates.
+  alternates: { canonical: "/" },
+};
+
 export default function LandingPage() {
   return (
     <div className="grain relative min-h-screen bg-[#15123a] text-white">
+      <HomeJsonLd />
       {/* Keyboard users land on the nav first; this lets them jump the whole
           header in one tab. Visible only while focused. */}
       <a
@@ -130,7 +140,7 @@ export default function LandingPage() {
           hero backdrop, which is what the wrapper used to do. */}
       <SiteNav />
 
-      <main id="main" className="relative scroll-mt-4">
+      <main id="main" className="relative scroll-mt-24">
         {/* -------------------------------------------------------------- */}
         {/* Hero                                                            */}
         {/* -------------------------------------------------------------- */}
@@ -252,7 +262,7 @@ export default function LandingPage() {
       {/* ---------------------------------------------------------------- */}
       {/* Product                                                           */}
       {/* ---------------------------------------------------------------- */}
-      <section id="product" className="scroll-mt-4">
+      <section id="product" className="scroll-mt-24">
         <div className="container pb-[76px]">
           <div className="max-w-[620px]">
             <Eyebrow>The product</Eyebrow>
@@ -313,7 +323,7 @@ export default function LandingPage() {
       {/* ---------------------------------------------------------------- */}
       <section
         id="how-it-works"
-        className="scroll-mt-4 border-y border-white/[0.07] bg-[#120f30]"
+        className="scroll-mt-24 border-y border-white/[0.07] bg-[#120f30]"
       >
         <div className="container py-[70px]">
           <div className="flex flex-wrap items-end gap-6">
@@ -346,9 +356,9 @@ export default function LandingPage() {
                   3 minutes
                 </span>
               </div>
-              <div className="mt-4 font-display text-[17px] font-bold leading-[1.25] text-white">
+              <h3 className="mt-4 font-display text-[17px] font-bold leading-[1.25] text-white">
                 Connect your channels
-              </div>
+              </h3>
               <p className="mt-2.5 text-[13px] leading-[1.6] text-[#8b88b8]">
                 One ManyChat account covers all five. Paste your key, then wire
                 one automation per channel you use.
@@ -379,9 +389,9 @@ export default function LandingPage() {
                   5 minutes
                 </span>
               </div>
-              <div className="mt-4 font-display text-[17px] font-bold leading-[1.25] text-white">
+              <h3 className="mt-4 font-display text-[17px] font-bold leading-[1.25] text-white">
                 Teach it your business
-              </div>
+              </h3>
               <p className="mt-2.5 text-[13px] leading-[1.6] text-[#8b88b8]">
                 Upload your FAQ, pricing and policies, then pick a tone.
               </p>
@@ -410,9 +420,9 @@ export default function LandingPage() {
                   instant
                 </span>
               </div>
-              <div className="mt-4 font-display text-[17px] font-bold leading-[1.25] text-white">
+              <h3 className="mt-4 font-display text-[17px] font-bold leading-[1.25] text-white">
                 Go live
-              </div>
+              </h3>
               <p className="mt-2.5 text-[13px] leading-[1.6] text-[#c3c0e4]">
                 Flip the switch and the next DM gets answered. Watch the first
                 few, then stop watching.
@@ -431,7 +441,7 @@ export default function LandingPage() {
       {/* ---------------------------------------------------------------- */}
       {/* Objections                                                        */}
       {/* ---------------------------------------------------------------- */}
-      <section id="faq" className="scroll-mt-4">
+      <section id="faq" className="scroll-mt-24">
         <div className="container py-[70px]">
           <div className="flex flex-col gap-10 lg:flex-row lg:gap-14">
             <div className="lg:w-[340px] lg:shrink-0">
@@ -495,7 +505,7 @@ export default function LandingPage() {
       {/* ---------------------------------------------------------------- */}
       {/* Pricing                                                           */}
       {/* ---------------------------------------------------------------- */}
-      <section id="pricing" className="scroll-mt-4">
+      <section id="pricing" className="scroll-mt-24">
         <div className="container pb-[76px]">
           <div className="mx-auto max-w-[560px] text-center">
             <Eyebrow>Pricing</Eyebrow>

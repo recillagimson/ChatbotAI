@@ -10,6 +10,11 @@ export const metadata: Metadata = {
   title: "Accessibility Statement | SpeedSettr",
   description:
     "Speedsettr LLC's commitment to digital accessibility and WCAG 2.1 Level AA standards.",
+  alternates: { canonical: "/accessibility" },
+  openGraph: {
+    title: "Accessibility Statement | SpeedSettr",
+    url: "/accessibility",
+  },
 };
 
 export default function AccessibilityPage() {

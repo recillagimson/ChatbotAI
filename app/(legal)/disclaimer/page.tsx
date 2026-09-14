@@ -5,6 +5,8 @@ export const metadata: Metadata = {
   title: "Disclaimer | SpeedSettr",
   description:
     "Important disclaimers regarding Speedsettr LLC's website, services, results, and third-party tools.",
+  alternates: { canonical: "/disclaimer" },
+  openGraph: { title: "Disclaimer | SpeedSettr", url: "/disclaimer" },
 };
 
 export default function DisclaimerPage() {

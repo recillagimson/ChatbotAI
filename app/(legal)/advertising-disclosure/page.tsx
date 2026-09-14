@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   title: "Advertising Disclosure | SpeedSettr",
   description:
     "How Speedsettr LLC discloses paid advertising, testimonials, results claims, and affiliate relationships under FTC guidelines.",
+  alternates: { canonical: "/advertising-disclosure" },
+  openGraph: {
+    title: "Advertising Disclosure | SpeedSettr",
+    url: "/advertising-disclosure",
+  },
 };
 
 export default function AdvertisingDisclosurePage() {
