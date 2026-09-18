@@ -6,6 +6,7 @@ const config: Config = {
     "./app/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
     "./lib/**/*.{ts,tsx}",
+    "./styles/**/*.css",
   ],
   theme: {
     container: { center: true, padding: "2rem", screens: { "2xl": "1400px" } },
@@ -146,6 +147,56 @@ const config: Config = {
           "fb-bg": "#e7f0ff",
           "fb-ink": "#1d4ed8",
         },
+
+        /**
+         * AURUM - the conversion design system (styles/aurum.css).
+         *
+         * Every entry points at a CSS variable rather than a literal, so
+         * styles/aurum.css stays the single source of truth and a token
+         * change propagates to Tailwind without touching this file. The
+         * `ss` palette above is deliberately left alone: the two systems
+         * ship side by side while Aurum is adopted route by route.
+         */
+        au: {
+          canvas: "var(--au-canvas)",
+          "canvas-sunk": "var(--au-canvas-sunk)",
+          surface: "var(--au-surface)",
+          "surface-raised": "var(--au-surface-raised)",
+
+          ink: "var(--au-ink)",
+          "ink-2": "var(--au-ink-2)",
+          "ink-3": "var(--au-ink-3)",
+          "ink-4": "var(--au-ink-4)",
+
+          gold: "var(--au-gold)",
+          "gold-hi": "var(--au-gold-hi)",
+          "gold-press": "var(--au-gold-press)",
+          "gold-ink": "var(--au-gold-ink)",
+          "gold-ink-sm": "var(--au-gold-ink-sm)",
+          "gold-soft": "var(--au-gold-soft)",
+          "gold-wash": "var(--au-gold-wash)",
+          "gold-tint": "var(--au-gold-tint)",
+          "gold-line": "var(--au-gold-line)",
+
+          line: "var(--au-line)",
+          "line-soft": "var(--au-line-soft)",
+          "line-strong": "var(--au-line-strong)",
+
+          obsidian: "var(--au-obsidian)",
+          "obsidian-2": "var(--au-obsidian-2)",
+          "obsidian-line": "var(--au-obsidian-line)",
+          "on-dark": "var(--au-on-dark)",
+          "on-dark-2": "var(--au-on-dark-2)",
+
+          good: "var(--au-good)",
+          "good-wash": "var(--au-good-wash)",
+          warn: "var(--au-warn)",
+          "warn-wash": "var(--au-warn-wash)",
+          bad: "var(--au-bad)",
+          "bad-wash": "var(--au-bad-wash)",
+
+          focus: "var(--au-focus)",
+        },
       },
       fontFamily: {
         sans: [
@@ -155,6 +206,14 @@ const config: Config = {
           "sans-serif",
         ],
         display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
+        // Aurum runs on the platform font: SF/Segoe/Roboto already ship the
+        // optical sizing and tracking tables a webfont would only approximate.
+        au: ["var(--au-font)"],
+      },
+      transitionTimingFunction: {
+        "au-spring": "var(--au-spring)",
+        "au-out": "var(--au-ease-out)",
+        "au-in": "var(--au-ease-in)",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -168,6 +227,15 @@ const config: Config = {
         panel: "14px",
         card: "16px",
         "card-lg": "18px",
+
+        // Aurum's ladder (styles/aurum.css). Each step is ~1.5x the last so
+        // a nested corner can be (outer - padding) and still look right.
+        "au-chip": "var(--au-r-chip)",
+        "au-ctl": "var(--au-r-control)",
+        "au-field": "var(--au-r-field)",
+        "au-card": "var(--au-r-card)",
+        "au-panel": "var(--au-r-panel)",
+        "au-hero": "var(--au-r-hero)",
       },
       boxShadow: {
         // Indigo lift under the active sidebar item.
@@ -183,6 +251,14 @@ const config: Config = {
         "ss-plan": "0 8px 30px -18px rgba(30,27,75,.25)",
         // Mobile bottom sheet.
         "ss-sheet": "0 -18px 50px -20px rgba(30,27,75,.5)",
+
+        // Aurum elevation. Warm-tinted and layered (a contact shadow plus an
+        // ambient one) rather than a single neutral blur.
+        "au-1": "var(--au-shadow-1)",
+        "au-2": "var(--au-shadow-2)",
+        "au-3": "var(--au-shadow-3)",
+        "au-4": "var(--au-shadow-4)",
+        "au-gold": "var(--au-shadow-gold)",
       },
     },
   },

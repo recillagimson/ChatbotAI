@@ -1,0 +1,465 @@
+/**
+ * AURUM - the SpeedSettr conversion design system.
+ * ------------------------------------------------------------------
+ * A second, independent design system built beside the existing indigo
+ * one (see docs/design-system-audit.md for the extraction it came from).
+ *
+ * WHY IT IS SCOPED, NOT GLOBAL
+ * Every token below lives under `.aurum`, never on `:root`. The dashboard,
+ * admin console and current marketing site are all driven by the shadcn
+ * HSL tokens in app/globals.css; redefining those would repaint ~40 screens
+ * at once. Scoping means Aurum can be adopted one route at a time and the
+ * two systems can render on the same deploy without collision.
+ *
+ * THE PALETTE DECISION
+ * The brief: gold #F0B429 for CTA fill and key numbers, #A06E08 for gold
+ * text on white, a light-but-not-#fff ground, and black-but-not-#000 text.
+ * So the system is a WARM NEUTRAL system with a single saturated accent -
+ * gold appears only where we want a click or an eye. Nothing else is
+ * allowed to be loud. That restraint is the Apple part: one accent, many
+ * greys, and depth carried by shadow and translucency rather than colour.
+ */
+
+/* ================================================================
+   1. TOKENS
+   ================================================================ */
+
+.aurum {
+  /* ---- Ground ---------------------------------------------------
+     Four warm neutral planes, coolest-to-warmest kept within 4 points
+     of hue so they read as one paper stock lit differently, not as
+     four different colours. `--au-canvas` is the page; it is #F6F5F1,
+     a bone white - light, but measurably off #fff (which would flare
+     under the gold). `--au-surface` is the card plane and is lighter
+     than the canvas, which is what makes a card read as raised without
+     a heavy shadow. */
+  --au-canvas: #f6f5f1;
+  --au-canvas-sunk: #efede5; /* alternating section wells, inset fields */
+  --au-surface: #fdfcfa; /* cards - near white, still warm */
+  --au-surface-raised: #ffffff; /* only the topmost float: popovers, sheets */
+
+  /* ---- Ink ------------------------------------------------------
+     Warm near-black. #000 renders as a hole on a warm ground; #1a1916
+     carries the same authority and sits in the same family as the paper.
+     The ramp is four steps because three is not enough to separate a
+     heading, body copy, a caption and a disabled state. */
+  --au-ink: #1a1916; /* headings, primary copy */
+  --au-ink-2: #57544c; /* body copy, long-form */
+  --au-ink-3: #8a867c; /* captions, labels, meta */
+  --au-ink-4: #b3afa3; /* placeholders, disabled */
+
+  /* ---- Gold -----------------------------------------------------
+     The only saturated hue in the system.
+     `--au-gold` is the fill: buttons, key numbers, progress. Its
+     contrast against `--au-ink` is 9.4:1, so a gold button carries a
+     near-black label rather than white - brighter, more legible, and
+     the reason the CTA reads as a physical, lit object.
+     `--au-gold-ink` (#A06E08) is gold TEXT on a light plane. It measures
+     ~4.4:1 on --au-surface: AA for large or semibold text, which is the
+     only place it is used. `--au-gold-ink-sm` is the deeper 5.0:1 tone
+     that carries gold text below 18px. Using the light one everywhere
+     would have been prettier and would have failed WCAG on captions. */
+  --au-gold: #f0b429;
+  --au-gold-hi: #f7c751; /* hover - lifts toward the light */
+  --au-gold-press: #d99c14; /* active - the surface takes the press */
+  --au-gold-ink: #a06e08; /* gold text, >=18px or semibold */
+  --au-gold-ink-sm: #7a5406; /* gold text, small sizes */
+  --au-gold-soft: #f8d98a; /* soft fills, chart bands */
+  --au-gold-wash: #fdf3dc; /* chip and callout backgrounds */
+  --au-gold-tint: #fefaf0; /* barely-there section tint */
+  --au-gold-line: #f0e0b6; /* hairline on gold surfaces */
+
+  /* ---- Lines ----------------------------------------------------
+     Three weights only. A design that needs a fourth border weight is
+     usually missing a spacing decision instead. */
+  --au-line: #e5e2d8; /* the default hairline */
+  --au-line-soft: #eeece4; /* interior dividers, table rules */
+  --au-line-strong: #d6d2c5; /* field borders, which must read as editable */
+
+  /* ---- Contrast plane -------------------------------------------
+     One dark surface, used at most twice per page (the closing CTA and
+     the occasional inset). It is the ink colour, not a new hue, so the
+     page never becomes two-toned. */
+  --au-obsidian: #1a1916;
+  --au-obsidian-2: #26241f; /* cards on obsidian */
+  --au-obsidian-line: #36332b;
+  --au-on-dark: #f6f5f1;
+  --au-on-dark-2: #a9a49a;
+
+  /* ---- Semantics (status only, never decoration) ----------------- */
+  --au-good: #0f7a55;
+  --au-good-wash: #e6f4ee;
+  --au-warn: #b45309;
+  --au-warn-wash: #fdf1e3;
+  --au-bad: #a81f37;
+  --au-bad-wash: #fbeaed;
+
+  /* ---- Focus ----------------------------------------------------
+     Focus is never the gold: on a gold button the ring would vanish.
+     A cool slate reads against every surface in the system. */
+  --au-focus: #2c6fd1;
+
+  /* ---- Radii ----------------------------------------------------
+     A tight ladder, each step ~1.5x the last. Nested corners need the
+     inner radius to be (outer - padding) or the curves look wrong;
+     these steps are spaced so that holds at the 8px gutters below. */
+  --au-r-chip: 8px;
+  --au-r-control: 11px;
+  --au-r-field: 12px;
+  --au-r-card: 18px;
+  --au-r-panel: 22px;
+  --au-r-hero: 28px;
+  --au-r-pill: 999px;
+
+  /* ---- Elevation ------------------------------------------------
+     Shadows are warm (tinted with the ink, never neutral black) and
+     layered: a tight contact shadow plus a wide ambient one. A single
+     blurred black shadow is the tell of a system that hasn't thought
+     about light. Bigger surfaces get more blur AND more spread-up
+     offset, so size reads as height. */
+  --au-shadow-1: 0 1px 2px rgba(26, 25, 22, 0.05);
+  --au-shadow-2: 0 1px 2px rgba(26, 25, 22, 0.05),
+    0 8px 22px -14px rgba(26, 25, 22, 0.18);
+  --au-shadow-3: 0 2px 6px -2px rgba(26, 25, 22, 0.07),
+    0 18px 44px -20px rgba(26, 25, 22, 0.24);
+  --au-shadow-4: 0 4px 10px -4px rgba(26, 25, 22, 0.08),
+    0 32px 70px -28px rgba(26, 25, 22, 0.32);
+  /* The CTA's own light. Gold-tinted so the button looks like it is
+     emitting, not just casting. */
+  --au-shadow-gold: 0 2px 4px -1px rgba(122, 84, 6, 0.24),
+    0 14px 30px -14px rgba(240, 180, 41, 0.62);
+
+  /* ---- Motion ---------------------------------------------------
+     Apple's interface motion is spring-driven: critically damped by
+     default (no overshoot), with bounce reserved for gestures that
+     carried momentum. CSS transitions cannot spring, so these curves
+     are the closest honest approximation - `--au-spring` is the curve
+     iOS uses for sheets, and it settles without overshoot.
+     Anything a user can GRAB (the calculator sliders) is animated in
+     JS from its live value instead, never with these. */
+  --au-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --au-ease-out: cubic-bezier(0.22, 0.7, 0.2, 1);
+  --au-ease-in: cubic-bezier(0.8, 0.3, 0.78, 0.3); /* mirror of ease-out */
+  --au-fast: 140ms; /* press feedback */
+  --au-base: 280ms; /* hover, colour, small moves */
+  --au-slow: 460ms; /* panels, sheets, reveals */
+
+  /* ---- Type -----------------------------------------------------
+     The system font stack, deliberately. Apple's own tracking tables
+     and optical sizing ship inside SF/Segoe/Roboto; a webfont would
+     cost a render-blocking download to get something less tuned. The
+     existing indigo system's Outfit/Jakarta stay available via
+     --font-display for surfaces that need brand continuity. */
+  --au-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --au-font-num: var(--au-font);
+
+  color-scheme: light;
+  background-color: var(--au-canvas);
+  color: var(--au-ink);
+  font-family: var(--au-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ================================================================
+   2. TYPE SCALE
+   ----------------------------------------------------------------
+   Tracking is SIZE-SPECIFIC, never one global value. Letterforms look
+   too far apart as they grow, so display sizes take negative tracking
+   and small text takes a positive nudge for legibility. Leading moves
+   inversely to size for the same reason. Everything is in rem so a
+   reader who raises their browser text size scales the layout with it.
+   ================================================================ */
+
+.aurum .au-display {
+  font-size: clamp(2.5rem, 6.2vw, 4.25rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  font-weight: 700;
+}
+.aurum .au-title-1 {
+  font-size: clamp(2rem, 4.2vw, 3rem);
+  line-height: 1.07;
+  letter-spacing: -0.028em;
+  font-weight: 700;
+}
+.aurum .au-title-2 {
+  font-size: clamp(1.5rem, 2.6vw, 1.875rem);
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  font-weight: 650;
+}
+.aurum .au-title-3 {
+  font-size: 1.1875rem;
+  line-height: 1.3;
+  letter-spacing: -0.012em;
+  font-weight: 600;
+}
+.aurum .au-body-lg {
+  font-size: 1.0625rem;
+  line-height: 1.62;
+  letter-spacing: -0.003em;
+}
+.aurum .au-body {
+  font-size: 1rem;
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+.aurum .au-callout {
+  font-size: 0.9375rem;
+  line-height: 1.53;
+  letter-spacing: 0;
+}
+.aurum .au-caption {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  letter-spacing: 0.005em;
+}
+/* The uppercase label above a section or a stat. Uppercase text needs
+   real tracking or it sets as a solid block. */
+.aurum .au-eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1;
+  font-weight: 650;
+  letter-spacing: 0.145em;
+  text-transform: uppercase;
+}
+/* Every figure the reader might compare or watch tick. Tabular so a
+   changing number never shifts its neighbours, and tight so large
+   numerals don't drift apart. */
+.aurum .au-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+/* ================================================================
+   3. MATERIALS & DEPTH
+   ================================================================ */
+
+/* Translucent chrome. Content scrolls UNDER it rather than being pushed
+   below an opaque strip - the bar reads as a floating layer of glass.
+   The bright top edge is light catching the material's near edge. */
+.aurum .au-glass {
+  background: rgba(253, 252, 250, 0.72);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border-bottom: 1px solid rgba(26, 25, 22, 0.06);
+}
+.aurum .au-glass-dark {
+  background: rgba(26, 25, 22, 0.66);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+
+/* Scroll edge, not a divider. Where floating chrome overlaps content we
+   fade the content out under it instead of drawing a 1px rule - a rule
+   says "two regions", a fade says "one surface, continuing". */
+.aurum .au-scroll-edge {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 18px);
+  mask-image: linear-gradient(to bottom, transparent, #000 18px);
+}
+
+/* The page's ambient light: one soft gold bloom behind the hero. Very low
+   alpha - it should be felt, not seen. */
+.aurum .au-bloom {
+  background:
+    radial-gradient(
+      62rem 34rem at 78% -8%,
+      rgba(240, 180, 41, 0.17),
+      transparent 62%
+    ),
+    radial-gradient(
+      48rem 30rem at 6% 4%,
+      rgba(240, 180, 41, 0.08),
+      transparent 60%
+    );
+}
+
+/* Hairline that fades at both ends, so a divider doesn't terminate in two
+   hard dots against the page. */
+.aurum .au-rule {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--au-line) 12%,
+    var(--au-line) 88%,
+    transparent
+  );
+}
+
+/* ================================================================
+   4. INTERACTION
+   ----------------------------------------------------------------
+   Feedback lives on the PRESS, not the release, and it is instant. The
+   scale is small (0.97) because a button is a rigid object - it depresses,
+   it does not squash.
+   ================================================================ */
+
+.aurum .au-press {
+  transition:
+    transform var(--au-fast) var(--au-ease-out),
+    background-color var(--au-base) var(--au-ease-out),
+    border-color var(--au-base) var(--au-ease-out),
+    box-shadow var(--au-base) var(--au-ease-out),
+    color var(--au-base) var(--au-ease-out);
+  touch-action: manipulation;
+}
+.aurum .au-press:active {
+  transform: scale(0.97);
+  transition-duration: var(--au-fast);
+}
+
+/* Focus is a ring the gold cannot swallow, and it only ever appears for
+   keyboard and assistive-tech focus - a mouse click never draws it. */
+.aurum :focus-visible {
+  outline: 2px solid var(--au-focus);
+  outline-offset: 3px;
+  border-radius: var(--au-r-chip);
+}
+
+/* A card that is itself a link. Rises a hair toward the pointer; the
+   shadow grows faster than the lift so the object reads as leaving the
+   page rather than just sliding up it. */
+.aurum .au-lift {
+  transition:
+    transform var(--au-base) var(--au-spring),
+    box-shadow var(--au-base) var(--au-spring),
+    border-color var(--au-base) var(--au-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .aurum .au-lift:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--au-shadow-3);
+  }
+}
+
+/* ================================================================
+   5. SCROLL REVEAL
+   ----------------------------------------------------------------
+   Opt-in and JS-gated: the hidden state only exists while [data-au-motion]
+   is set on <html>, and that attribute is set from inside the observer's
+   own effect. Without JS, or under reduced motion, the attribute is never
+   written and every block renders in its final position - content can
+   never be trapped at opacity 0.
+   ================================================================ */
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-au-motion] .aurum [data-au-reveal] {
+    transition:
+      opacity var(--au-slow) var(--au-ease-out) var(--au-reveal-delay, 0ms),
+      transform 620ms var(--au-ease-out) var(--au-reveal-delay, 0ms);
+  }
+  [data-au-motion] .aurum [data-au-reveal]:not([data-au-shown]) {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+}
+
+/* The live "answering" pulse. A slow, low-amplitude breath - a fast blink
+   would pull the eye away from the CTA it sits beside. */
+.aurum .au-pulse::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  animation: auPulse 2.4s var(--au-ease-out) infinite;
+}
+@keyframes auPulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+/* ================================================================
+   6. ACCESSIBILITY PREFERENCES
+   ----------------------------------------------------------------
+   Three independent signals, each with its own answer. Reduced motion
+   does not mean no feedback - it means a non-vestibular equivalent, so
+   colour and opacity feedback is kept and only travel is removed.
+   ================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .aurum *,
+  .aurum *::before,
+  .aurum *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .aurum .au-press:active {
+    transform: none;
+  }
+  .aurum .au-lift:hover {
+    transform: none;
+  }
+}
+
+/* Frost the glass into a solid rather than removing the layer, so the
+   chrome keeps its identity as a separate plane. */
+@media (prefers-reduced-transparency: reduce) {
+  .aurum .au-glass {
+    background: var(--au-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .aurum .au-glass-dark {
+    background: var(--au-obsidian);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* High contrast: near-solid surfaces plus a defined border, and the
+   soft gold text steps down to the deep tone everywhere. */
+@media (prefers-contrast: more) {
+  .aurum {
+    --au-line: #b9b4a6;
+    --au-line-soft: #c6c1b3;
+    --au-ink-3: #5f5c54;
+    --au-gold-ink: var(--au-gold-ink-sm);
+  }
+  .aurum .au-glass {
+    background: var(--au-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Forced-colors (Windows high contrast) strips our backgrounds; give the
+   CTA a real border so it survives as a button shape. */
+@media (forced-colors: active) {
+  .aurum .au-btn-primary {
+    border: 1px solid ButtonText;
+  }
+}
+
+/* Print: the scroll-reveal hidden state must never survive onto paper. An
+   element that has simply never been scrolled past is still real content, and
+   a printed page (or a PDF export, or a full-page screenshot tool) has no
+   scroll for the observer to react to. */
+@media print {
+  .aurum [data-au-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .aurum .au-glass,
+  .aurum .au-glass-dark {
+    position: static;
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
