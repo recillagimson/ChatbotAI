@@ -171,15 +171,15 @@ export default async function RequestsPage({
   return (
     <div className="flex h-full min-h-0 bg-ss-page">
       {/* ---- Left rail: new request, chatbot scope, history -------------- */}
-      <aside className="hidden w-[286px] shrink-0 flex-col border-r border-ss-line bg-white lg:flex">
+      <aside className="hidden w-[286px] shrink-0 flex-col border-r border-ss-line bg-ss-surface lg:flex">
         <div className="p-3.5">
           <Link
             href="/requests"
             className={cn(
               "flex items-center justify-center gap-2 rounded-ctl-lg px-3 py-3 text-[13px] font-semibold leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
               !isThread && !activeProjectId
-                ? "bg-ss-indigo text-white hover:bg-ss-indigo-600"
-                : "border border-ss-line text-ss-ink hover:bg-ss-page"
+                ? "bg-ss-indigo text-ss-on-accent hover:bg-ss-indigo-600"
+                : "border border-ss-line text-ss-ink hover:bg-ss-chip"
             )}
           >
             <Plus className="h-[17px] w-[17px]" aria-hidden="true" />
@@ -212,7 +212,7 @@ export default async function RequestsPage({
                         "flex items-center gap-2.5 rounded-ctl px-3 py-2.5 text-[13px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
                         active
                           ? "bg-ss-indigo-50 font-bold text-ss-indigo-800"
-                          : "font-medium text-ss-body hover:bg-ss-page hover:text-ss-ink"
+                          : "font-medium text-ss-body hover:bg-ss-chip hover:text-ss-ink"
                       )}
                     >
                       <SsDot tone={active ? "green" : "idle"} className="h-1.5 w-1.5" />
@@ -251,8 +251,8 @@ export default async function RequestsPage({
                       className={cn(
                         "block rounded-ctl-lg border px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
                         active
-                          ? "border-ss-indigo-200 bg-[#f4f5ff]"
-                          : "border-ss-hair hover:border-ss-line hover:bg-ss-page"
+                          ? "border-ss-indigo-200 bg-ss-indigo-50"
+                          : "border-ss-hair hover:border-ss-line hover:bg-ss-chip"
                       )}
                     >
                       <span

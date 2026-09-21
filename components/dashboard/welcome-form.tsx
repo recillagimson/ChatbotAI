@@ -229,8 +229,8 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
         <Button type="submit" disabled={saving}>
           {saving ? "Saving..." : "Save welcome"}
         </Button>
-        {saved && <span className="text-sm text-green-600">Saved ✓</span>}
-        {dirty && !saving && <span className="text-sm text-amber-600">Unsaved changes</span>}
+        {saved && <span className="text-sm text-ss-green">Saved ✓</span>}
+        {dirty && !saving && <span className="text-sm text-ss-amber-soft">Unsaved changes</span>}
       </div>
     </form>
   );

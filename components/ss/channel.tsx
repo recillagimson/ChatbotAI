@@ -18,7 +18,7 @@ const TONE: Record<Platform, string> = {
   instagram: "bg-ss-ig-bg text-ss-ig-ink",
   messenger: "bg-ss-fb-bg text-ss-fb-ink",
   whatsapp: "bg-ss-green-bg text-ss-green-ink",
-  telegram: "bg-[#e7f4ff] text-[#0369a1]",
+  telegram: "bg-ss-tg-bg text-ss-tg-ink",
   tiktok: "bg-ss-chip text-ss-slate",
 };
 

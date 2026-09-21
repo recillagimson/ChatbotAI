@@ -62,7 +62,7 @@ function AttachmentView({ att }: { att: SignedAttachment }) {
       href={att.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-full border border-ss-line bg-ss-page px-3 py-1 text-[11px] font-medium text-ss-body transition-colors hover:border-ss-dash hover:bg-ss-page-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-2"
+      className="inline-flex items-center gap-1.5 rounded-full border border-ss-line bg-ss-page px-3 py-1 text-[11px] font-medium text-ss-body transition-colors hover:border-ss-dash hover:bg-ss-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-2"
     >
       <Paperclip className="h-3 w-3 shrink-0" aria-hidden="true" />
       <span className="max-w-[16rem] truncate">{att.name}</span>

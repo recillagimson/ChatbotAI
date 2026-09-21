@@ -223,7 +223,7 @@ export function FollowupSequenceForm({
           <Label htmlFor="link-buttons">Send links as buttons on Facebook</Label>
           <p className="text-sm text-muted-foreground">
             On Facebook/Messenger, a link is sent as a tappable button instead of plain text.
-            Only affects Messenger &mdash; Instagram always sends the plain link. If your link
+            Only affects Messenger. Instagram always sends the plain link. If your link
             has a tracking part (<code>?ref=&hellip;</code>), send yourself a test on Messenger
             after turning this on to confirm the whole link still opens.
           </p>
@@ -259,9 +259,9 @@ export function FollowupSequenceForm({
         <Button type="submit" disabled={saving}>
           {saving ? "Saving..." : "Save follow-up"}
         </Button>
-        {saved && <span className="text-sm text-green-600">Saved ✓</span>}
+        {saved && <span className="text-sm text-ss-green">Saved ✓</span>}
         {dirty && !saving && (
-          <span className="text-sm text-amber-600">Unsaved changes</span>
+          <span className="text-sm text-ss-amber-soft">Unsaved changes</span>
         )}
       </div>
     </form>

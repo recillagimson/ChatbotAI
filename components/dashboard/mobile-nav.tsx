@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SidebarNav, BoltMark, type NavCounts } from "@/components/dashboard/sidebar-nav";
+import { SidebarNav, type NavCounts } from "@/components/dashboard/sidebar-nav";
+import { HighThriveMark } from "@/components/brand/highthrive-mark";
 import { MobileTabBar } from "@/components/dashboard/mobile-tabbar";
 import { AiLiveToggle } from "@/components/dashboard/ai-live-toggle";
 import { BotSwitcher } from "@/components/dashboard/bot-switcher";
@@ -15,9 +16,9 @@ import type { WorkspaceBot } from "@/lib/workspace";
  * The mobile shell - a slim brand header at the top, the bottom tab bar at
  * thumb height, and a "More" drawer holding the full navigation.
  *
- * The header stays light rather than navy so the phone screens read as one
- * continuous #f6f7fc surface the way the design draws them; the navy is saved
- * for the drawer and the hero cards, where it means something.
+ * The header sits on the app ground (#0A0A0C) so the phone screens read as one
+ * continuous surface; the darker rail is saved for the drawer, where it means
+ * "navigation".
  */
 export function MobileNav({
   isSuperadmin = false,
@@ -61,10 +62,10 @@ export function MobileNav({
       <header className="sticky top-0 z-30 flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-ss-line bg-ss-page px-4 py-2.5 lg:hidden">
         <Link
           href="/dashboard"
-          aria-label="SpeedSettr"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-ss-indigo text-white"
+          aria-label="HighThrive.ai"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-ss-indigo/25 bg-ss-indigo-50 text-ss-indigo"
         >
-          <BoltMark size={18} />
+          <HighThriveMark size={20} />
         </Link>
         <BotSwitcher bots={bots} className="min-w-0 flex-1" />
         <AiLiveToggle
@@ -81,7 +82,7 @@ export function MobileNav({
           onClick={close}
           aria-hidden="true"
           className={cn(
-            "fixed inset-0 z-40 bg-ss-navy/40 transition-opacity duration-300 motion-reduce:transition-none",
+            "fixed inset-0 z-40 bg-black/60 transition-opacity duration-300 motion-reduce:transition-none",
             open ? "opacity-100" : "pointer-events-none opacity-0"
           )}
         />
@@ -91,7 +92,7 @@ export function MobileNav({
           aria-modal="true"
           aria-label="Navigation"
           className={cn(
-            "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col bg-ss-navy text-white shadow-2xl transition-[transform,visibility] duration-300 ease-out motion-reduce:transition-none",
+            "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-ss-line bg-ss-rail text-white shadow-2xl transition-[transform,visibility] duration-300 ease-out motion-reduce:transition-none",
             open ? "visible translate-x-0" : "invisible -translate-x-full"
           )}
         >

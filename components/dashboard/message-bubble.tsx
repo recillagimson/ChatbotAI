@@ -40,10 +40,10 @@ export function MessageBubble({
         className={cn(
           "px-[15px] py-3 text-[13.5px] leading-relaxed",
           fromCustomer
-            ? "rounded-[16px_16px_16px_5px] border border-ss-line bg-white text-ss-ink"
+            ? "rounded-[16px_16px_16px_5px] border border-ss-line bg-ss-surface text-ss-ink"
             : fromHuman
-              ? "rounded-[16px_16px_5px_16px] bg-ss-navy text-white"
-              : "rounded-[16px_16px_5px_16px] bg-ss-indigo text-white"
+              ? "rounded-[16px_16px_5px_16px] bg-ss-navy text-white shadow-[inset_0_0_0_1px_rgba(232,182,68,0.28)]"
+              : "rounded-[16px_16px_5px_16px] bg-ss-indigo text-ss-on-accent"
         )}
       >
         {m.media_url && mediaUrl && (
@@ -59,7 +59,7 @@ export function MessageBubble({
       <div className="mt-1.5 flex items-center gap-1.5 text-[10.5px] font-medium leading-none text-ss-faint">
         {!fromCustomer &&
           (fromHuman ? (
-            <User className="h-3 w-3 text-ss-navy" aria-hidden="true" />
+            <User className="h-3 w-3 text-ss-ink" aria-hidden="true" />
           ) : (
             <Sparkles className="h-3 w-3 text-ss-indigo" aria-hidden="true" />
           ))}

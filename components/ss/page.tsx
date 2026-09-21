@@ -43,7 +43,7 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "flex-none border-b border-ss-line bg-white px-5 pt-[18px] sm:px-[30px]",
+        "flex-none border-b border-ss-line bg-ss-surface px-5 pt-[18px] sm:px-[30px]",
         below ? "pb-0" : "pb-[18px]",
         className
       )}
@@ -141,7 +141,7 @@ export function Tab({
       className={cn(
         "flex shrink-0 items-center gap-[7px] whitespace-nowrap px-[15px] py-3 text-[13px] leading-none transition-colors",
         active
-          ? "font-bold text-ss-ink shadow-[inset_0_-2px_0_#6366f1]"
+          ? "font-bold text-ss-ink shadow-[inset_0_-2px_0_#E8B644]"
           : "font-medium text-ss-muted hover:text-ss-body"
       )}
       {...props}
@@ -176,7 +176,7 @@ export function EmptyState({
     return (
       <div
         className={cn(
-          "rounded-card border border-dashed border-ss-dash bg-[#f2f3fb] px-[18px] py-4",
+          "rounded-card border border-dashed border-ss-dash bg-ss-soft px-[18px] py-4",
           className
         )}
       >
@@ -237,7 +237,7 @@ export function Callout({
     amber: "border-ss-amber-line bg-ss-amber-tint",
     rose: "border-ss-rose-line bg-ss-rose-tint",
     indigo: "border-ss-rule-indigo bg-ss-indigo-25",
-    plain: "border-ss-line bg-white",
+    plain: "border-ss-line bg-ss-surface",
   };
   const titles = {
     amber: "text-ss-ink",

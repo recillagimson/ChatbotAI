@@ -63,7 +63,7 @@ export function BotActiveToggle({
         aria-label="Turn this chatbot's AI auto-replies on or off"
         className={cn(
           "flex h-[29px] w-[52px] shrink-0 items-center rounded-full px-[3px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-          dark ? "focus-visible:ring-offset-ss-navy" : "focus-visible:ring-offset-white",
+          dark ? "focus-visible:ring-offset-ss-navy" : "focus-visible:ring-offset-ss-surface",
           active
             ? "justify-end bg-ss-mint focus-visible:ring-ss-mint"
             : dark

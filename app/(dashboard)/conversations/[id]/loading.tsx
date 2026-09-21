@@ -25,7 +25,7 @@ export default function ConversationLoading() {
     >
       <span className="sr-only">Loading the conversation</span>
 
-      <div className="flex-none border-b border-ss-line bg-white px-5 py-4 sm:px-6">
+      <div className="flex-none border-b border-ss-line bg-ss-surface px-5 py-4 sm:px-6">
         <div className="flex items-center gap-3">
           <Sk className="h-10 w-10 shrink-0 rounded-full" />
           <div className="min-w-0">
@@ -45,7 +45,7 @@ export default function ConversationLoading() {
         ))}
       </div>
 
-      <div className="flex-none border-t border-ss-line bg-white px-5 py-4 sm:px-6">
+      <div className="flex-none border-t border-ss-line bg-ss-surface px-5 py-4 sm:px-6">
         <Sk className="h-[76px] w-full rounded-ctl-lg" />
       </div>
     </div>

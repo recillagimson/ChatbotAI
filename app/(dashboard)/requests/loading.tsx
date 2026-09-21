@@ -9,7 +9,7 @@ export default function RequestsLoading() {
     <div role="status" aria-busy="true" className="flex h-full min-h-0 bg-ss-page">
       <span className="sr-only">Loading your change requests</span>
 
-      <aside className="hidden w-[286px] shrink-0 flex-col border-r border-ss-line bg-white lg:flex">
+      <aside className="hidden w-[286px] shrink-0 flex-col border-r border-ss-line bg-ss-surface lg:flex">
         <div className="p-4">
           <Sk className="h-[42px] w-full rounded-ctl-lg" />
         </div>
@@ -30,14 +30,14 @@ export default function RequestsLoading() {
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex-none border-b border-ss-line bg-white px-6 py-4">
+        <div className="flex-none border-b border-ss-line bg-ss-surface px-6 py-4">
           <Sk className="h-[16px] w-40" />
           <Sk className="mt-2.5 h-[12px] w-32" />
         </div>
         <div className="min-h-0 flex-1 overflow-hidden bg-ss-page-alt">
           <SkRows rows={4} avatar={false} />
         </div>
-        <div className="flex-none border-t border-ss-line bg-white px-6 py-4">
+        <div className="flex-none border-t border-ss-line bg-ss-surface px-6 py-4">
           <Sk className="h-[76px] w-full rounded-ctl-lg" />
         </div>
       </div>

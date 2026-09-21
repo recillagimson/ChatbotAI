@@ -29,11 +29,11 @@ export function DiffView({
         </p>
         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-red-200" aria-hidden="true" />
+            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-ss-rose/25" aria-hidden="true" />
             removed
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-green-200" aria-hidden="true" />
+            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-ss-green/25" aria-hidden="true" />
             added
           </span>
         </div>
@@ -41,7 +41,7 @@ export function DiffView({
 
       <div className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md border px-3 py-2 text-xs leading-relaxed">
         {!before?.trim() && (
-          <span className="mb-1 block text-[11px] font-medium text-green-700">
+          <span className="mb-1 block text-[11px] font-medium text-ss-green">
             New - this is all new content.
           </span>
         )}
@@ -51,12 +51,12 @@ export function DiffView({
           ) : op.type === "add" ? (
             <ins
               key={i}
-              className="rounded-sm bg-green-100 text-green-900 no-underline"
+              className="rounded-sm bg-ss-green/25 no-underline"
             >
               {op.value}
             </ins>
           ) : (
-            <del key={i} className="rounded-sm bg-red-100 text-red-900 line-through">
+            <del key={i} className="rounded-sm bg-ss-rose/25 line-through">
               {op.value}
             </del>
           )

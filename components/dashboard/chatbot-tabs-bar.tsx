@@ -53,7 +53,7 @@ export function ChatbotTabsBar({
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
               "motion-reduce:transition-none",
               isActive
-                ? "font-bold text-ss-ink shadow-[inset_0_-2px_0_#6366f1]"
+                ? "font-bold text-ss-ink shadow-[inset_0_-2px_0_#E8B644]"
                 : "font-medium text-ss-muted hover:text-ss-body"
             )}
           >

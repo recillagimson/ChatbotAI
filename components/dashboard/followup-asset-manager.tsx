@@ -397,7 +397,7 @@ export function FollowupAssetManager({
         {error && (
           <p className="rounded bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
         )}
-        {notice && !error && <p className="text-sm text-green-600">{notice}</p>}
+        {notice && !error && <p className="text-sm text-ss-green">{notice}</p>}
         {progress && <p className="text-sm text-muted-foreground">{progress}</p>}
         <Button type="submit" disabled={busy}>
           {busy

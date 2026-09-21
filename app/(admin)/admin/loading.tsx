@@ -22,7 +22,7 @@ export default function AdminClientsLoading() {
         {[0, 1, 2, 3, 4, 5].map((i) => (
           <div
             key={i}
-            className="flex items-center gap-3.5 rounded-card border border-ss-line bg-white px-5 py-3.5"
+            className="flex items-center gap-3.5 rounded-card border border-ss-line bg-ss-surface px-5 py-3.5"
           >
             <Sk className="h-[38px] w-[38px] shrink-0 rounded-full" />
             <div className="min-w-0 flex-1">

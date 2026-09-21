@@ -445,7 +445,7 @@ async function FollowUpsQueue({
                 <Link
                   key={it.id}
                   href={`/conversations/${it.id}`}
-                  className="flex items-center gap-3 rounded-chip border border-ss-line px-3.5 py-3 transition-colors hover:border-ss-dash hover:bg-ss-page"
+                  className="flex items-center gap-3 rounded-chip border border-ss-line px-3.5 py-3 transition-colors hover:border-ss-dash hover:bg-ss-chip"
                 >
                   <span className="truncate text-[13px] font-semibold leading-none text-ss-ink">
                     {it.name}
@@ -566,7 +566,7 @@ function FollowUpsSkeleton() {
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
-              className="rounded-card border border-ss-line bg-white px-5 py-[18px]"
+              className="rounded-card border border-ss-line bg-ss-surface px-5 py-[18px]"
             >
               <Sk className="h-[11px] w-20" />
               <Sk className="mt-3 h-[28px] w-14" />

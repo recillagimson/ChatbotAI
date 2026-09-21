@@ -12,7 +12,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { BoltMark } from "@/components/dashboard/sidebar-nav";
+import { HighThriveLockup } from "@/components/brand/highthrive-mark";
 
 /** Live counts for the rail badges (pending change requests, new feedback). */
 export interface AdminNavCounts {
@@ -65,26 +65,16 @@ function useSignOut() {
   };
 }
 
-/** The bolt mark + wordmark + ADMIN tag, matching the client rail's lockup. */
+/** The HighThrive.ai lockup with an "Admin console" tag, matching the client rail. */
 function AdminBrand({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <Link
       href="/admin"
-      aria-label="SpeedSettr Admin"
+      aria-label="HighThrive.ai Admin"
       onClick={onNavigate}
-      className="flex items-center gap-2.5 rounded-ctl-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+      className="rounded-ctl-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
     >
-      <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ctl-lg bg-ss-indigo text-white">
-        <BoltMark size={20} />
-      </span>
-      <span>
-        <span className="block font-display text-[15.5px] font-extrabold italic leading-none tracking-[-0.01em] text-white">
-          SPEEDSETTR
-        </span>
-        <span className="mt-[3px] block text-[8px] font-bold leading-none tracking-[0.22em] text-ss-indigo-300">
-          ADMIN CONSOLE
-        </span>
-      </span>
+      <HighThriveLockup tagline="Admin console" />
     </Link>
   );
 }
@@ -101,7 +91,8 @@ function RailBadge({
     <span
       className={cn(
         "ml-auto shrink-0 rounded-full px-[7px] py-[3px] font-display text-[10px] font-bold leading-none",
-        active ? "bg-white/20 text-white" : "bg-ss-rose text-white"
+        // On the gold active row the pip goes dark-on-gold; white on gold fails.
+        active ? "bg-ss-on-accent/15 text-ss-on-accent" : "bg-ss-rose text-white"
       )}
     >
       {count > 99 ? "99+" : count}
@@ -119,7 +110,7 @@ export function AdminSidebar({ counts }: { counts?: AdminNavCounts }) {
   const signOut = useSignOut();
 
   return (
-    <aside className="hidden h-full w-[252px] shrink-0 flex-col bg-ss-navy text-white lg:flex">
+    <aside className="hidden h-full w-[252px] shrink-0 flex-col border-r border-ss-line bg-ss-rail text-white lg:flex">
       <div className="flex shrink-0 items-center gap-2.5 px-5 pb-[22px] pt-[22px]">
         <AdminBrand />
       </div>
@@ -140,7 +131,7 @@ export function AdminSidebar({ counts }: { counts?: AdminNavCounts }) {
                 className={cn(
                   "flex items-center gap-3 rounded-ctl-lg px-3 py-2.5 text-sm leading-none transition-colors",
                   active
-                    ? "bg-ss-indigo font-semibold text-white shadow-ss-nav"
+                    ? "bg-ss-indigo font-semibold text-ss-on-accent shadow-ss-nav"
                     : "font-medium text-ss-nav-text hover:bg-white/10 hover:text-white"
                 )}
               >
@@ -182,7 +173,7 @@ export function AdminMobileHeader({ counts }: { counts?: AdminNavCounts }) {
   const pathname = usePathname();
 
   return (
-    <header className="shrink-0 bg-ss-navy text-white lg:hidden">
+    <header className="shrink-0 border-b border-ss-line bg-ss-rail text-white lg:hidden">
       <div className="flex h-14 items-center gap-3 px-4">
         <AdminBrand />
         <Link
@@ -205,7 +196,7 @@ export function AdminMobileHeader({ counts }: { counts?: AdminNavCounts }) {
               className={cn(
                 "flex items-center gap-2 whitespace-nowrap rounded-ctl px-3 py-2 text-[13px] leading-none transition-colors",
                 active
-                  ? "bg-ss-indigo font-semibold text-white"
+                  ? "bg-ss-indigo font-semibold text-ss-on-accent"
                   : "font-medium text-ss-nav-text hover:bg-white/10 hover:text-white"
               )}
             >

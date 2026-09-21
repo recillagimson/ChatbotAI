@@ -51,100 +51,114 @@ const config: Config = {
         },
 
         /**
-         * SpeedSettr dashboard palette - the literal values from the design
-         * blueprint (locked to the logo PDF: #6366f1 primary, #1e1b4b navy,
-         * white; semantic green/amber/rose for status only).
+         * App palette (dashboard + admin) - HighThrive dark + gold, matching the
+         * public landing and the auth screens (re-themed 2026-09-21; it was the
+         * light SpeedSettr navy/indigo blueprint before).
          *
-         * These are deliberately raw hexes rather than themeable HSL vars: the
-         * dashboard blueprint is light-theme-only ("the navy is doing the dark
-         * work"), and pinning them keeps every screen pixel-consistent with the
-         * design. The shadcn `--background`/`--primary` tokens above still drive
-         * the marketing site, auth pages and admin area.
+         * The token NAMES are the old roles, kept so ~1,000 call sites didn't
+         * have to be renamed: `indigo-*` is now the gold accent ramp, `navy-*`
+         * is the gold-tinted emphasis surface, `ink/body/muted/faint` are the
+         * warm off-white text ladder. Read a token by its role, not its name.
+         *
+         * Raw hexes (not HSL vars) on purpose: `ss-*` is used ONLY inside the
+         * signed-in app shell (no public page references it), so a global value
+         * can't leak, and hexes keep Tailwind's `/opacity` modifiers working. The
+         * shadcn `--background`/`--primary` vars are re-pointed for the app in
+         * globals.css (scoped to `html:has([data-app-shell])`).
          */
         ss: {
-          // Deep navy - sidebar, hero panels, dark buttons.
-          navy: "#1e1b4b",
-          "navy-700": "#2b2566",
-          "navy-600": "#332a78",
-          "navy-500": "#312e81",
+          // Surfaces. `surface` replaces the old white card/header fill.
+          page: "#0A0A0C", // app ground (= landing bg)
+          "page-alt": "#0E0F12", // inset / "soft" card tone
+          soft: "#0C0D10", // empty-state well: recessed below the card surface
+          chip: "#1B1C22", // neutral chip, hover fill for rows/buttons
+          surface: "#111216", // cards, page header strip, panels
+          "surface-2": "#15161B", // raised: popovers, sheets, menus
+          rail: "#0D0E11", // sidebar / drawer / admin rail
 
-          // Indigo ramp - primary actions, links, chips.
-          indigo: "#6366f1",
-          "indigo-600": "#4f46e5",
-          "indigo-700": "#4338ca",
-          "indigo-800": "#3730a3",
-          "indigo-350": "#9698f7",
-          "indigo-400": "#8b8ef5",
-          "indigo-300": "#a5b4fc",
-          "indigo-250": "#b4b6f9",
-          "indigo-200": "#c3c5fb",
-          "indigo-100": "#dcdcfd",
-          "indigo-50": "#eef0ff",
-          "indigo-25": "#f8f9ff",
+          // Gold-tinted emphasis surface (was navy): hero panels, the
+          // secondary-commit button, the human-agent bubble.
+          navy: "#1A1710",
+          "navy-700": "#262113",
+          "navy-600": "#2E2715",
+          "navy-500": "#3A3119",
 
-          // Surfaces.
-          page: "#f6f7fc",
-          "page-alt": "#fbfbfe",
-          soft: "#f8f9fc",
-          chip: "#f1f2f7",
+          // Gold accent ramp (was indigo). Solid fills take `text-ss-on-accent`
+          // (dark), never white - white on gold is ~1.9:1.
+          indigo: "#E8B644", // primary solid, rings, dots
+          "indigo-600": "#F2C85C", // links / hover of primary (lighter on dark)
+          "indigo-700": "#F0C458", // text on gold-tint chips
+          "indigo-800": "#F5D27A", // link hover
+          "indigo-350": "#D4A13A",
+          "indigo-400": "#C9952A", // chart ramp
+          "indigo-300": "#D9AE4E", // accent text on the dark rail/panels
+          "indigo-250": "#8A6A22", // chart ramp
+          "indigo-200": "#6A521C", // selected borders, secondary series
+          "indigo-100": "#3A2E14", // gold-tint fill hover; dark text on gold
+          "indigo-50": "#1E1809", // gold-tint chip / soft-button fill
+          "indigo-25": "#14120B", // barely-tinted "we suggest" card
+          "on-accent": "#141414", // text/icons sitting ON a gold fill
 
           // Lines.
-          line: "#e7e8f3",
-          hair: "#f0f1f8",
-          "hair-2": "#f4f5fa",
-          rule: "#e2e4f0",
-          "rule-indigo": "#e2e4f9",
-          dash: "#d6d8e8",
+          line: "#26272D", // the single card hairline
+          hair: "#1C1D22", // inner dividers
+          "hair-2": "#1A1B20",
+          rule: "#2A2B31", // tracks, rules
+          "rule-indigo": "#3A2E14", // hairline of gold-tinted cards
+          dash: "#34353C", // dashed borders, idle dots, scrollbar thumb
 
-          // Text.
-          ink: "#1e1b4b",
-          body: "#5c5f80",
-          muted: "#8b8ea8",
-          faint: "#a3a5bd",
-          fainter: "#c9cbdd",
-          slate: "#6b6e8c",
+          // Text (warm off-white ladder, from the landing).
+          ink: "#F4F1EA",
+          body: "#C8C3B7",
+          muted: "#A9A499",
+          faint: "#8A8579",
+          fainter: "#5E5A52",
+          slate: "#B3AEA2",
 
-          // Sidebar-on-navy text ramp.
-          "nav-text": "#b6b7d8",
-          "nav-dim": "#8f90c4",
-          "nav-label": "#6f70a8",
-          "nav-meta": "#9c9dcb",
+          // Sidebar-on-rail text ramp.
+          "nav-text": "#C8C3B7",
+          "nav-dim": "#8A8579",
+          "nav-label": "#6E6A61",
+          "nav-meta": "#A9A499",
 
-          // Success / green.
-          green: "#059669",
-          "green-ink": "#046c4e",
-          "green-bg": "#e8f8f1",
-          "green-line": "#b9e8d3",
+          // Success / green (lifted for a dark ground).
+          green: "#34D399",
+          "green-ink": "#6EE7B7",
+          "green-bg": "#0F241C",
+          "green-line": "#1F4535",
           mint: "#34d399",
           "mint-soft": "#86e3b8",
           "mint-text": "#9ee7c6",
-          "green-tint": "#f0fdf7",
-          "green-deep": "#065f46",
+          "green-tint": "#0C1A15",
+          "green-deep": "#A7F3D0",
 
-          // Warning / amber.
+          // Warning / amber. Solid stays #d97706 so white-on-amber badges keep
+          // their existing contrast; the ink/tints are the dark-ground versions.
           amber: "#d97706",
-          "amber-ink": "#92400e",
-          "amber-bg": "#fff4e5",
-          "amber-line": "#fde3c8",
-          "amber-tint": "#fffaf3",
+          "amber-ink": "#FCD34D",
+          "amber-bg": "#2A1F0B",
+          "amber-line": "#4A3510",
+          "amber-tint": "#1A140A",
           "amber-soft": "#fbbf24",
           "amber-text": "#fcd9a0",
 
           // Danger / rose.
-          rose: "#e11d48",
-          "rose-ink": "#be123c",
-          "rose-deep": "#9f1239",
-          "rose-bg": "#ffe9ee",
-          "rose-tint": "#fff5f7",
-          "rose-line": "#f6cdd6",
+          rose: "#E8385A",
+          "rose-ink": "#FDA4AF",
+          "rose-deep": "#FECDD3",
+          "rose-bg": "#2A1016",
+          "rose-tint": "#1A0C10",
+          "rose-line": "#4A1A26",
           "rose-soft": "#fca5b5",
-          "rose-wash": "#ffe0e7",
+          "rose-wash": "#3A141D",
 
           // Channel chips.
-          "ig-bg": "#fde8f3",
-          "ig-ink": "#be185d",
-          "fb-bg": "#e7f0ff",
-          "fb-ink": "#1d4ed8",
+          "ig-bg": "#2A1022",
+          "ig-ink": "#F9A8D4",
+          "fb-bg": "#0F1A33",
+          "fb-ink": "#93C5FD",
+          "tg-bg": "#0B2130",
+          "tg-ink": "#7DD3FC",
         },
       },
       fontFamily: {
@@ -170,19 +184,19 @@ const config: Config = {
         "card-lg": "18px",
       },
       boxShadow: {
-        // Indigo lift under the active sidebar item.
-        "ss-nav": "0 8px 18px -8px rgba(99,102,241,.95)",
+        // Gold lift under the active sidebar item.
+        "ss-nav": "0 8px 18px -8px rgba(201,149,42,.6)",
         // Barely-there card lift used across the dashboard grid.
-        "ss-card": "0 1px 2px rgba(30,27,75,.04)",
+        "ss-card": "0 1px 2px rgba(0,0,0,.4)",
         // Selected/primary chatbot card.
-        "ss-pick": "0 12px 28px -20px rgba(99,102,241,.9)",
+        "ss-pick": "0 12px 28px -20px rgba(232,182,68,.55)",
         // Chatbot switcher popover.
         "ss-pop":
-          "0 28px 60px -22px rgba(30,27,75,.42), 0 4px 12px rgba(30,27,75,.08)",
+          "0 28px 60px -22px rgba(0,0,0,.75), 0 4px 12px rgba(0,0,0,.4)",
         // Billing plan card.
-        "ss-plan": "0 8px 30px -18px rgba(30,27,75,.25)",
+        "ss-plan": "0 8px 30px -18px rgba(0,0,0,.7)",
         // Mobile bottom sheet.
-        "ss-sheet": "0 -18px 50px -20px rgba(30,27,75,.5)",
+        "ss-sheet": "0 -18px 50px -20px rgba(0,0,0,.75)",
       },
     },
   },

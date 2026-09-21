@@ -295,7 +295,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
       <div className="lg:col-span-1 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium">Saved scenarios ({pairs.length})</h3>
-          {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
+          {dirty && <span className="text-xs text-ss-amber-soft">Unsaved</span>}
         </div>
         <p className="text-[11px] leading-snug text-muted-foreground">
           When a contact&rsquo;s message matches a Scenario, the bot answers with that Reply - it takes precedence over the knowledge base for that scenario. Click <strong>Save training</strong> to apply it to the live bot.
@@ -333,7 +333,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
                   : "Keeps your wording and facts, said in the bot's own voice."}
               </p>
               {p.enabled && !(p.scenario.trim() && p.reply.trim()) && (
-                <p className="text-[11px] text-amber-700 dark:text-amber-500">
+                <p className="text-[11px] text-ss-amber-soft">
                   Needs both a Scenario and a Reply to take effect.
                 </p>
               )}
@@ -342,7 +342,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
         </div>
         <Button type="button" variant="outline" size="sm" onClick={addPair}>+ Add scenario</Button>
         {incompleteEnabled > 0 && (
-          <p className="rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-500">
+          <p className="rounded bg-ss-amber-bg px-2 py-1 text-xs text-ss-amber-ink">
             {incompleteEnabled} enabled scenario{incompleteEnabled === 1 ? "" : "s"} {incompleteEnabled === 1 ? "is" : "are"} missing a Scenario or Reply - they won&rsquo;t be saved or used until both are filled.
           </p>
         )}
@@ -351,7 +351,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
           <Button type="button" onClick={() => void saveTraining()} disabled={saving}>
             {saving ? "Saving…" : "Save training"}
           </Button>
-          {saved && <span className="text-xs text-green-600">Saved ✓</span>}
+          {saved && <span className="text-xs text-ss-green">Saved ✓</span>}
         </div>
       </div>
     </div>
@@ -377,7 +377,7 @@ function DiagLine({ diag }: { diag: Diag }) {
           {sim}
         </div>
         {kbEmpty && (
-          <div className="text-amber-600 dark:text-amber-500">
+          <div className="text-ss-amber-soft">
             ⚠ The bot got NO knowledge base for this message
             {diag.kbMode === "retrieval"
               ? " (nothing matched) - it can only use the persona/prompt and any trained scenarios."

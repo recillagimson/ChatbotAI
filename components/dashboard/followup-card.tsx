@@ -116,7 +116,7 @@ export function FollowupCard({ item }: { item: FollowupItem }) {
   if (resolved) return null;
 
   return (
-    <div className="rounded-card border border-ss-line bg-white px-5 py-[18px]">
+    <div className="rounded-card border border-ss-line bg-ss-surface px-5 py-[18px]">
       <div className="flex items-start gap-3">
         <SsAvatar name={item.name} size={38} tone="indigo" />
         <div className="min-w-0 flex-1">
@@ -186,7 +186,7 @@ export function FollowupCard({ item }: { item: FollowupItem }) {
             href={item.manychatUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-ss-indigo-600 px-[13px] py-2.5 text-[12.5px] font-semibold leading-none text-white transition-colors hover:bg-ss-indigo-700"
+            className="inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-ss-indigo-600 px-[13px] py-2.5 text-[12.5px] font-semibold leading-none text-ss-on-accent transition-colors hover:bg-ss-indigo-800"
           >
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
             Open in ManyChat
@@ -207,7 +207,7 @@ export function FollowupCard({ item }: { item: FollowupItem }) {
             href={item.nativeUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-ss-line bg-white px-[13px] py-2.5 text-[12.5px] font-semibold leading-none text-ss-ink transition-colors hover:border-ss-dash hover:bg-ss-page"
+            className="inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-ss-line bg-ss-surface px-[13px] py-2.5 text-[12.5px] font-semibold leading-none text-ss-ink transition-colors hover:border-ss-dash hover:bg-ss-chip"
           >
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
             {item.nativeLabel}

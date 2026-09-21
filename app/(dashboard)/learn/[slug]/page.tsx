@@ -68,7 +68,9 @@ export default async function LessonPage({
         <div
           className="h-2 w-full rounded-full"
           style={{
-            background: `linear-gradient(90deg, ${lesson.gradient[0]}, ${lesson.gradient[1]})`,
+            // Lesson tone into the brand gold: the thumbnail pairs are dark so
+            // white text reads on them, which is too dim for a bare bar.
+            background: `linear-gradient(90deg, ${lesson.gradient[1]}, #E8B644)`,
           }}
           aria-hidden="true"
         />
@@ -99,7 +101,7 @@ export default async function LessonPage({
               action={
                 <Link
                   href={`/learn/${next.slug}`}
-                  className="inline-flex items-center gap-1.5 rounded-[10px] bg-ss-indigo px-[13px] py-2.5 text-[12.5px] font-semibold leading-none text-white transition-colors hover:bg-ss-indigo-600"
+                  className="inline-flex items-center gap-1.5 rounded-[10px] bg-ss-indigo px-[13px] py-2.5 text-[12.5px] font-semibold leading-none text-ss-on-accent transition-colors hover:bg-ss-indigo-600"
                 >
                   {next.title}
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />

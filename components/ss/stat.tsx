@@ -51,7 +51,7 @@ export function StatCard({
         "rounded-card border px-5 py-[18px]",
         tone === "rose"
           ? "border-ss-rose-line bg-ss-rose-tint"
-          : "border-ss-line bg-white",
+          : "border-ss-line bg-ss-surface",
         className
       )}
     >

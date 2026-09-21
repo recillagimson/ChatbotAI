@@ -8,7 +8,7 @@ export default function FollowUpsLoading() {
         <SkNavyPanel height="h-[196px]" />
         <div className="grid grid-cols-2 gap-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="rounded-card border border-ss-line bg-white px-5 py-[18px]">
+            <div key={i} className="rounded-card border border-ss-line bg-ss-surface px-5 py-[18px]">
               <Sk className="h-[11px] w-20" />
               <Sk className="mt-3 h-[28px] w-14" />
               <Sk className="mt-2.5 h-[11px] w-24" />

@@ -107,7 +107,7 @@ export function ChangePasswordForm({ email }: { email: string }) {
         <Button type="submit" disabled={loading}>
           {loading ? "Updating..." : "Update password"}
         </Button>
-        {saved && <span className="text-sm text-green-600">Password updated ✓</span>}
+        {saved && <span className="text-sm text-ss-green">Password updated ✓</span>}
       </div>
     </form>
   );

@@ -168,7 +168,7 @@ async function LearnBody({ sp }: { sp: { bot?: string; category?: string } }) {
                 <span
                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-display text-[10px] font-bold leading-none ${
                     i === 0
-                      ? "bg-white/20 text-white"
+                      ? "bg-white/20 text-ss-on-accent"
                       : "border-[1.5px] border-white/25 text-ss-nav-meta"
                   }`}
                   aria-hidden="true"
@@ -176,7 +176,11 @@ async function LearnBody({ sp }: { sp: { bot?: string; category?: string } }) {
                   {i + 1}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12.5px] font-semibold leading-snug text-white">
+                  <span
+                    className={`block text-[12.5px] font-semibold leading-snug ${
+                      i === 0 ? "text-ss-on-accent" : "text-white"
+                    }`}
+                  >
                     {lesson.title}
                   </span>
                   <span
@@ -243,7 +247,7 @@ async function LearnBody({ sp }: { sp: { bot?: string; category?: string } }) {
 
           <SsCard tone="indigo" className="flex flex-wrap items-center gap-4 p-[22px]">
             <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-panel bg-ss-indigo">
-              <Headset className="h-6 w-6 text-white" aria-hidden="true" />
+              <Headset className="h-6 w-6 text-ss-on-accent" aria-hidden="true" />
             </span>
             <div className="min-w-[14rem] flex-1">
               <div className="font-display text-[15px] font-bold leading-tight text-ss-ink">
@@ -260,7 +264,7 @@ async function LearnBody({ sp }: { sp: { bot?: string; category?: string } }) {
                 <a
                   key={c.tel}
                   href={`tel:${c.tel}`}
-                  className="whitespace-nowrap rounded-[10px] bg-ss-navy px-4 py-2.5 text-center text-[12.5px] font-bold leading-none text-white transition-colors hover:bg-ss-navy-700"
+                  className="whitespace-nowrap rounded-[10px] bg-ss-navy px-4 py-2.5 text-center text-[12.5px] font-bold leading-none text-ss-ink shadow-[inset_0_0_0_1px_rgba(232,182,68,0.28)] transition-colors hover:bg-ss-navy-700"
                 >
                   {c.phone}
                 </a>
@@ -283,7 +287,7 @@ function LessonCard({
   return (
     <Link
       href={`/learn/${lesson.slug}`}
-      className="group flex flex-col overflow-hidden rounded-card border border-ss-line bg-white transition-shadow hover:shadow-ss-plan"
+      className="group flex flex-col overflow-hidden rounded-card border border-ss-line bg-ss-surface transition-shadow hover:border-ss-dash hover:shadow-ss-plan"
     >
       <div
         className="relative flex h-[112px] items-center justify-center"
@@ -297,7 +301,7 @@ function LessonCard({
         <span className="absolute left-3 top-2.5 rounded-[6px] bg-white/20 px-2 py-[3px] text-[9.5px] font-bold uppercase leading-[1.6] tracking-wide text-white">
           {lesson.category}
         </span>
-        <span className="absolute bottom-2.5 right-3 rounded-[6px] bg-[#0f0d2d]/60 px-2 py-[3px] text-[10.5px] font-semibold leading-[1.5] text-white">
+        <span className="absolute bottom-2.5 right-3 rounded-[6px] bg-ss-navy/60 px-2 py-[3px] text-[10.5px] font-semibold leading-[1.5] text-white">
           {lesson.minutes} min read
         </span>
       </div>
@@ -365,7 +369,7 @@ function LearnSkeleton() {
       <SkPills count={5} />
       <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="overflow-hidden rounded-card border border-ss-line bg-white">
+          <div key={i} className="overflow-hidden rounded-card border border-ss-line bg-ss-surface">
             <Sk className="h-[112px] w-full rounded-none" />
             <div className="px-[18px] py-4">
               <Sk className="h-[14px] w-48" />

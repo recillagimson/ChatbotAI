@@ -19,7 +19,7 @@ export function Sidebar({
   planNote?: string;
 }) {
   return (
-    <aside className="hidden h-full w-[252px] shrink-0 flex-col bg-ss-navy text-white lg:flex">
+    <aside className="hidden h-full w-[252px] shrink-0 flex-col border-r border-ss-line bg-ss-rail text-white lg:flex">
       <SidebarNav
         isSuperadmin={isSuperadmin}
         impersonating={impersonating}

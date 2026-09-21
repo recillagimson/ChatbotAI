@@ -74,7 +74,7 @@ export function WebhookSecretField({ chatbotId, secret: initialSecret }: Webhook
       </Button>
 
       {note && (
-        <p className="text-xs text-amber-600">{note}</p>
+        <p className="text-xs text-ss-amber-soft">{note}</p>
       )}
     </div>
   );

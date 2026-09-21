@@ -21,16 +21,19 @@ export const ssButton = cva(
   {
     variants: {
       variant: {
-        primary: "bg-ss-indigo text-white hover:bg-ss-indigo-600",
-        navy: "bg-ss-navy text-white hover:bg-ss-navy-700",
+        // Gold carries dark text (white on gold is ~1.9:1), as on the login.
+        primary: "bg-ss-indigo text-ss-on-accent hover:bg-ss-indigo-600",
+        // Gold-tinted dark with a gold hairline, so it still reads as a
+        // committing action beside the outline buttons on a dark card.
+        navy: "bg-ss-navy text-ss-ink shadow-[inset_0_0_0_1px_rgba(232,182,68,0.28)] hover:bg-ss-navy-700",
         outline:
-          "border border-ss-line bg-white text-ss-ink hover:bg-ss-page hover:border-ss-dash",
+          "border border-ss-line bg-ss-surface text-ss-ink hover:bg-ss-chip hover:border-ss-dash",
         soft: "bg-ss-indigo-50 text-ss-indigo-700 hover:bg-ss-indigo-100",
-        ghost: "text-ss-body hover:bg-ss-page hover:text-ss-ink",
-        danger: "bg-ss-rose text-white hover:bg-ss-rose-ink",
+        ghost: "text-ss-body hover:bg-ss-chip hover:text-ss-ink",
+        danger: "bg-ss-rose text-white hover:brightness-110",
         "danger-outline":
-          "border border-ss-rose-line bg-white text-ss-rose-ink hover:bg-ss-rose-tint",
-        amber: "bg-ss-amber text-white hover:bg-ss-amber-ink",
+          "border border-ss-rose-line bg-ss-surface text-ss-rose-ink hover:bg-ss-rose-tint",
+        amber: "bg-ss-amber text-white hover:brightness-110",
       },
       size: {
         sm: "px-3 py-2 text-[12px]",
@@ -92,12 +95,14 @@ export const ssPill = cva(
   {
     variants: {
       state: {
-        /** Selected filter - solid indigo. */
-        active: "bg-ss-indigo font-bold text-white",
-        /** Selected, but the "everything" scope - navy, per the Learn screen. */
-        "active-navy": "bg-ss-navy font-bold text-white",
+        /** Selected filter - solid gold, dark text. */
+        active: "bg-ss-indigo font-bold text-ss-on-accent",
+        /** Selected, but the "everything" scope - the gold-tinted dark, per the
+         *  Learn screen, with a gold hairline so it reads as selected. */
+        "active-navy":
+          "bg-ss-navy font-bold text-ss-ink shadow-[inset_0_0_0_1px_rgba(232,182,68,0.4)]",
         /** Unselected. */
-        idle: "border border-ss-line bg-white font-medium text-ss-body hover:border-ss-dash hover:text-ss-ink",
+        idle: "border border-ss-line bg-ss-surface font-medium text-ss-body hover:border-ss-dash hover:text-ss-ink",
         /** The standing "Needs attention · 3" pill - always rose, never idle. */
         alert: "bg-ss-rose-bg font-bold text-ss-rose-ink hover:bg-ss-rose-wash",
       },
@@ -262,7 +267,7 @@ export function SsDot({
       className={cn(
         "inline-block h-[7px] w-[7px] shrink-0 rounded-full",
         tones[tone],
-        ring && tone === "green" && "shadow-[0_0_0_3px_rgba(5,150,105,.16)]",
+        ring && tone === "green" && "shadow-[0_0_0_3px_rgba(52,211,153,.18)]",
         className
       )}
     />
@@ -282,15 +287,16 @@ export function SsCount({
   children: React.ReactNode;
   className?: string;
 }) {
+  // Text colour travels with the fill: dark on gold, white on rose/amber.
   const tones = {
-    indigo: "bg-ss-indigo",
-    rose: "bg-ss-rose",
-    amber: "bg-ss-amber",
+    indigo: "bg-ss-indigo text-ss-on-accent",
+    rose: "bg-ss-rose text-white",
+    amber: "bg-ss-amber text-white",
   };
   return (
     <span
       className={cn(
-        "inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-[5px] font-display text-[10px] font-bold leading-none text-white",
+        "inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-[5px] font-display text-[10px] font-bold leading-none",
         tones[tone],
         className
       )}
@@ -359,7 +365,7 @@ export function SsBotMark({
 }) {
   const tones = {
     indigo: "bg-ss-indigo-50 text-ss-indigo-600",
-    solid: "bg-ss-indigo-600 text-white",
+    solid: "bg-ss-indigo-600 text-ss-on-accent",
     chip: "bg-ss-chip text-ss-body",
     amber: "bg-ss-amber-bg text-ss-amber-ink",
   };

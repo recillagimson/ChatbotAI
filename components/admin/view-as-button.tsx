@@ -56,7 +56,7 @@ export function ViewAsButton({
         className={cn(
           "inline-flex items-center justify-center gap-1.5 font-semibold leading-none transition-colors disabled:opacity-60",
           variant === "button"
-            ? "rounded-[10px] bg-ss-indigo-600 px-[13px] py-2.5 text-[12.5px] text-white hover:bg-ss-indigo-700"
+            ? "rounded-[10px] bg-ss-indigo px-[13px] py-2.5 text-[12.5px] text-ss-on-accent hover:bg-ss-indigo-600"
             : "text-[12.5px] text-ss-indigo-600 hover:text-ss-indigo-800"
         )}
       >

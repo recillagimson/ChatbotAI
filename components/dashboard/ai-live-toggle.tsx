@@ -75,7 +75,7 @@ export function AiLiveToggle({
           on
             ? "border-ss-green-line bg-ss-green-bg focus-visible:ring-ss-green"
             : "border-ss-rose-line bg-ss-rose-tint focus-visible:ring-ss-rose",
-          disabled ? "cursor-not-allowed opacity-70" : "hover:brightness-[0.98]"
+          disabled ? "cursor-not-allowed opacity-70" : "hover:brightness-110"
         )}
       >
         <span
@@ -83,8 +83,8 @@ export function AiLiveToggle({
           className={cn(
             "h-[7px] w-[7px] shrink-0 rounded-full",
             on
-              ? "bg-ss-green shadow-[0_0_0_3px_rgba(5,150,105,.16)]"
-              : "bg-ss-rose shadow-[0_0_0_3px_rgba(225,29,72,.16)]"
+              ? "bg-ss-green shadow-[0_0_0_3px_rgba(52,211,153,.18)]"
+              : "bg-ss-rose shadow-[0_0_0_3px_rgba(232,56,90,.18)]"
           )}
         />
         <span

@@ -356,7 +356,7 @@ export function ConversationActions({
   ) as string[];
 
   return (
-    <div className="flex-none border-b border-ss-line bg-white px-5 py-4 sm:px-6">
+    <div className="flex-none border-b border-ss-line bg-ss-surface px-5 py-4 sm:px-6">
       {/* ---- Identity + the one primary action ------------------------- */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
         {identity}
@@ -492,7 +492,7 @@ export function ConversationActions({
 }
 
 const SELECT =
-  "h-[34px] rounded-ctl border border-ss-line bg-white px-2.5 text-[12px] font-semibold leading-none text-ss-ink outline-none transition-colors focus:border-ss-indigo-200 focus:ring-2 focus:ring-ss-indigo/20 disabled:opacity-60";
+  "h-[34px] rounded-ctl border border-ss-line bg-ss-surface px-2.5 text-[12px] font-semibold leading-none text-ss-ink outline-none transition-colors focus:border-ss-indigo-200 focus:ring-2 focus:ring-ss-indigo/20 disabled:opacity-60";
 
 function Field({
   label,

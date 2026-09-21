@@ -33,7 +33,7 @@ export function ConversationReplyBox({
 
   if (!botSilent) {
     return (
-      <div className="flex-none border-t border-ss-line bg-white px-5 py-4 sm:px-6">
+      <div className="flex-none border-t border-ss-line bg-ss-surface px-5 py-4 sm:px-6">
         <div className="flex items-center gap-2.5 rounded-chip border border-ss-line bg-ss-page px-3.5 py-3">
           <Lock className="h-4 w-4 shrink-0 text-ss-muted" aria-hidden="true" />
           <p className="text-[12.5px] leading-snug text-ss-body">
@@ -112,7 +112,7 @@ export function ConversationReplyBox({
   const busy = isPending || drafting;
 
   return (
-    <div className="flex-none border-t border-ss-line bg-white px-5 py-4 sm:px-6">
+    <div className="flex-none border-t border-ss-line bg-ss-surface px-5 py-4 sm:px-6">
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -122,7 +122,7 @@ export function ConversationReplyBox({
         placeholder="Reply as a human - the AI stays paused on this thread until you resume it…"
         disabled={busy}
         aria-label="Your reply"
-        className="w-full resize-none rounded-[13px] border border-ss-line bg-ss-page-alt px-[15px] py-3 text-[13px] leading-relaxed text-ss-ink outline-none transition-colors placeholder:text-ss-faint focus:border-ss-indigo-200 focus:bg-white focus:ring-2 focus:ring-ss-indigo/15 disabled:opacity-60"
+        className="w-full resize-none rounded-[13px] border border-ss-line bg-ss-page-alt px-[15px] py-3 text-[13px] leading-relaxed text-ss-ink outline-none transition-colors placeholder:text-ss-faint focus:border-ss-indigo-200 focus:bg-ss-surface focus:ring-2 focus:ring-ss-indigo/15 disabled:opacity-60"
       />
 
       {error && (

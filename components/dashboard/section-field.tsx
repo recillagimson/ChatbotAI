@@ -99,7 +99,7 @@ export function SectionField({
         onChange={(e) => onChange(e.target.value)}
       />
       {uploadError && <p className="text-xs text-destructive">{uploadError}</p>}
-      {notice && <p className="text-xs text-amber-600">{notice}</p>}
+      {notice && <p className="text-xs text-ss-amber-soft">{notice}</p>}
       {helper && <p className="text-xs text-muted-foreground">{helper}</p>}
     </div>
   );

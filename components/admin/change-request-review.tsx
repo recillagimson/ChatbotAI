@@ -191,7 +191,7 @@ export function ChangeRequestReview({
                     className={
                       isClient
                         ? "max-w-[85%] rounded-ctl-lg border border-ss-line bg-ss-page px-3 py-2"
-                        : "max-w-[85%] rounded-ctl-lg border border-ss-line bg-white px-3 py-2"
+                        : "max-w-[85%] rounded-ctl-lg border border-ss-line bg-ss-surface px-3 py-2"
                     }
                   >
                     <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-ss-muted">

@@ -79,7 +79,7 @@ export function AxisTicks({
     <div
       className={cn(
         "mt-2 flex justify-between text-[10.5px] font-medium leading-none",
-        dark ? "text-[#7d7eb0]" : "text-ss-faint",
+        dark ? "text-ss-nav-dim" : "text-ss-faint",
         className,
       )}
     >
@@ -294,12 +294,16 @@ const FUNNEL_INSET = [
   "pl-[108px] pr-[78px]",
 ] as const;
 
-/** Deepest stages are the brightest - the eye lands on the end of the funnel. */
+/**
+ * Deepest stages are the brightest - the eye lands on the end of the funnel.
+ * Fill and text travel together: light text on the two dark gold-tint stages,
+ * dark text on the two gold ones (white on gold is ~1.9:1).
+ */
 const FUNNEL_TONE = [
-  "bg-ss-navy",
-  "bg-ss-navy-500",
-  "bg-ss-indigo-600",
-  "bg-ss-indigo",
+  "bg-ss-navy-600 text-ss-ink",
+  "bg-ss-navy-500 text-ss-ink",
+  "bg-ss-indigo-400 text-ss-on-accent",
+  "bg-ss-indigo text-ss-on-accent",
 ] as const;
 
 /**
@@ -340,18 +344,18 @@ export function FunnelStep({
         interactive && "transition-opacity hover:opacity-90",
       )}
     >
-      <span className="truncate text-[13.5px] font-semibold leading-none text-white">
+      <span className="truncate text-[13.5px] font-semibold leading-none">
         {label}
       </span>
       <span className="ml-auto flex shrink-0 items-center gap-2.5">
-        <span className="ss-num text-[20px] leading-none text-white">
+        <span className="ss-num text-[20px] leading-none">
           {value}
         </span>
         {interactive ? (
           <ChevronDown
             aria-hidden="true"
             className={cn(
-              "h-5 w-5 text-white/70 transition-transform",
+              "h-5 w-5 opacity-70 transition-transform",
               expanded && "rotate-180",
             )}
           />

@@ -139,7 +139,7 @@ export function GrantAccessForm({
               // Re-clamp so switching to Months can't leave an over-cap amount.
               setAmount((a) => Math.min(next === "months" ? 120 : 3650, a));
             }}
-            className="flex h-10 w-full rounded-ctl-lg border border-ss-line bg-white px-3 py-2 text-[13px] text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-1"
+            className="flex h-10 w-full rounded-ctl-lg border border-ss-line bg-ss-surface px-3 py-2 text-[13px] text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo focus-visible:ring-offset-1"
           >
             <option value="days">Days</option>
             <option value="months">Months</option>

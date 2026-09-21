@@ -7,6 +7,7 @@ import { LogOut, LifeBuoy, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { SUPPORT_CONTACTS, SUPPORT_HOURS } from "@/lib/support-contacts";
+import { HighThriveLockup } from "@/components/brand/highthrive-mark";
 import {
   WORKSPACE_NAV,
   ACCOUNT_NAV,
@@ -68,26 +69,16 @@ export function SidebarNav({
 
   return (
     <>
-      {/* Brand lockup - the bolt mark plus the italic wordmark and its
-          micro-caps tagline, exactly as the logo spec sets it. */}
+      {/* Brand lockup - the HighThrive.ai mark and wordmark, the same identity
+          as the landing and the sign-in screens (owner's call, 2026-09-21). */}
       <div className="flex shrink-0 items-center gap-2.5 px-5 pb-[22px] pt-[22px]">
         <Link
           href="/dashboard"
-          aria-label="SpeedSettr"
+          aria-label="HighThrive.ai"
           onClick={onNavigate}
-          className="flex items-center gap-2.5 rounded-ctl-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          className="rounded-ctl-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
         >
-          <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ctl-lg bg-ss-indigo">
-            <BoltMark size={20} />
-          </span>
-          <span>
-            <span className="block font-display text-[15.5px] font-extrabold italic leading-none tracking-[-0.01em] text-white">
-              SPEEDSETTR
-            </span>
-            <span className="mt-[3px] block text-[6.5px] font-semibold leading-none tracking-[0.22em] text-ss-nav-dim">
-              RAPID LEAD CONVERSION AI
-            </span>
-          </span>
+          <HighThriveLockup />
         </Link>
       </div>
 
@@ -198,7 +189,7 @@ function RailLink({
       className={cn(
         "flex items-center gap-3 rounded-ctl-lg px-3 py-2.5 text-sm leading-none transition-colors",
         active
-          ? "bg-ss-indigo font-semibold text-white shadow-ss-nav"
+          ? "bg-ss-indigo font-semibold text-ss-on-accent shadow-ss-nav"
           : "font-medium text-ss-nav-text hover:bg-white/10 hover:text-white"
       )}
     >
@@ -218,33 +209,6 @@ function RailLink({
         </span>
       ) : null}
     </Link>
-  );
-}
-
-/**
- * The speed bolt from the logo spec, drawn as a path so it stays crisp at the
- * 18–21px the rail and the mobile header ask for.
- */
-export function BoltMark({
-  size = 21,
-  className,
-}: {
-  size?: number;
-  className?: string;
-}) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      className={className}
-      aria-hidden="true"
-    >
-      <polygon
-        points="14,2 4,14.5 10.2,14.5 8.4,22.5 19.6,9.2 12.9,9.2 15.6,2"
-        fill="currentColor"
-      />
-    </svg>
   );
 }
 

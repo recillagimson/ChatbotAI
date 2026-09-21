@@ -74,7 +74,7 @@ export function StatsControlsBar({
   return (
     <div className="flex flex-wrap items-center gap-2.5">
       <div
-        className="flex flex-wrap items-center gap-0.5 rounded-[10px] border border-ss-line bg-white p-[3px]"
+        className="flex flex-wrap items-center gap-0.5 rounded-[10px] border border-ss-line bg-ss-surface p-[3px]"
         role="group"
         aria-label="Date range"
       >
@@ -91,8 +91,8 @@ export function StatsControlsBar({
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
                 "motion-reduce:transition-none",
                 active
-                  ? "bg-ss-indigo font-bold text-white"
-                  : "font-medium text-ss-body hover:bg-ss-page hover:text-ss-ink"
+                  ? "bg-ss-indigo font-bold text-ss-on-accent"
+                  : "font-medium text-ss-body hover:bg-ss-chip hover:text-ss-ink"
               )}
             >
               {label}
@@ -103,7 +103,7 @@ export function StatsControlsBar({
 
       <div
         className={cn(
-          "flex items-center gap-1.5 rounded-[10px] border bg-white px-3 py-2",
+          "flex items-center gap-1.5 rounded-[10px] border bg-ss-surface px-3 py-2",
           custom ? "border-ss-indigo-200" : "border-ss-line"
         )}
       >
@@ -137,7 +137,7 @@ export function StatsControlsBar({
         type="button"
         onClick={() => router.refresh()}
         aria-label="Refresh statistics"
-        className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-ss-line bg-white text-ss-body transition-colors hover:border-ss-dash hover:text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
+        className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-ss-line bg-ss-surface text-ss-body transition-colors hover:border-ss-dash hover:text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
       >
         <RefreshCw className="h-[18px] w-[18px]" aria-hidden="true" />
       </button>

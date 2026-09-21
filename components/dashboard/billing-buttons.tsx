@@ -106,7 +106,7 @@ export function BillingButtons({
       <div
         role="group"
         aria-label="Billing cycle"
-        className="inline-flex w-fit items-center rounded-full border border-ss-line bg-white p-[3px]"
+        className="inline-flex w-fit items-center rounded-full border border-ss-line bg-ss-surface p-[3px]"
       >
         <button
           type="button"
@@ -115,7 +115,7 @@ export function BillingButtons({
           className={cn(
             "rounded-full px-[15px] py-2 text-[12.5px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
             cycle === "monthly"
-              ? "bg-ss-navy font-bold text-white"
+              ? "bg-ss-navy font-bold text-ss-ink shadow-[inset_0_0_0_1px_rgba(232,182,68,0.4)]"
               : "font-medium text-ss-body hover:text-ss-ink"
           )}
         >
@@ -128,7 +128,7 @@ export function BillingButtons({
           className={cn(
             "flex items-center gap-1.5 rounded-full px-[13px] py-2 text-[12.5px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
             cycle === "annual"
-              ? "bg-ss-navy font-bold text-white"
+              ? "bg-ss-navy font-bold text-ss-ink shadow-[inset_0_0_0_1px_rgba(232,182,68,0.4)]"
               : "font-medium text-ss-body hover:text-ss-ink"
           )}
         >

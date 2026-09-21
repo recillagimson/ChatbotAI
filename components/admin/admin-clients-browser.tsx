@@ -158,7 +158,7 @@ export function AdminClientsBrowser({ clients }: { clients: AdminClientRow[] }) 
             onChange={(e) => changeQuery(e.target.value)}
             placeholder="Search name, email, or company"
             aria-label="Search clients"
-            className="h-[38px] w-full rounded-ctl-lg border border-ss-line bg-white pl-9 pr-3 text-[13px] leading-none text-ss-ink placeholder:text-ss-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
+            className="h-[38px] w-full rounded-ctl-lg border border-ss-line bg-ss-surface pl-9 pr-3 text-[13px] leading-none text-ss-ink placeholder:text-ss-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
           />
         </div>
       </div>

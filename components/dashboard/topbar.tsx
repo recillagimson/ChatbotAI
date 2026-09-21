@@ -33,7 +33,7 @@ export function Topbar({
   impersonating?: boolean;
 }) {
   return (
-    <header className="hidden h-[68px] shrink-0 items-center gap-4 border-b border-ss-line bg-white px-[30px] lg:flex">
+    <header className="hidden h-[68px] shrink-0 items-center gap-4 border-b border-ss-line bg-ss-surface px-[30px] lg:flex">
       <BotSwitcher bots={bots} />
       <p className="hidden truncate text-[11.5px] leading-none text-ss-faint xl:block">
         Scopes Conversations, Follow-ups, Statistics &amp; Knowledge Base · ⌘K
@@ -58,7 +58,7 @@ export function Topbar({
           {needsAttention > 0 && (
             <span
               aria-hidden="true"
-              className="absolute right-2 top-[7px] h-[7px] w-[7px] rounded-full border-[1.5px] border-white bg-ss-rose"
+              className="absolute right-2 top-[7px] h-[7px] w-[7px] rounded-full border-[1.5px] border-ss-page bg-ss-rose"
             />
           )}
         </Link>
@@ -114,9 +114,9 @@ function UserMenu({
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2.5 rounded-full border border-ss-line py-1 pl-1 pr-2.5 transition-colors hover:bg-ss-page focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
+        className="flex items-center gap-2.5 rounded-full border border-ss-line py-1 pl-1 pr-2.5 transition-colors hover:bg-ss-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
       >
-        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-ss-navy font-display text-xs font-bold leading-none text-white">
+        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-ss-indigo-50 font-display text-xs font-bold leading-none text-ss-indigo-600">
           {initial}
         </span>
         <span className="max-w-[8rem] truncate text-[12.5px] font-semibold leading-none text-ss-ink">
@@ -128,7 +128,7 @@ function UserMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 w-52 overflow-hidden rounded-chip border border-ss-rule bg-white py-1.5 shadow-ss-pop"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 w-52 overflow-hidden rounded-chip border border-ss-rule bg-ss-surface-2 py-1.5 shadow-ss-pop"
         >
           {!impersonating && (
             <>
@@ -143,7 +143,7 @@ function UserMenu({
                 type="button"
                 role="menuitem"
                 onMouseDown={signOut}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium leading-none text-ss-body transition-colors hover:bg-ss-page hover:text-ss-ink"
+                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium leading-none text-ss-body transition-colors hover:bg-ss-chip hover:text-ss-ink"
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
                 Sign out
@@ -176,7 +176,7 @@ function MenuLink({
       href={href}
       role="menuitem"
       className={cn(
-        "flex items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium leading-none text-ss-body transition-colors hover:bg-ss-page hover:text-ss-ink"
+        "flex items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium leading-none text-ss-body transition-colors hover:bg-ss-chip hover:text-ss-ink"
       )}
     >
       {icon}

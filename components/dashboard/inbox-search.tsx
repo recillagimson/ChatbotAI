@@ -47,7 +47,7 @@ export function InboxSearch({
   }, [value]);
 
   return (
-    <div className="mt-3.5 flex items-center gap-2 rounded-[10px] border border-ss-line bg-ss-page px-3 py-2.5 focus-within:border-ss-indigo-200 focus-within:bg-white">
+    <div className="mt-3.5 flex items-center gap-2 rounded-[10px] border border-ss-line bg-ss-page px-3 py-2.5 focus-within:border-ss-indigo-400 focus-within:bg-ss-surface focus-within:ring-[3px] focus-within:ring-ss-indigo-400/20">
       <Search className="h-[17px] w-[17px] shrink-0 text-ss-muted" aria-hidden="true" />
       <input
         value={value}

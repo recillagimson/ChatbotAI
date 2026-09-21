@@ -402,7 +402,7 @@ export default async function DashboardPage({
                   className={`rounded-[13px] border p-3.5 ${
                     b.unconnected
                       ? "border-ss-amber-line bg-ss-amber-tint"
-                      : "border-ss-line bg-white"
+                      : "border-ss-line bg-ss-surface"
                   }`}
                 >
                   <div className="flex items-center gap-2">
@@ -492,7 +492,7 @@ export default async function DashboardPage({
                 <a
                   key={c.tel}
                   href={`tel:${c.tel}`}
-                  className="flex items-center gap-2.5 rounded-chip border border-ss-line px-3.5 py-3 transition-colors hover:border-ss-dash hover:bg-ss-page"
+                  className="flex items-center gap-2.5 rounded-chip border border-ss-line px-3.5 py-3 transition-colors hover:border-ss-dash hover:bg-ss-chip"
                 >
                   <Phone className="h-[17px] w-[17px] shrink-0 text-ss-indigo-600" aria-hidden="true" />
                   <span className="text-[13px] font-semibold leading-none text-ss-ink">
@@ -544,7 +544,7 @@ function SetupStrip({
 }) {
   if (done) {
     return (
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-chip border border-ss-line bg-white px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-chip border border-ss-line bg-ss-surface px-4 py-3">
         <CheckCircle2 className="h-[18px] w-[18px] shrink-0 text-ss-green" aria-hidden="true" />
         <span className="text-[13px] font-semibold leading-none text-ss-ink">
           Setup complete

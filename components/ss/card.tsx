@@ -16,11 +16,12 @@ import { cn } from "@/lib/utils";
 export type SsTone = "plain" | "amber" | "rose" | "indigo" | "navy" | "soft";
 
 const TONE: Record<SsTone, string> = {
-  plain: "bg-white border-ss-line",
+  plain: "bg-ss-surface border-ss-line",
   amber: "bg-ss-amber-tint border-ss-amber-line",
   rose: "bg-ss-rose-tint border-ss-rose-line",
   indigo: "bg-ss-indigo-25 border-ss-rule-indigo",
-  navy: "bg-ss-navy border-transparent",
+  // A gold hairline instead of none: dark-on-dark needs the edge.
+  navy: "bg-ss-navy border-ss-rule-indigo",
   soft: "bg-ss-page-alt border-ss-line",
 };
 
@@ -130,7 +131,7 @@ export function SsIconTile({
     amber: "bg-ss-amber-bg text-ss-amber",
     green: "bg-ss-green-bg text-ss-green",
     chip: "bg-ss-chip text-ss-body",
-    navy: "bg-ss-navy text-white",
+    navy: "bg-ss-navy text-ss-indigo-300",
   };
   return (
     <span

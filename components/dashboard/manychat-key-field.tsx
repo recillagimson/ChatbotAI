@@ -89,7 +89,7 @@ export function ManychatKeyField({ chatbotId, configured }: ManychatKeyFieldProp
 
       <div className="flex items-center gap-2 text-sm">
         {isConfigured ? (
-          <span className="text-green-600 font-medium">● Connected</span>
+          <span className="text-ss-green font-medium">● Connected</span>
         ) : (
           <span className="text-muted-foreground">○ Not connected - using the global key</span>
         )}
@@ -142,7 +142,7 @@ export function ManychatKeyField({ chatbotId, configured }: ManychatKeyFieldProp
       {message && (
         <p
           className={`text-sm ${
-            message.ok ? "text-green-600" : "text-destructive"
+            message.ok ? "text-ss-green" : "text-destructive"
           }`}
         >
           {message.text}

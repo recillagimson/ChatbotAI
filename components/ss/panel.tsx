@@ -21,9 +21,11 @@ export function NavyPanel({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-card-lg",
+        // Inset gold hairline (a shadow, so it adds no layout): a dark panel on
+        // a dark page needs an edge to read as the one emphasised surface.
+        "relative overflow-hidden rounded-card-lg shadow-[inset_0_0_0_1px_rgba(232,182,68,0.16)]",
         gradient
-          ? "bg-[linear-gradient(103deg,#1e1b4b_0%,#2b2566_62%,#332a78_100%)]"
+          ? "bg-[linear-gradient(103deg,#241C0A_0%,#1A1710_55%,#15161B_100%)]"
           : "bg-ss-navy",
         className
       )}
@@ -37,7 +39,7 @@ export function NavyPanel({
           />
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute -top-10 right-24 h-[220px] w-[6px] rotate-[24deg] bg-ss-indigo/25"
+            className="pointer-events-none absolute -top-10 right-24 h-[220px] w-[6px] rotate-[24deg] bg-ss-indigo/[.12]"
           />
         </>
       ) : null}

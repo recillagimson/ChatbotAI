@@ -14,7 +14,7 @@ export default function AdminRequestLoading() {
     >
       <span className="sr-only">Loading this request</span>
 
-      <header className="flex-none border-b border-ss-line bg-white px-5 pb-[18px] pt-[18px] sm:px-[30px]">
+      <header className="flex-none border-b border-ss-line bg-ss-surface px-5 pb-[18px] pt-[18px] sm:px-[30px]">
         <div className="flex flex-wrap items-start gap-x-3.5 gap-y-3">
           <Sk className="mt-1 h-[13px] w-24" tone="on-page" />
           <div className="min-w-0">

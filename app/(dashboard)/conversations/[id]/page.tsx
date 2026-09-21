@@ -133,7 +133,7 @@ export default async function ConversationDetailPage({
                 "/conversations",
               )}
               aria-label="Back to the inbox"
-              className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-ctl-lg text-ss-body transition-colors hover:bg-ss-page lg:hidden"
+              className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-ctl-lg text-ss-body transition-colors hover:bg-ss-chip lg:hidden"
             >
               <ArrowLeft className="h-5 w-5" aria-hidden="true" />
             </Link>

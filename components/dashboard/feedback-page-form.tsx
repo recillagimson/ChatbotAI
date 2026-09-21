@@ -188,7 +188,7 @@ export function FeedbackPageForm({
                   onClick={() => removeFile(i)}
                   disabled={busy}
                   aria-label={`Remove ${f.name}`}
-                  className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                 >
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
@@ -207,7 +207,7 @@ export function FeedbackPageForm({
         </p>
       )}
       {success && (
-        <p className="rounded-md bg-green-100 px-3 py-2 text-sm text-green-800">
+        <p className="rounded-md bg-ss-green-bg px-3 py-2 text-sm text-ss-green-ink">
           Sent - thanks! The team will take a look.
         </p>
       )}

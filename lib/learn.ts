@@ -64,7 +64,7 @@ export const LESSONS: Lesson[] = [
     minutes: 3,
     summary:
       "One flow per channel, the right platform value in each, and the check that tells you it worked.",
-    gradient: ["#312e81", "#4f46e5"],
+    gradient: ["#1E1809", "#5A4413"],
     signal: (s) =>
       !s.connected ? "Your bot isn't delivering replies yet" : null,
     body: [
@@ -98,7 +98,7 @@ export const LESSONS: Lesson[] = [
     minutes: 4,
     summary:
       "How one well-written entry stops a whole category of off-script replies.",
-    gradient: ["#6366f1", "#a5b4fc"],
+    gradient: ["#5A4413", "#B4862A"],
     signal: (s) =>
       s.kbEntries < 6
         ? s.kbEntries === 0
@@ -135,7 +135,7 @@ export const LESSONS: Lesson[] = [
     minutes: 4,
     summary:
       "Why sends bounce after a day of silence, and the three ways to reach the lead anyway.",
-    gradient: ["#312e81", "#4f46e5"],
+    gradient: ["#1E1809", "#5A4413"],
     signal: (s) =>
       s.deliveryFailures > 0
         ? `Fixes your ${s.deliveryFailures.toLocaleString()} failed send${s.deliveryFailures === 1 ? "" : "s"}`
@@ -173,7 +173,7 @@ export const LESSONS: Lesson[] = [
     minutes: 3,
     summary:
       "The timed nudges that catch leads who go quiet - before the window shuts on them.",
-    gradient: ["#4f46e5", "#8b8ef5"],
+    gradient: ["#3A2E14", "#8A6A22"],
     signal: (s) =>
       !s.followupsOn ? "Follow-ups are off - quiet leads go un-nudged" : null,
     body: [
@@ -206,7 +206,7 @@ export const LESSONS: Lesson[] = [
     minutes: 3,
     summary:
       "The fastest path from DM to link, and the mistake that makes a bot repeat itself.",
-    gradient: ["#4f46e5", "#8b8ef5"],
+    gradient: ["#3A2E14", "#8A6A22"],
     signal: (s) =>
       !s.hasKeywords ? "No keywords set - leads take the long route" : null,
     body: [
@@ -238,7 +238,7 @@ export const LESSONS: Lesson[] = [
     minutes: 3,
     summary:
       "When to step in, what pausing actually does, and how to hand it back.",
-    gradient: ["#6366f1", "#a5b4fc"],
+    gradient: ["#5A4413", "#B4862A"],
     signal: (s) =>
       s.needsAttention > 0
         ? `${s.needsAttention} thread${s.needsAttention === 1 ? " is" : "s are"} waiting for you`
@@ -272,7 +272,7 @@ export const LESSONS: Lesson[] = [
     minutes: 4,
     summary:
       "Find the one stage losing you the most leads - and what to change first.",
-    gradient: ["#4f46e5", "#8b8ef5"],
+    gradient: ["#3A2E14", "#8A6A22"],
     signal: () => null,
     body: [
       {
@@ -303,7 +303,7 @@ export const LESSONS: Lesson[] = [
     minutes: 3,
     summary:
       "How threads get tagged, which tags stick, and when to override one by hand.",
-    gradient: ["#312e81", "#4f46e5"],
+    gradient: ["#1E1809", "#5A4413"],
     signal: () => null,
     body: [
       {

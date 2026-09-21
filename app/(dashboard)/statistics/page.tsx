@@ -922,7 +922,7 @@ function SequenceColumn({
               className={`rounded-panel border px-[17px] py-[15px] ${
                 s.dead
                   ? "border-ss-hair bg-ss-page-alt"
-                  : "border-ss-line bg-white"
+                  : "border-ss-line bg-ss-surface"
               }`}
             >
               <div className="flex items-baseline gap-2.5">
@@ -945,7 +945,7 @@ function SequenceColumn({
                 </span>
               </div>
               <div
-                className={`mt-3 rounded-[9px] px-2 py-2 text-center text-[11.5px] font-bold leading-tight text-white ${reachTone(
+                className={`mt-3 rounded-[9px] px-2 py-2 text-center text-[11.5px] font-bold leading-tight ${reachTone(
                   s.shareOfFirst,
                   s.dead,
                 )}`}
@@ -964,11 +964,11 @@ function SequenceColumn({
 
 /** Green while most of the entrants are still here, rose once nobody is. */
 function reachTone(share: number | null, dead: boolean): string {
-  if (dead || share === 0) return "bg-ss-rose-soft";
-  if (share == null) return "bg-ss-dash";
-  if (share >= 60) return "bg-ss-green";
-  if (share >= 25) return "bg-ss-amber";
-  return "bg-[#ea8009]";
+  if (dead || share === 0) return "bg-ss-rose-soft text-ss-on-accent";
+  if (share == null) return "bg-ss-dash text-white";
+  if (share >= 60) return "bg-ss-green text-ss-on-accent";
+  if (share >= 25) return "bg-ss-amber text-white";
+  return "bg-[#ea8009] text-white";
 }
 
 function sequenceSubtitle(pre: SequenceStats, post: SequenceStats): string {

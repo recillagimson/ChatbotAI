@@ -29,7 +29,7 @@ export function MobileTabBar({
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-ss-line bg-white/95 px-2.5 pt-2 backdrop-blur-sm lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-ss-line bg-ss-surface/95 px-2.5 pt-2 backdrop-blur-sm lg:hidden"
       style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
     >
       {MOBILE_TABS.map((tab) => (

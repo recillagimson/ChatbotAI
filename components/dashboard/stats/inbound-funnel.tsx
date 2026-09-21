@@ -211,7 +211,7 @@ function StageList({
   onLoadMore: () => void;
 }) {
   const note =
-    "mt-[7px] rounded-chip border border-ss-rule bg-white px-4 py-3 text-[12px] text-ss-muted";
+    "mt-[7px] rounded-chip border border-ss-rule bg-ss-surface-2 px-4 py-3 text-[12px] text-ss-muted";
 
   // Still loading its first page (preload in flight, or a fresh open).
   if (!state || (state.loading && state.rows.length === 0)) {
@@ -227,13 +227,13 @@ function StageList({
   }
 
   return (
-    <div className="mt-[7px] overflow-hidden rounded-chip border border-ss-rule bg-white shadow-ss-pop">
+    <div className="mt-[7px] overflow-hidden rounded-chip border border-ss-rule bg-ss-surface-2 shadow-ss-pop">
       <div className="ss-scroll max-h-[196px] overflow-auto">
         {state.rows.map((r, i) => (
           <Link
             key={r.id}
             href={`/conversations/${r.id}`}
-            className={`flex items-center gap-2.5 px-[15px] py-3 transition-colors hover:bg-ss-page ${
+            className={`flex items-center gap-2.5 px-[15px] py-3 transition-colors hover:bg-ss-chip ${
               i > 0 ? "border-t border-ss-hair-2" : ""
             }`}
           >
@@ -251,7 +251,7 @@ function StageList({
           type="button"
           onClick={onLoadMore}
           disabled={state.loading}
-          className="flex w-full items-center gap-2 border-t border-ss-hair bg-ss-page-alt px-[15px] py-3 text-[12px] font-semibold text-ss-indigo-600 transition-colors hover:bg-ss-page disabled:opacity-60"
+          className="flex w-full items-center gap-2 border-t border-ss-hair bg-ss-page-alt px-[15px] py-3 text-[12px] font-semibold text-ss-indigo-600 transition-colors hover:bg-ss-chip disabled:opacity-60"
         >
           {state.loading ? "Loading…" : "Load more"}
           <span className="font-normal text-ss-muted">

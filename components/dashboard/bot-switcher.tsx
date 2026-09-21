@@ -140,14 +140,14 @@ function BotSwitcherInner({
         {active ? (
           <SsBotMark name={active.name} size={22} tone="solid" className="rounded-[7px]" />
         ) : (
-          <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-ss-indigo-600 text-white">
+          <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-ss-indigo-600 text-ss-on-accent">
             <LayoutGrid className="h-3 w-3" aria-hidden="true" />
           </span>
         )}
         <span className="truncate text-[13px] font-bold leading-none text-ss-indigo-800">
           {active ? active.name : "All chatbots"}
         </span>
-        <span className="hidden whitespace-nowrap text-[11.5px] font-medium leading-none text-[#6f6bd8] sm:inline">
+        <span className="hidden whitespace-nowrap text-[11.5px] font-medium leading-none text-ss-indigo-400 sm:inline">
           {(active ? active.threads : totalThreads).toLocaleString()} threads
         </span>
         <ChevronsUpDown
@@ -160,7 +160,7 @@ function BotSwitcherInner({
         <div
           role="listbox"
           aria-label="Choose a chatbot"
-          className="absolute left-0 top-[calc(100%+8px)] z-50 w-[352px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-ss-rule bg-white shadow-ss-pop"
+          className="absolute left-0 top-[calc(100%+8px)] z-50 w-[352px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-ss-rule bg-ss-surface-2 shadow-ss-pop"
         >
           <div className="border-b border-ss-hair p-3.5">
             <div className="flex items-center gap-2.5 rounded-[10px] border border-ss-line bg-ss-page px-2.5 py-2.5">
@@ -173,7 +173,7 @@ function BotSwitcherInner({
                 aria-label="Find a chatbot"
                 className="min-w-0 flex-1 bg-transparent text-[12.5px] leading-none text-ss-ink outline-none placeholder:text-ss-faint"
               />
-              <kbd className="rounded-[5px] border border-ss-line bg-white px-1.5 py-0.5 text-[9.5px] font-semibold leading-[1.5] text-ss-muted">
+              <kbd className="rounded-[5px] border border-ss-line bg-ss-surface px-1.5 py-0.5 text-[9.5px] font-semibold leading-[1.5] text-ss-muted">
                 ⌘K
               </kbd>
             </div>
@@ -248,7 +248,7 @@ function BotSwitcherInner({
           <Link
             href="/chatbots/new"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2.5 border-t border-ss-hair bg-ss-page-alt px-4 py-3 transition-colors hover:bg-ss-page"
+            className="flex items-center gap-2.5 border-t border-ss-hair bg-ss-page-alt px-4 py-3 transition-colors hover:bg-ss-chip"
           >
             <Plus className="h-4 w-4 text-ss-indigo-600" aria-hidden="true" />
             <span className="text-[12.5px] font-semibold leading-none text-ss-indigo-600">
@@ -297,7 +297,7 @@ function ScopeRow({
       onClick={onSelect}
       className={cn(
         "flex w-full items-center gap-2.5 rounded-ctl-lg p-2.5 text-left transition-colors",
-        selected ? "bg-ss-indigo-50" : "hover:bg-ss-page"
+        selected ? "bg-ss-indigo-50" : "hover:bg-ss-chip"
       )}
     >
       {mark}
@@ -318,7 +318,7 @@ function ScopeRow({
             metaTone === "amber"
               ? "text-ss-amber-ink"
               : selected
-                ? "text-[#6f6bd8]"
+                ? "text-ss-indigo-400"
                 : "text-ss-muted"
           )}
         >

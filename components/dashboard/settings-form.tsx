@@ -62,7 +62,7 @@ export function SettingsForm({
         <Button type="submit" disabled={loading}>
           {loading ? "Saving..." : "Save changes"}
         </Button>
-        {saved && <span className="text-sm text-green-600">Saved</span>}
+        {saved && <span className="text-sm text-ss-green">Saved</span>}
       </div>
     </form>
   );

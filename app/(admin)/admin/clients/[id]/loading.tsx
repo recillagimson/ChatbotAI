@@ -9,7 +9,7 @@ export default function AdminClientLoading() {
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="rounded-card border border-ss-line bg-white px-5 py-[18px]"
+            className="rounded-card border border-ss-line bg-ss-surface px-5 py-[18px]"
           >
             <Sk className="h-[11px] w-24" />
             <Sk className="mt-3 h-[28px] w-16" />

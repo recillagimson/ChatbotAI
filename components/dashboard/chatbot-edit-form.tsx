@@ -212,7 +212,7 @@ export function ChatbotEditForm({
         <Button type="submit" disabled={saving}>
           {saving ? "Saving..." : "Save changes"}
         </Button>
-        {saved && <span className="text-sm text-green-600">Saved ✓</span>}
+        {saved && <span className="text-sm text-ss-green">Saved ✓</span>}
       </div>
     </form>
   );

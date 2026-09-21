@@ -222,7 +222,7 @@ export default async function BillingPage({
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start">
           <SsCard className="overflow-hidden shadow-ss-plan">
             <div
-              className="h-[5px] bg-[linear-gradient(90deg,#6366f1,#a5b4fc)]"
+              className="h-[5px] bg-gradient-to-r from-ss-indigo to-ss-indigo-800"
               aria-hidden="true"
             />
             <div className="p-[22px]">
@@ -390,7 +390,7 @@ function Usage({
   note: string;
 }) {
   return (
-    <div className="rounded-chip bg-ss-soft px-3.5 py-3">
+    <div className="rounded-chip bg-ss-page px-3.5 py-3">
       <div className="ss-num text-xl leading-none text-ss-ink">{value}</div>
       <div className="mt-1.5 text-[11.5px] leading-snug text-ss-muted">
         {label}

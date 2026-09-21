@@ -137,7 +137,7 @@ export function InboxListClient() {
   return (
     <div
       className={cn(
-        "h-full min-h-0 w-full flex-col border-ss-line bg-white lg:w-[412px] lg:shrink-0 lg:border-r",
+        "h-full min-h-0 w-full flex-col border-ss-line bg-ss-surface lg:w-[412px] lg:shrink-0 lg:border-r",
         mobile,
       )}
     >
@@ -287,10 +287,10 @@ export function InboxListClient() {
                   "flex gap-3 px-5 py-3.5 transition-colors",
                   i > 0 && "border-t border-ss-hair-2",
                   selected
-                    ? "border-l-[3px] border-l-ss-indigo bg-[#f4f5ff] pl-[17px]"
+                    ? "border-l-[3px] border-l-ss-indigo bg-ss-indigo-50 pl-[17px]"
                     : urgent
-                      ? "border-l-[3px] border-l-ss-rose pl-[17px] hover:bg-ss-page"
-                      : "hover:bg-ss-page",
+                      ? "border-l-[3px] border-l-ss-rose pl-[17px] hover:bg-ss-chip"
+                      : "hover:bg-ss-chip",
                 )}
               >
                 <SsAvatar
@@ -407,7 +407,7 @@ function PagerLink({
     <Link
       href={href}
       rel={rel}
-      className={cn(cls, "hover:bg-ss-page hover:text-ss-ink")}
+      className={cn(cls, "hover:bg-ss-chip hover:text-ss-ink")}
     >
       {children}
     </Link>

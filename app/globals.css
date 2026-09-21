@@ -75,6 +75,59 @@
     --chart-2: 239 60% 80%;
   }
 
+  /* The signed-in app (dashboard + admin) wears the HighThrive dark + gold
+     theme, matching the landing and the auth screens (2026-09-21).
+
+     Keyed on the app-shell marker - the same `html:has([data-app-shell])`
+     pattern as the scroll lock below - and set on <html>, not on the shell
+     div, so Radix portals (dialogs, popovers, toasts) that mount on <body>
+     inherit it too. Public pages render no shell, so they keep :root. The
+     app's own `ss-*` palette lives in tailwind.config.ts. */
+  html:has([data-app-shell]) {
+    /* Native controls (selects, date pickers, checkboxes, scrollbars) render
+       their dark variants instead of white boxes on a dark page. */
+    color-scheme: dark;
+
+    --background: 240 9% 4%; /* #0A0A0C */
+    --foreground: 42 31% 94%; /* #F4F1EA */
+    --card: 228 13% 8%; /* #111216 */
+    --card-foreground: 42 31% 94%;
+    --primary: 42 78% 59%; /* #E8B644 gold */
+    --primary-foreground: 0 0% 8%; /* #141414 - dark text on gold */
+    --secondary: 43 54% 8%; /* #1E1809 gold-tint fill */
+    --secondary-foreground: 43 85% 65%; /* #F2C85C */
+    --muted: 231 11% 12%; /* #1B1C22 */
+    --muted-foreground: 41 9% 63%; /* #A9A499 */
+    --accent: 43 54% 8%; /* #1E1809 hover surface */
+    --accent-foreground: 43 85% 65%;
+    --destructive: 348 79% 56%; /* #E8385A */
+    --destructive-foreground: 0 0% 100%;
+    --border: 231 8% 16%; /* #26272D */
+    --input: 232 8% 20%; /* #2E2F36 */
+    --ring: 42 78% 59%;
+
+    --sidebar: 228 12% 6%; /* #0D0E11 */
+    --sidebar-foreground: 42 31% 94%;
+    --sidebar-active: 42 78% 59%;
+
+    --conv-good: 152 55% 52%;
+    --conv-mid: 38 92% 56%;
+    --conv-bad: 348 79% 62%;
+
+    --chart-1: 42 78% 59%; /* gold */
+    --chart-2: 40 65% 38%; /* deep gold */
+  }
+
+  /* Tailwind's focus-ring offset defaults to #fff, which would draw a white
+     halo round every focus ring on the dark app. Re-default it to the app
+     ground. :where() keeps this at zero specificity, so an explicit
+     `ring-offset-*` utility on an element still wins. */
+  :where(html:has([data-app-shell])) *,
+  :where(html:has([data-app-shell])) ::before,
+  :where(html:has([data-app-shell])) ::after {
+    --tw-ring-offset-color: #0a0a0c;
+  }
+
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
 
@@ -122,27 +175,28 @@
      independently inside the two-pane shell. */
   .ss-scroll {
     scrollbar-width: thin;
-    scrollbar-color: #d6d8e8 transparent;
+    scrollbar-color: #34353c transparent;
   }
   .ss-scroll::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   .ss-scroll::-webkit-scrollbar-thumb {
-    background: #d6d8e8;
+    background: #34353c;
     border-radius: 999px;
   }
   .ss-scroll::-webkit-scrollbar-track {
     background: transparent;
   }
 
-  /* Visible keyboard focus on the dark marketing canvas.
+  /* Visible keyboard focus on the dark auth canvas.
      The UA default ring is near-black, which measures about 1:1 against
-     #15123a - effectively invisible. Applied to the whole dark page rather
+     #0A0A0C - effectively invisible. Applied to the whole dark page rather
      than per-element so a new link can't ship without one. Pointer clicks are
-     unaffected: :focus-visible only fires for keyboard/AT focus. */
+     unaffected: :focus-visible only fires for keyboard/AT focus. Gold, to match
+     the HighThrive theme. */
   .grain :focus-visible {
-    outline: 2px solid #c084fc;
+    outline: 2px solid #e8b644;
     outline-offset: 3px;
     border-radius: 6px;
   }
@@ -163,8 +217,8 @@
   .grain input:-webkit-autofill,
   .grain input:-webkit-autofill:hover,
   .grain input:-webkit-autofill:focus {
-    -webkit-text-fill-color: #fff;
-    caret-color: #fff;
+    -webkit-text-fill-color: #f4f1ea;
+    caret-color: #f4f1ea;
     transition: background-color 600000s 0s;
   }
 

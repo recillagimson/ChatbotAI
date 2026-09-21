@@ -22,7 +22,7 @@ export default function LearnLoading() {
 
       <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="overflow-hidden rounded-card border border-ss-line bg-white">
+          <div key={i} className="overflow-hidden rounded-card border border-ss-line bg-ss-surface">
             <Sk className="h-[112px] w-full rounded-none" />
             <div className="px-[18px] py-4">
               <Sk className="h-[14px] w-48" />

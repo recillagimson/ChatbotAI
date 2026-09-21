@@ -79,7 +79,7 @@ export function SkPage({
 
       <header
         className={cn(
-          "flex-none border-b border-ss-line bg-white px-5 pt-[18px] sm:px-[30px]",
+          "flex-none border-b border-ss-line bg-ss-surface px-5 pt-[18px] sm:px-[30px]",
           below ? "pb-0" : "pb-[18px]"
         )}
       >
@@ -115,7 +115,7 @@ export function SkCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className={cn("rounded-card border border-ss-line bg-white p-[22px]", className)}>
+    <div className={cn("rounded-card border border-ss-line bg-ss-surface p-[22px]", className)}>
       {children}
     </div>
   );
@@ -150,7 +150,7 @@ export function SkStatCards({
       )}
     >
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="rounded-card border border-ss-line bg-white px-5 py-[18px]">
+        <div key={i} className="rounded-card border border-ss-line bg-ss-surface px-5 py-[18px]">
           <Sk className="h-[11px] w-24" />
           <Sk className="mt-3 h-[28px] w-20" />
           <Sk className="mt-2.5 h-[11px] w-28" />
@@ -307,7 +307,7 @@ export function SkInboxList({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 w-full flex-col border-ss-line bg-white lg:w-[412px] lg:shrink-0 lg:border-r",
+        "flex h-full min-h-0 w-full flex-col border-ss-line bg-ss-surface lg:w-[412px] lg:shrink-0 lg:border-r",
         className
       )}
     >

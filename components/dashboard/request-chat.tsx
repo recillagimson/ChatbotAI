@@ -430,12 +430,12 @@ export function RequestChat({
               </div>
             )}
             {status === "pending" && (
-              <p className="rounded-md bg-green-100 px-3 py-2 text-sm text-green-800">
+              <p className="rounded-md bg-ss-green-bg px-3 py-2 text-sm text-ss-green-ink">
                 Submitted - the SpeedSettr team will review it.
               </p>
             )}
             {status === "applied" && (
-              <p className="rounded-md bg-green-100 px-3 py-2 text-sm text-green-800">
+              <p className="rounded-md bg-ss-green-bg px-3 py-2 text-sm text-ss-green-ink">
                 Applied - this change is live on your bot. Start a new request to make more changes.
               </p>
             )}

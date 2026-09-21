@@ -69,13 +69,13 @@ export function InboxFilters({
           "flex items-center gap-1.5 rounded-full border px-[11px] py-[7px] text-[12px] font-medium leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
           count > 0
             ? "border-ss-indigo-200 bg-ss-indigo-50 text-ss-indigo-700"
-            : "border-ss-line bg-white text-ss-body hover:border-ss-dash"
+            : "border-ss-line bg-ss-surface text-ss-body hover:border-ss-dash"
         )}
       >
         <SlidersHorizontal className="h-[15px] w-[15px]" aria-hidden="true" />
         Filters
         {count > 0 && (
-          <span className="rounded-[5px] bg-white px-1.5 py-px font-display text-[10px] font-bold leading-[1.5] text-ss-indigo-600">
+          <span className="rounded-[5px] bg-ss-surface px-1.5 py-px font-display text-[10px] font-bold leading-[1.5] text-ss-indigo-600">
             {count}
           </span>
         )}
@@ -85,7 +85,7 @@ export function InboxFilters({
         <div
           role="dialog"
           aria-label="Filter conversations"
-          className="absolute right-0 top-[calc(100%+8px)] z-40 w-[19rem] max-w-[calc(100vw-2rem)] rounded-card border border-ss-rule bg-white p-4 shadow-ss-pop"
+          className="absolute right-0 top-[calc(100%+8px)] z-40 w-[19rem] max-w-[calc(100vw-2rem)] rounded-card border border-ss-rule bg-ss-surface-2 p-4 shadow-ss-pop"
         >
           <Group label="Status">
             <Option
@@ -167,7 +167,7 @@ export function InboxFilters({
                 basePath
               )}
               onClick={() => setOpen(false)}
-              className="mt-4 block rounded-ctl-lg border border-ss-line py-2 text-center text-[12px] font-semibold leading-none text-ss-body transition-colors hover:bg-ss-page"
+              className="mt-4 block rounded-ctl-lg border border-ss-line py-2 text-center text-[12px] font-semibold leading-none text-ss-body transition-colors hover:bg-ss-chip"
             >
               Clear all filters
             </Link>
@@ -211,7 +211,7 @@ function Option({
       className={cn(
         "rounded-full px-2.5 py-1.5 text-[11.5px] leading-none transition-colors",
         active
-          ? "bg-ss-indigo font-bold text-white"
+          ? "bg-ss-indigo font-bold text-ss-on-accent"
           : "border border-ss-line font-medium text-ss-body hover:border-ss-dash"
       )}
     >

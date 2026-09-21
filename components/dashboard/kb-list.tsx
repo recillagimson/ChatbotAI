@@ -121,7 +121,7 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
                     maxLength={200}
                     disabled={saving}
                     aria-label="Entry title"
-                    className="w-full rounded-ctl border border-ss-line bg-white px-2 py-1 font-display text-[15px] font-bold text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
+                    className="w-full rounded-ctl border border-ss-line bg-ss-surface px-2 py-1 font-display text-[15px] font-bold text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
                   />
                 ) : (
                   <h3 className="font-display text-[15px] font-bold leading-tight text-ss-ink">
@@ -197,7 +197,7 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
                     disabled={saving}
                     rows={10}
                     aria-label="Entry content"
-                    className="min-h-[160px] w-full resize-y rounded-ctl border border-ss-line bg-white px-3 py-2 text-sm leading-relaxed text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
+                    className="min-h-[160px] w-full resize-y rounded-ctl border border-ss-line bg-ss-surface px-3 py-2 text-sm leading-relaxed text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
                   />
                   {editError && (
                     <p role="alert" className="text-sm text-ss-rose-ink">

@@ -330,7 +330,7 @@ export default async function AdminClientDetailPage({
                           "inline-flex items-center rounded-full border px-3.5 py-2 text-[12.5px] font-semibold leading-none transition-colors",
                           active
                             ? "border-ss-indigo-200 bg-ss-indigo-25 text-ss-indigo-700"
-                            : "border-ss-line bg-white text-ss-muted hover:border-ss-dash hover:text-ss-ink"
+                            : "border-ss-line bg-ss-surface text-ss-muted hover:border-ss-dash hover:text-ss-ink"
                         )}
                       >
                         {b.name}

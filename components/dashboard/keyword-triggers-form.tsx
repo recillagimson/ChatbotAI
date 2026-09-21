@@ -220,7 +220,7 @@ export function KeywordTriggersForm({
           still show in your inbox so you can reply by hand.
         </p>
         {gateEnabled && !hasActiveKeywords && (
-          <p className="text-xs text-amber-600">
+          <p className="text-xs text-ss-amber-soft">
             With this on and no keywords set, the bot won&apos;t reply to anyone. Add at least
             one enabled keyword group below.
           </p>
@@ -454,8 +454,8 @@ export function KeywordTriggersForm({
         <Button type="submit" disabled={saving}>
           {saving ? "Saving..." : "Save keyword triggers"}
         </Button>
-        {saved && <span className="text-sm text-green-600">Saved ✓</span>}
-        {dirty && !saving && <span className="text-sm text-amber-600">Unsaved changes</span>}
+        {saved && <span className="text-sm text-ss-green">Saved ✓</span>}
+        {dirty && !saving && <span className="text-sm text-ss-amber-soft">Unsaved changes</span>}
       </div>
     </form>
   );

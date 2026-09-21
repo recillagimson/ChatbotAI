@@ -151,7 +151,7 @@ export default async function ChatbotsPage({
 
                   <div
                     className={`mt-4 flex gap-6 border-y py-3.5 ${
-                      b.unconnected ? "border-[#f6ecd9]" : "border-ss-hair"
+                      b.unconnected ? "border-ss-amber-line" : "border-ss-hair"
                     }`}
                   >
                     <Metric label="threads" value={num(b.threads)} />
