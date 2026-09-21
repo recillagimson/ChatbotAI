@@ -29,7 +29,7 @@ function buildGraph() {
     "@type": "Organization",
     "@id": `${BASE}/#org`,
     name: COMPANY.name,
-    alternateName: "SpeedSettr",
+    alternateName: "HighThrive.ai",
     url: BASE,
     logo: `${BASE}/icon.svg`,
     email: COMPANY.email,
@@ -51,14 +51,14 @@ function buildGraph() {
     "@type": "WebSite",
     "@id": `${BASE}/#website`,
     url: BASE,
-    name: "SpeedSettr",
+    name: "HighThrive.ai",
     publisher: { "@id": `${BASE}/#org` },
   };
 
   const application = {
     "@type": "SoftwareApplication",
     "@id": `${BASE}/#app`,
-    name: "SpeedSettr",
+    name: "HighThrive.ai",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     description: PLAN_TAGLINE,

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
+import { Outfit, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 // Body / UI font. Locked to Plus Jakarta Sans by the SpeedSettr dashboard
@@ -18,7 +18,16 @@ const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-display",
   display: "swap",
-  weight: ["400", "500", "600", "700", "800"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+});
+
+// Mono accents (timestamps, step numbers, stat figures) for the HighThrive.ai
+// marketing landing. Exposed as --font-mono; only the landing references it.
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+  weight: ["400", "500"],
 });
 
 // Mobile viewport: fit the true device width and honor safe areas (notch /
@@ -61,7 +70,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${jakarta.variable} ${outfit.variable}`}>
+    <html lang="en" className={`${jakarta.variable} ${outfit.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-screen bg-background font-sans antialiased">
         {children}
       </body>

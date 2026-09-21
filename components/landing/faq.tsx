@@ -1,96 +1,92 @@
-import { Minus, Plus } from "lucide-react";
-
 /**
- * The pre-purchase objections, answered.
+ * The pre-booking objections, answered (HighThrive.ai funnel).
  *
- * Built on <details>/<summary> rather than a state-driven accordion: it needs no
- * JavaScript, it's keyboard- and screen-reader-correct for free, and - the part
- * that matters for a marketing page - the answers are in the HTML whether or not
- * they're open, so search engines and link previews can read them.
+ * Built on <details>/<summary>, not a state-driven accordion: no JavaScript, it's
+ * keyboard- and screen-reader-correct for free, and - the part that matters for a
+ * marketing page - the answers are in the HTML whether or not they're open, so
+ * search engines and link previews (and the FAQPage JSON-LD in
+ * components/seo/structured-data.tsx, which imports FAQS) can read them.
  *
- * Every answer below describes behaviour the product actually has. If a claim
- * here stops being true, this file is the thing to fix.
+ * Every answer describes behaviour the product actually has. If a claim here
+ * stops being true, this file is the thing to fix. `a` stays string[] so the
+ * JSON-LD builder can join paragraphs; single-paragraph answers are one entry.
  */
 
-// Exported so components/seo/structured-data.tsx can build the FAQPage JSON-LD
-// from the exact same Q/A pairs the accordion renders (single source of truth).
+// Exported so components/seo/structured-data.tsx builds the FAQPage JSON-LD from
+// the exact same Q/A pairs the accordion renders (single source of truth).
 export const FAQS: { q: string; a: string[]; open?: boolean }[] = [
   {
     q: "Will it sound like a robot?",
     open: true,
     a: [
-      "No - and that's the whole point. It runs on a frontier language model, it waits a few seconds before replying instead of firing back instantly, it groups rapid-fire messages into one answer the way a person would, and it writes in the tone you picked.",
-      "Read the transcripts yourself in the inbox and judge for yourself.",
+      "It waits a few seconds instead of firing back instantly, answers three quick messages in one reply the way a person would, and writes in the tone you set during setup. The transcripts are all in your inbox, so judge it yourself after a day.",
     ],
   },
   {
     q: "What if it says the wrong thing?",
     a: [
-      "It answers from the knowledge base you write, not from guesses. When a lead asks something you never covered, it says it will check rather than inventing an answer.",
-      "You can also write rules for what it must never claim. The AI treats your knowledge base as the boundary of what it's allowed to assert, so an unwritten rule is the only kind it can break. The Knowledge base screen shows a coverage meter so you can see when your entries are still thin.",
+      "It only answers from the material you gave it. Anything outside that gets handed to you rather than guessed at, and a correction you make once carries forward.",
     ],
   },
   {
     q: "Can I jump into a conversation myself?",
     a: [
-      "Any time on Instagram, Facebook, WhatsApp and Telegram - open the thread, pause the AI, and reply as yourself. The lead sees one continuous conversation, not a handoff. TikTok is receive-and-reply-only through ManyChat, so those threads are read-only in the inbox.",
-      "Switch the AI back on when you're done and it picks up with the full history, including everything you just said.",
+      "Any time. Hit take over and the AI steps back for that chat; resume it when you're done. Every channel lands in the same inbox.",
     ],
   },
   {
     q: "Do I need ManyChat, and does it cost extra?",
     a: [
-      "Yes, ManyChat is how DMs reach us and how replies go back out, and it's billed separately by ManyChat - we don't resell it or mark it up.",
-      "Connecting it is one automation per channel: paste your webhook URL and secret into a ManyChat External Request, set the channel name, done. The setup guide in your dashboard walks through it, including the one automation people always forget.",
+      "Yes. One ManyChat account covers all five channels, billed by them rather than us, and we wire it up with you on the call.",
     ],
   },
   {
     q: "What happens if a lead goes quiet for a day?",
     a: [
-      "Follow-up sequences. You write the steps and we send them on your schedule. A reply resets the clock rather than ending the sequence, so the lead keeps their place and the next step only goes out after the next stretch of silence. Mark the thread subscribed, or tag it, to stop it for good.",
-      "Timing matters more than people expect: Instagram and Facebook close their messaging window 24 hours after the lead's last message. The app tracks that window on every conversation and shows you which threads are about to close while you can still reach them.",
+      "It follows up on your schedule, in your voice, and stops when they reply or when you tell it to.",
+    ],
+  },
+  {
+    q: "How long until it pays for itself?",
+    a: [
+      "Most accounts book their first call off an AI-answered DM inside the first week. One closed client a month covers the plan, and after that it's revenue that was already sitting unanswered.",
+    ],
+  },
+  {
+    q: "What if it isn't a fit for my business?",
+    a: [
+      "We'll say so on the call. Low DM volume, or a business where every question needs judgment, and you'll get a no rather than a pitch.",
     ],
   },
   {
     q: "Is my customer data safe?",
     a: [
-      "Your conversations sit behind row-level security, so every read is scoped to your account and no other customer's bot can reach them. Payments run through Stripe - a card number never touches our servers.",
-      "You can delete knowledge entries and uploaded assets yourself at any time. To have a conversation or an entire chatbot removed, email admin@speedsettr.com and we'll action it.",
+      "Encrypted in transit and at rest, never used to train public models, and deletable on request. Payments run through Stripe.",
     ],
   },
 ];
 
 export function Faq() {
   return (
-    <div className="min-w-0 flex-1 overflow-hidden rounded-[20px] border border-white/[0.09] bg-[#120f30]">
+    <div className="overflow-hidden rounded-[20px] border border-[#F4F1EA]/10 bg-[#111216]">
       {FAQS.map(({ q, a, open }, i) => (
         <details
           key={q}
           open={open}
-          /* The design slides each row's padding-left 30px on hover. Padding is
-             animated rather than the row's transform so the open answer below
-             doesn't slide with the question. */
-          className={`group px-5 py-5 transition-[background-color,padding-left] duration-[340ms] ease-[cubic-bezier(.22,.7,.2,1)] hover:bg-white/[0.04] sm:px-6 sm:hover:pl-[30px] ${
-            i < FAQS.length - 1 ? "border-b border-white/[0.07]" : ""
+          className={`group ${
+            i < FAQS.length - 1 ? "border-b border-[#F4F1EA]/[0.08]" : ""
           }`}
         >
-          <summary className="flex cursor-pointer list-none items-center gap-3.5 [&::-webkit-details-marker]:hidden">
-            <span className="font-display text-base font-semibold leading-[1.3] text-white group-open:font-bold sm:text-[17px]">
-              {q}
-            </span>
-            <span className="ml-auto shrink-0" aria-hidden>
-              <Plus className="h-5 w-5 text-[#8b88b8] group-open:hidden" />
-              <Minus className="hidden h-5 w-5 text-[#c084fc] group-open:block" />
+          <summary className="flex cursor-pointer list-none items-center gap-4 px-[22px] py-5 text-[15.5px] font-medium leading-tight tracking-[-0.01em] text-[#F4F1EA] transition-colors hover:bg-[#15161B] [&::-webkit-details-marker]:hidden">
+            <span className="flex-1">{q}</span>
+            <span className="text-lg leading-none text-[#E8B644]" aria-hidden>
+              <span className="group-open:hidden">+</span>
+              <span className="hidden group-open:inline">&minus;</span>
             </span>
           </summary>
-          <div className="max-w-[620px] pt-3">
+          <div className="max-w-[46em] px-[22px] pb-[22px] text-[14.5px] leading-[1.6] text-[#A9A499]">
             {a.map((p, j) => (
-              <p
-                key={j}
-                className={`text-pretty text-sm leading-[1.7] text-[#b6b4dd] ${
-                  j > 0 ? "mt-3" : ""
-                }`}
-              >
+              <p key={j} className={j > 0 ? "mt-3" : ""}>
                 {p}
               </p>
             ))}
