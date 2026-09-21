@@ -53,7 +53,7 @@ export function AuthField({
       <div className="flex items-center gap-2">
         <label
           htmlFor={id}
-          className="text-[11.5px] font-semibold uppercase leading-none tracking-[0.04em] text-[#9b98c8]"
+          className="text-[12.5px] font-medium leading-none tracking-[0.02em] text-[#A9A499]"
         >
           {label}
         </label>
@@ -62,20 +62,20 @@ export function AuthField({
 
       <div
         className={cn(
-          "mt-2 flex items-center gap-2.5 rounded-chip border border-white/[0.11] bg-white/[0.04] px-3.5 py-[13px] transition-colors",
-          "focus-within:border-[#8b5cf6] focus-within:bg-[#7c22c4]/10 focus-within:ring-[3px] focus-within:ring-[#8b5cf6]/20",
+          "mt-2 flex items-center gap-2.5 rounded-chip border border-[#F4F1EA]/[0.14] bg-[#1B1C22] px-3.5 py-[13px] transition-colors",
+          "focus-within:border-[#C9952A] focus-within:bg-[#1E1F26] focus-within:ring-[3px] focus-within:ring-[#C9952A]/20",
           className
         )}
       >
         {Icon && (
-          <Icon className="h-[18px] w-[18px] shrink-0 text-[#8b88b8]" aria-hidden />
+          <Icon className="h-[18px] w-[18px] shrink-0 text-[#8A8579]" aria-hidden />
         )}
         <input
           id={id}
           {...props}
           type={isPassword && show ? "text" : props.type}
           className={cn(
-            "w-full min-w-0 bg-transparent text-[13.5px] leading-none text-white outline-none placeholder:text-[#6e6b9c]",
+            "w-full min-w-0 bg-transparent text-[13.5px] leading-none text-[#F4F1EA] outline-none placeholder:text-[#6E6A61]",
             isPassword && !show && props.value ? "tracking-[0.18em]" : ""
           )}
         />
@@ -83,7 +83,7 @@ export function AuthField({
           <button
             type="button"
             onClick={() => setShow((s) => !s)}
-            className="-my-1 shrink-0 p-1 text-[#8b88b8] transition-colors hover:text-white"
+            className="-my-1 shrink-0 p-1 text-[#8A8579] transition-colors hover:text-[#F4F1EA]"
             aria-label={show ? "Hide password" : "Show password"}
             tabIndex={-1}
           >
@@ -100,7 +100,7 @@ export function AuthField({
 
       {below}
       {hint && (
-        <p className="mt-[7px] text-[11.5px] leading-[1.4] text-[#8b88b8]">{hint}</p>
+        <p className="mt-[7px] text-[11.5px] leading-[1.4] text-[#8A8579]">{hint}</p>
       )}
     </div>
   );
@@ -122,8 +122,8 @@ export function AuthSubmit({
       {...props}
       disabled={loading || props.disabled}
       className={cn(
-        "flex w-full items-center justify-center gap-2.5 rounded-chip p-[15px] text-sm font-bold leading-none text-white",
-        "bg-[linear-gradient(120deg,#7c22c4,#5355cb)] shadow-[0_18px_36px_-16px_rgba(124,34,196,.95)]",
+        "flex w-full items-center justify-center gap-2.5 rounded-full p-[15px] text-sm font-semibold leading-none text-[#141414]",
+        "bg-[linear-gradient(145deg,#F2C85C,#C9952A)] shadow-[0_18px_36px_-16px_rgba(201,149,42,.7)]",
         "transition-[filter,opacity] hover:brightness-110",
         "disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:brightness-100",
         props.className
@@ -148,7 +148,7 @@ const NOTICE_TONES = {
   error: "border-[#e11d48]/40 bg-[#e11d48]/[0.14] text-[#fca5b5]",
   success: "border-[#34d399]/[0.3] bg-[#34d399]/[0.12] text-[#9ee7c6]",
   info: "border-[#fbbf24]/[0.3] bg-[#d97706]/[0.14] text-[#fcd9a0]",
-  neutral: "border-white/[0.1] bg-white/[0.05] text-[#b6b4dd]",
+  neutral: "border-white/[0.1] bg-white/[0.05] text-[#A9A499]",
 };
 
 /** Inline status message. `role="alert"` only for errors, so success text
@@ -203,7 +203,7 @@ export function AuthCheckbox({
         className={cn(
           "relative mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors",
           checked
-            ? "border-transparent bg-[linear-gradient(120deg,#7c22c4,#5355cb)]"
+            ? "border-transparent bg-[linear-gradient(145deg,#F2C85C,#C9952A)]"
             : "border-white/[0.24] bg-white/[0.06]"
         )}
       >
@@ -217,13 +217,13 @@ export function AuthCheckbox({
         />
         {checked && (
           <Check
-            className="pointer-events-none h-3 w-3 text-white"
+            className="pointer-events-none h-3 w-3 text-[#141414]"
             strokeWidth={3}
             aria-hidden
           />
         )}
       </span>
-      <label htmlFor={id} className="text-[12.5px] leading-[1.5] text-[#b6b4dd]">
+      <label htmlFor={id} className="text-[12.5px] leading-[1.5] text-[#A9A499]">
         {children}
       </label>
     </div>

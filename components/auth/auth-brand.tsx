@@ -19,14 +19,14 @@ import { PLAN_FEATURES, PRICING } from "@/lib/pricing";
 export function WelcomeNote() {
   return (
     <div className="flex items-center gap-3 rounded-panel border border-white/[0.1] bg-white/[0.05] px-4 py-3.5">
-      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-ctl bg-[#34d399]/[0.16]">
-        <Zap className="h-[17px] w-[17px] text-[#34d399]" aria-hidden />
+      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-ctl border border-[#E8B644]/[0.28] bg-[#1E1809]">
+        <Zap className="h-[17px] w-[17px] text-[#E8B644]" aria-hidden />
       </span>
       <div className="min-w-0">
         <div className="text-xs font-semibold leading-none text-white">
           While you were away
         </div>
-        <p className="mt-1.5 text-[11.5px] leading-[1.4] text-[#a5a2d0]">
+        <p className="mt-1.5 text-[11.5px] leading-[1.4] text-[#A9A499]">
           Your AI answers around the clock. Sign in to see what it handled.
         </p>
       </div>
@@ -46,7 +46,7 @@ const SETUP_STEPS = [
 export function SignupAside() {
   return (
     <div className="flex h-full flex-col">
-      <div className="text-[10.5px] font-bold uppercase leading-none tracking-[0.14em] text-[#8b88b8]">
+      <div className="text-[10.5px] font-bold uppercase leading-none tracking-[0.14em] text-[#8A8579]">
         What you get
       </div>
 
@@ -57,11 +57,11 @@ export function SignupAside() {
         <span className="font-display text-[30px] font-bold leading-none tabular-nums text-white">
           ${PRICING.monthly}
         </span>
-        <span className="text-[12.5px] font-medium leading-none text-[#b6b4dd]">
+        <span className="text-[12.5px] font-medium leading-none text-[#A9A499]">
           / month
         </span>
       </div>
-      <p className="mt-2 text-xs leading-[1.55] text-[#8b88b8]">
+      <p className="mt-2 text-xs leading-[1.55] text-[#A9A499]">
         Or ${PRICING.annualPerMonth}/mo billed yearly. No card to create your
         account, and you can cancel from Billing at any time.
       </p>
@@ -73,7 +73,7 @@ export function SignupAside() {
             className="flex gap-2 text-[12px] leading-[1.45] text-white"
           >
             <CheckCircle2
-              className="mt-px h-[15px] w-[15px] shrink-0 text-[#34d399]"
+              className="mt-px h-[15px] w-[15px] shrink-0 text-[#E8B644]"
               aria-hidden
             />
             {f}
@@ -90,12 +90,12 @@ export function SignupAside() {
 
       <div className="mt-6 rounded-panel border border-white/[0.09] bg-white/[0.05] px-4 py-3.5">
         <div className="flex items-center gap-2">
-          <Clock className="h-[15px] w-[15px] shrink-0 text-[#c084fc]" aria-hidden />
+          <Clock className="h-[15px] w-[15px] shrink-0 text-[#E8B644]" aria-hidden />
           <span className="font-display text-[11.5px] font-bold leading-none text-white">
             About 10 minutes to live
           </span>
         </div>
-        <p className="mt-2.5 text-[11.5px] leading-[1.5] text-[#b6b4dd]">
+        <p className="mt-2.5 text-[11.5px] leading-[1.5] text-[#A9A499]">
           {SETUP_STEPS.join(" · ")}
         </p>
       </div>

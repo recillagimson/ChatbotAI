@@ -21,5 +21,5 @@ export default function AuthLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <div className="min-h-dvh bg-[#15123a]">{children}</div>;
+  return <div className="min-h-dvh bg-[#0A0A0C]">{children}</div>;
 }

@@ -51,7 +51,7 @@ export default function ForgotPasswordPage() {
           </AuthNotice>
           <Link
             href="/login"
-            className="inline-flex items-center gap-2 text-[13px] font-semibold text-[#c084fc] transition-colors hover:text-white"
+            className="inline-flex items-center gap-2 text-[13px] font-semibold text-[#E8B644] transition-colors hover:text-[#F4F1EA]"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Back to sign in

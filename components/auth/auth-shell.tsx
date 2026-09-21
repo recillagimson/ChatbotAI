@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ArrowRight, Lock } from "lucide-react";
-import { BrandLockup } from "@/components/landing/brand-lockup";
 import { COMPANY } from "@/lib/company";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +11,11 @@ import { cn } from "@/lib/utils";
  * to decoration on every viewport; here the same gradient runs behind
  * everything and the card is the only object, so the form is centred at any
  * width instead of drifting further from centre the wider the display gets.
+ *
+ * The public landing wears the HighThrive.ai brand, so the auth screens do too
+ * (owner's call, 2026-09-21): the dark near-black + gold palette and the
+ * HighThrive lockup below match the landing. The app behind sign-in (dashboard,
+ * legal) is still SpeedSettr; the legal entity stays Speedsettr LLC.
  *
  * `aside` widens the card into two columns - the form on the left and a rail on
  * the right. Sign-up uses it to show what the money buys at the moment the
@@ -28,7 +32,7 @@ const FOOTER_LINKS = [
 ];
 
 export function AuthShell({
-  /** The bordered link in the top-right corner, e.g. "Create an account". */
+  /** The bordered link in the top-right corner, e.g. "Book a call". */
   cta,
   /** Optional right-hand rail. Present = the wide two-column card. */
   aside,
@@ -42,31 +46,66 @@ export function AuthShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grain relative flex min-h-dvh flex-col overflow-hidden bg-[#15123a] text-white">
+    <div className="grain relative flex min-h-dvh flex-col overflow-hidden bg-[#0A0A0C] text-[#F4F1EA]">
       {/* Backdrop. Absolute rather than a background on the flex container so a
           tall form (the sign-up card on a phone) scrolls over one wash instead
           of stretching the gradient's colour stops down the whole document. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(110%_90%_at_12%_0%,#2e2c6d_0%,#221f52_40%,#19163e_80%,#15123a_100%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_55%_at_78%_4%,rgba(232,182,68,0.13)_0%,rgba(232,182,68,0)_60%)]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-[60px] -top-[140px] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle,rgba(124,34,196,.3),transparent_68%)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-[200px] left-[120px] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle,rgba(83,85,203,.2),transparent_70%)]"
+        className="pointer-events-none absolute -bottom-[200px] left-[80px] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle,rgba(232,182,68,.08),transparent_70%)]"
       />
 
       <header className="relative flex items-center gap-3 px-5 py-5 sm:px-8">
-        <Link href="/" aria-label="SpeedSettr home" className="w-fit">
-          <BrandLockup size="sm" />
+        <Link
+          href="/"
+          aria-label="HighThrive.ai home"
+          className="flex w-fit items-center gap-2.5 text-[#F4F1EA]"
+        >
+          <svg
+            width="26"
+            height="26"
+            viewBox="0 0 100 100"
+            aria-hidden
+            className="block shrink-0"
+          >
+            <g
+              stroke="currentColor"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path
+                d="M14 48 L30 26 M30 26 L48 20 M14 48 L22 68 M22 68 L48 20"
+                strokeWidth="2"
+                opacity="0.6"
+              />
+              <polyline points="16,76 40,52 54,66 79,31" strokeWidth="9" />
+            </g>
+            <g fill="currentColor">
+              <circle cx="14" cy="48" r="5" />
+              <circle cx="30" cy="26" r="4" />
+              <circle cx="48" cy="20" r="5.5" />
+              <circle cx="22" cy="68" r="3.5" />
+              <polygon points="88,18 88,46 60,22" />
+            </g>
+          </svg>
+          <span className="flex flex-col leading-[1.15]">
+            <span className="text-[18px] font-semibold tracking-[-0.025em]">
+              HighThrive.ai
+            </span>
+            <span className="text-[10px] font-light uppercase tracking-[0.14em] text-[#8A8579]">
+              AI Setter &amp; Closer
+            </span>
+          </span>
         </Link>
         {cta && (
           <Link
             href={cta.href}
-            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-ctl-lg border border-white/[0.16] px-3.5 py-2.5 text-[12.5px] font-semibold leading-none text-white transition-colors hover:border-white/30 hover:bg-white/[0.06]"
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-full border border-[#F4F1EA]/[0.16] bg-[#F4F1EA]/[0.05] px-4 py-2.5 text-[13px] font-medium leading-none text-[#F4F1EA] transition-colors hover:border-[#F4F1EA]/30 hover:bg-[#F4F1EA]/10"
           >
             {cta.label}
             <ArrowRight className="h-4 w-4" aria-hidden />
@@ -80,7 +119,7 @@ export function AuthShell({
 
           <div
             className={cn(
-              "overflow-hidden rounded-[22px] border border-white/[0.11] bg-[#120f30] shadow-[0_50px_90px_-40px_rgba(0,0,0,.85)]",
+              "overflow-hidden rounded-[22px] border border-[#F4F1EA]/[0.1] bg-[#111216] shadow-[0_50px_90px_-40px_rgba(0,0,0,.85)]",
               aside && "md:flex"
             )}
           >
@@ -88,13 +127,13 @@ export function AuthShell({
                 unbreakable label) can push the card past its own max width. */}
             <div className="min-w-0 flex-1 p-6 sm:p-8">{children}</div>
             {aside && (
-              <div className="border-t border-white/[0.08] bg-white/[0.04] p-6 sm:p-8 md:w-[312px] md:shrink-0 md:border-l md:border-t-0">
+              <div className="border-t border-[#F4F1EA]/[0.08] bg-[#F4F1EA]/[0.03] p-6 sm:p-8 md:w-[312px] md:shrink-0 md:border-l md:border-t-0">
                 {aside}
               </div>
             )}
           </div>
 
-          <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2.5 px-1 text-[11.5px] leading-none text-[#8b88b8]">
+          <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2.5 px-1 text-[11.5px] leading-none text-[#8A8579]">
             <span className="flex items-center gap-1.5">
               <Lock className="h-[14px] w-[14px]" aria-hidden />
               Encrypted in transit
@@ -104,7 +143,7 @@ export function AuthShell({
                 <Link
                   key={href}
                   href={href}
-                  className="transition-colors hover:text-white"
+                  className="transition-colors hover:text-[#F4F1EA]"
                 >
                   {label}
                 </Link>
@@ -127,11 +166,11 @@ export function AuthHeading({
 }) {
   return (
     <div>
-      <h1 className="font-display text-[26px] font-bold leading-[1.15] tracking-[-0.02em] text-white sm:text-[28px]">
+      <h1 className="font-display text-[26px] font-bold leading-[1.15] tracking-[-0.02em] text-[#F4F1EA] sm:text-[28px]">
         {title}
       </h1>
       {children && (
-        <p className="mt-2.5 text-[13.5px] leading-[1.5] text-[#8b88b8]">
+        <p className="mt-2.5 text-[13.5px] leading-[1.5] text-[#A9A499]">
           {children}
         </p>
       )}

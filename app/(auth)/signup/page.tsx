@@ -121,8 +121,8 @@ export default function SignupPage() {
 
         <div className="mt-6 flex flex-col gap-4">
           <div className="flex items-start gap-3.5 rounded-chip border border-white/[0.1] bg-white/[0.05] px-4 py-4">
-            <MailCheck className="h-5 w-5 shrink-0 text-[#c084fc]" aria-hidden />
-            <p className="text-[13px] leading-[1.6] text-[#b6b4dd]">
+            <MailCheck className="h-5 w-5 shrink-0 text-[#E8B644]" aria-hidden />
+            <p className="text-[13px] leading-[1.6] text-[#A9A499]">
               We sent a confirmation link to{" "}
               <span className="font-semibold text-white">{email}</span>. Click it
               to activate your account, then sign in. If you don&apos;t see it,
@@ -131,7 +131,7 @@ export default function SignupPage() {
           </div>
           <Link
             href="/login"
-            className="flex w-full items-center justify-center rounded-chip bg-[linear-gradient(120deg,#7c22c4,#5355cb)] p-[15px] text-sm font-bold leading-none text-white shadow-[0_18px_36px_-16px_rgba(124,34,196,.95)] transition-[filter] hover:brightness-110"
+            className="flex w-full items-center justify-center rounded-full bg-[linear-gradient(145deg,#F2C85C,#C9952A)] p-[15px] text-sm font-semibold leading-none text-[#141414] shadow-[0_18px_36px_-16px_rgba(201,149,42,.7)] transition-[filter] hover:brightness-110"
           >
             Go to sign in
           </Link>
@@ -205,11 +205,11 @@ export default function SignupPage() {
 
         <AuthCheckbox id="terms" checked={agreed} onChange={setAgreed} required>
           I agree to the{" "}
-          <Link href="/terms" className="font-semibold text-[#c084fc] underline">
+          <Link href="/terms" className="font-semibold text-[#E8B644] underline">
             Terms
           </Link>{" "}
           and{" "}
-          <Link href="/privacy" className="font-semibold text-[#c084fc] underline">
+          <Link href="/privacy" className="font-semibold text-[#E8B644] underline">
             Privacy Policy
           </Link>
           .
@@ -225,7 +225,7 @@ export default function SignupPage() {
           Create account
         </AuthSubmit>
 
-        <p className="text-center text-[11.5px] leading-none text-[#8b88b8]">
+        <p className="text-center text-[11.5px] leading-none text-[#8A8579]">
           Next: confirm your email
         </p>
       </form>
@@ -242,12 +242,12 @@ function StepProgress({ step }: { step: number }) {
           key={label}
           className={`h-1 w-[26px] rounded-full ${
             i < step
-              ? "bg-[linear-gradient(90deg,#7c22c4,#5355cb)]"
+              ? "bg-[linear-gradient(90deg,#F2C85C,#C9952A)]"
               : "bg-white/[0.14]"
           }`}
         />
       ))}
-      <span className="ml-1.5 text-[10.5px] font-bold uppercase leading-none tracking-[0.06em] text-[#8b88b8]">
+      <span className="ml-1.5 text-[10.5px] font-bold uppercase leading-none tracking-[0.06em] text-[#8A8579]">
         Step {step} of {STEPS.length} · {STEPS[step - 1]}
       </span>
     </div>

@@ -49,11 +49,11 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      cta={{ href: "/signup", label: "Create an account" }}
+      cta={{ href: "/#book", label: "Book a call" }}
       above={<WelcomeNote />}
     >
       <AuthHeading title="Welcome back">
-        Sign in to see what your bot handled while you were away.
+        Sign in to see what your AI handled overnight.
       </AuthHeading>
 
       <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3.5">
@@ -94,7 +94,7 @@ export default function LoginPage() {
           action={
             <Link
               href="/forgot-password"
-              className="text-[11.5px] font-semibold leading-none text-[#c084fc] transition-colors hover:text-white"
+              className="text-[11.5px] font-semibold leading-none text-[#E8B644] transition-colors hover:text-[#F4F1EA]"
             >
               Forgot?
             </Link>
@@ -108,14 +108,15 @@ export default function LoginPage() {
         </AuthSubmit>
       </form>
 
-      <p className="mt-5 text-center text-[12.5px] leading-none text-[#8b88b8]">
+      <p className="mt-5 text-center text-[12.5px] leading-[1.5] text-[#A9A499]">
         New here?{" "}
         <Link
-          href="/signup"
-          className="font-semibold text-[#c084fc] transition-colors hover:text-white"
+          href="/#book"
+          className="font-semibold text-[#E8B644] transition-colors hover:text-[#F4F1EA]"
         >
-          Create an account
-        </Link>
+          Book a call
+        </Link>{" "}
+        and we&apos;ll set up your account on it.
       </p>
     </AuthShell>
   );
