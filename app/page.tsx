@@ -16,11 +16,12 @@ import { HomeJsonLd } from "@/components/seo/structured-data";
  * so the per-page title/OG below override the SpeedSettr defaults in
  * app/layout.tsx for this route only.
  *
- * CTAs: every "Book a call" scrolls to #book. When NEXT_PUBLIC_BOOKING_URL is a
- * GoHighLevel widget link, that section embeds the live GHL calendar inline (the
- * page's real booking surface); any other calendar URL opens in a new tab, and
- * with no URL set the button falls back to email. No fake on-page form. Set the
- * env in Vercel.
+ * CTAs: every "Book a call" button goes to /book-a-call, the standalone booking
+ * page (app/book-a-call/page.tsx). The #book section near the bottom still
+ * serves visitors who scroll: when NEXT_PUBLIC_BOOKING_URL is a GoHighLevel
+ * widget link it embeds the same GHL calendar inline; any other calendar URL
+ * opens in a new tab, and with no URL set the button falls back to email. No
+ * fake on-page form. Set the env in Vercel.
  */
 
 export const metadata: Metadata = {
@@ -205,9 +206,9 @@ export default function LandingPage() {
           >
             Sign in
           </Link>
-          <a href="#book" className={`${primaryCta} px-4 py-2.5 text-sm`}>
+          <Link href="/book-a-call" className={`${primaryCta} px-4 py-2.5 text-sm`}>
             Book a call
-          </a>
+          </Link>
         </nav>
       </header>
 
@@ -231,9 +232,9 @@ export default function LandingPage() {
               the conversation lands back with you.
             </p>
             <div className="mt-[30px] flex flex-wrap gap-2.5">
-              <a href="#book" className={`${primaryCta} px-6 py-3.5 text-[16px]`}>
+              <Link href="/book-a-call" className={`${primaryCta} px-6 py-3.5 text-[16px]`}>
                 Book a 15-min call <span aria-hidden>&rarr;</span>
-              </a>
+              </Link>
               <a
                 href="#product"
                 className="inline-flex items-center gap-2 rounded-full border border-[#F4F1EA]/[0.14] bg-[#F4F1EA]/[0.06] px-[22px] py-3.5 text-[16px] font-medium text-[#F4F1EA] transition-colors hover:bg-[#111216]"
@@ -319,12 +320,12 @@ export default function LandingPage() {
                 following up on one. Most of the messages worth money arrive when
                 nobody is watching the inbox.
               </p>
-              <a
-                href="#book"
+              <Link
+                href="/book-a-call"
                 className="mt-[26px] inline-flex items-center gap-2.5 text-[16px] font-semibold text-[#E8B644]"
               >
                 See it on your own account <span aria-hidden>&rarr;</span>
-              </a>
+              </Link>
             </div>
             <div className="rounded-[18px] border border-[#F4F1EA]/10 bg-[#111216] px-6 py-[22px]">
               <div className="text-[13px] text-[#8A8579]">
@@ -732,9 +733,9 @@ export default function LandingPage() {
                 Fifteen minutes with someone who sets these up every day.
               </div>
             </div>
-            <a href="#book" className={`${primaryCta} px-[22px] py-3.5 text-[15.5px]`}>
+            <Link href="/book-a-call" className={`${primaryCta} px-[22px] py-3.5 text-[15.5px]`}>
               Book a call <span aria-hidden>&rarr;</span>
-            </a>
+            </Link>
           </div>
         </section>
       </main>

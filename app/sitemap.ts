@@ -1,13 +1,14 @@
 import type { MetadataRoute } from "next";
 
 // sitemap.xml, emitted by Next's metadata route. Lists ONLY the public,
-// indexable URLs: the landing page and the six legal pages. NEVER add an
-// (auth)/(dashboard)/(admin)/api path here - those are private tenant surfaces
-// and must not be advertised to search engines.
+// indexable URLs: the landing page, the booking page and the six legal pages.
+// NEVER add an (auth)/(dashboard)/(admin)/api path here - those are private
+// tenant surfaces and must not be advertised to search engines.
 const BASE = "https://www.speedsettr.com";
 
 const PUBLIC_PATHS = [
   "/",
+  "/book-a-call",
   "/accessibility",
   "/advertising-disclosure",
   "/disclaimer",
@@ -21,7 +22,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return PUBLIC_PATHS.map((path) => ({
     url: `${BASE}${path}`,
     lastModified,
-    changeFrequency: path === "/" ? "weekly" : "yearly",
-    priority: path === "/" ? 1 : 0.4,
+    changeFrequency:
+      path === "/" ? "weekly" : path === "/book-a-call" ? "monthly" : "yearly",
+    priority: path === "/" ? 1 : path === "/book-a-call" ? 0.8 : 0.4,
   }));
 }

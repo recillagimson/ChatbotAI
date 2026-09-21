@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { PRICING } from "@/lib/pricing";
 
 /**
@@ -10,8 +11,8 @@ import { PRICING } from "@/lib/pricing";
  * screen can never quote different numbers. Amounts are formatted with an explicit
  * "en-US" locale so the server render and the client hydration match exactly.
  *
- * The CTA scrolls to the #book section (like every other CTA on the page); the
- * real calendar link lives on that section's button.
+ * The CTA goes to /book-a-call, the standalone booking page, like every other
+ * "Book a call" button on the site.
  */
 
 const INCLUSIONS = [
@@ -84,12 +85,12 @@ export function PricingPlans() {
             {note}
           </div>
 
-          <a
-            href="#book"
+          <Link
+            href="/book-a-call"
             className="mt-6 flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(145deg,#F2C85C,#C9952A)] px-5 py-3.5 text-[15.5px] font-semibold text-[#141414] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] transition-[filter] hover:brightness-105"
           >
             Book a call <span aria-hidden>&rarr;</span>
-          </a>
+          </Link>
           <div className="mt-3 text-center text-[12.5px] text-[#8A8579]">
             We&apos;ll set it up live on the call.
           </div>

@@ -49,7 +49,7 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      cta={{ href: "/#book", label: "Book a call" }}
+      cta={{ href: "/book-a-call", label: "Book a call" }}
       above={<WelcomeNote />}
     >
       <AuthHeading title="Welcome back">
@@ -111,7 +111,7 @@ export default function LoginPage() {
       <p className="mt-5 text-center text-[12.5px] leading-[1.5] text-[#A9A499]">
         New here?{" "}
         <Link
-          href="/#book"
+          href="/book-a-call"
           className="font-semibold text-[#E8B644] transition-colors hover:text-[#F4F1EA]"
         >
           Book a call
