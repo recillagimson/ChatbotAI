@@ -3,9 +3,12 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
- * The link-preview card. Whenever speedsettr.com is pasted into iMessage,
- * Messenger, WhatsApp, Slack, LinkedIn, X or a Google result, this is the image
- * that renders above the title.
+ * The link-preview card. Whenever the site is pasted into iMessage, Messenger,
+ * WhatsApp, Slack, LinkedIn, X or a Google result, this is the image that
+ * renders above the title.
+ *
+ * It wears the HighThrive.ai brand to match the public landing (app/page.tsx):
+ * near-black + gold, the rising-arrow mark, and the hero headline.
  *
  * Built with next/og (Satori) rather than a hand-exported PNG so the copy and
  * the brand colours stay in one place - edit the strings below and every
@@ -17,28 +20,50 @@ import { join } from "node:path";
  */
 
 export const alt =
-  "SpeedSettr - AI that answers your Instagram, Facebook and TikTok DMs in seconds";
+  "HighThrive.ai - AI that answers your DMs while you sleep";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Brand tokens, mirrored from globals.css / the landing page.
-const NAVY = "#15123a";
-const CARD_EDGE = "#2e2c6d";
-const INDIGO = "#6366f1";
-const INDIGO_SOFT = "#a5b4fc";
-const MUTED = "#b6b4dd";
+// Brand tokens, mirrored from the landing page.
+const PAGE = "#0A0A0C";
+const GOLD = "#E8B644";
+const GOLD_SOFT = "#D9B262";
+const INK = "#F4F1EA";
+const MUTED = "#A9A499";
+
+/** The HighThrive.ai mark (same geometry as components/brand/highthrive-mark.tsx). */
+function Mark({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100">
+      <g
+        stroke={GOLD}
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path
+          d="M14 48 L30 26 M30 26 L48 20 M14 48 L22 68 M22 68 L48 20"
+          strokeWidth="2"
+          opacity="0.6"
+        />
+        <polyline points="16,76 40,52 54,66 79,31" strokeWidth="9" />
+      </g>
+      <g fill={GOLD}>
+        <circle cx="14" cy="48" r="5" />
+        <circle cx="30" cy="26" r="4" />
+        <circle cx="48" cy="20" r="5.5" />
+        <circle cx="22" cy="68" r="3.5" />
+        <polygon points="88,18 88,46 60,22" />
+      </g>
+    </svg>
+  );
+}
 
 export default async function OpengraphImage() {
-  const [display, body, logo] = await Promise.all([
+  const [display, body] = await Promise.all([
     readFile(join(process.cwd(), "assets/fonts/Outfit-ExtraBold.ttf")),
     readFile(join(process.cwd(), "assets/fonts/PlusJakartaSans-SemiBold.ttf")),
-    readFile(join(process.cwd(), "public/brand/logo-lockup.png")),
   ]);
-
-  // The full-colour lockup on a white chip - the same treatment the app uses on
-  // every dark surface (sidebar, hero, auth panel), so the navy "SPEED" in the
-  // wordmark stays legible here too.
-  const logoSrc = `data:image/png;base64,${logo.toString("base64")}`;
 
   return new ImageResponse(
     (
@@ -49,10 +74,11 @@ export default async function OpengraphImage() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: "68px 72px",
-          backgroundColor: NAVY,
-          backgroundImage: `radial-gradient(110% 80% at 12% 0%, ${CARD_EDGE} 0%, #221f52 42%, #19163e 82%, ${NAVY} 100%)`,
+          padding: "64px 72px",
+          backgroundColor: PAGE,
+          backgroundImage: `radial-gradient(90% 75% at 100% 0%, #2A2110 0%, #16130C 45%, ${PAGE} 100%)`,
           fontFamily: "Jakarta",
+          color: INK,
           position: "relative",
         }}
       >
@@ -66,7 +92,7 @@ export default async function OpengraphImage() {
               bottom: 0,
               left: (i + 1) * 100,
               width: 1,
-              backgroundColor: "rgba(255,255,255,0.035)",
+              backgroundColor: "rgba(244,241,234,0.03)",
             }}
           />
         ))}
@@ -79,49 +105,35 @@ export default async function OpengraphImage() {
               right: 0,
               top: (i + 1) * 105,
               height: 1,
-              backgroundColor: "rgba(255,255,255,0.035)",
+              backgroundColor: "rgba(244,241,234,0.03)",
             }}
           />
         ))}
 
-        {/* Indigo glow, top-right, matching the hero orb. */}
-        <div
-          style={{
-            position: "absolute",
-            top: -190,
-            right: -140,
-            width: 620,
-            height: 620,
-            borderRadius: 620,
-            background:
-              "radial-gradient(circle, rgba(99,102,241,0.34), rgba(99,102,241,0) 68%)",
-          }}
-        />
-
-        {/* Top: logo chip + status pill */}
+        {/* Top: brand + eyebrow pill */}
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <Mark size={52} />
             <div
               style={{
                 display: "flex",
-                backgroundColor: "#ffffff",
-                borderRadius: 18,
-                padding: "13px 20px",
+                fontSize: 34,
+                letterSpacing: -0.8,
+                color: GOLD,
               }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={logoSrc} width={193} height={56} alt="SpeedSettr" />
+              HighThrive.ai
             </div>
           </div>
 
-          <div style={{ display: "flex", marginTop: 26 }}>
+          <div style={{ display: "flex", marginTop: 30 }}>
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                border: "1px solid rgba(165,180,252,0.34)",
-                backgroundColor: "rgba(99,102,241,0.16)",
+                border: "1px solid rgba(232,182,68,0.34)",
+                backgroundColor: "rgba(232,182,68,0.10)",
                 borderRadius: 999,
                 padding: "9px 18px",
               }}
@@ -131,40 +143,37 @@ export default async function OpengraphImage() {
                   width: 9,
                   height: 9,
                   borderRadius: 9,
-                  backgroundColor: "#34d399",
+                  backgroundColor: "#2F9E6B",
                 }}
               />
               <div
                 style={{
                   fontSize: 19,
                   letterSpacing: 1.6,
-                  color: INDIGO_SOFT,
+                  color: GOLD_SOFT,
                   textTransform: "uppercase",
                 }}
               >
-                AI DM Replies · Live in 10 Minutes
+                AI Setter &amp; Closer for your DMs
               </div>
             </div>
           </div>
         </div>
 
         {/* Headline */}
-        <div style={{ display: "flex", flexDirection: "column", marginTop: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <div
             style={{
               display: "flex",
               flexDirection: "column",
               fontFamily: "Outfit",
-              fontSize: 82,
+              fontSize: 84,
               lineHeight: 1.04,
-              letterSpacing: -2.4,
-              color: "#ffffff",
+              letterSpacing: -2.6,
             }}
           >
-            <div style={{ display: "flex" }}>Never Miss a DM.</div>
-            <div style={{ display: "flex", color: INDIGO_SOFT }}>
-              Never Miss a Sale.
-            </div>
+            <div style={{ display: "flex" }}>Your DMs get answered</div>
+            <div style={{ display: "flex", color: GOLD }}>while you sleep.</div>
           </div>
 
           <div
@@ -173,8 +182,8 @@ export default async function OpengraphImage() {
               width: 132,
               height: 7,
               borderRadius: 7,
-              marginTop: 30,
-              background: `linear-gradient(90deg, ${INDIGO}, rgba(99,102,241,0))`,
+              marginTop: 28,
+              background: `linear-gradient(90deg, ${GOLD}, rgba(232,182,68,0))`,
             }}
           />
         </div>
@@ -188,17 +197,17 @@ export default async function OpengraphImage() {
           }}
         >
           <div style={{ display: "flex", fontSize: 22, color: MUTED }}>
-            Answers in seconds · Trained on your business · You take over any time
+            Replies in seconds · Trained on your business · Books the calls
           </div>
           <div
             style={{
               display: "flex",
               fontFamily: "Outfit",
               fontSize: 26,
-              color: INDIGO_SOFT,
+              color: GOLD,
             }}
           >
-            speedsettr.com
+            highthrive.ai
           </div>
         </div>
       </div>
