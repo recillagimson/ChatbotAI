@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition } from "react";
+import { useManychatFlows } from "@/components/dashboard/use-manychat-flows";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -31,31 +32,8 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [flows, setFlows] = useState<{ ns: string; name: string }[] | null>(null);
-  const [flowsError, setFlowsError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    fetch(`/api/chatbots/${chatbot.id}/manychat-flows`)
-      .then(async (r) => {
-        const j = await r.json().catch(() => null);
-        if (!alive) return;
-        if (r.ok && Array.isArray(j?.flows)) setFlows(j.flows);
-        else {
-          setFlows([]);
-          setFlowsError(j?.error ?? "Couldn't load your ManyChat flows.");
-        }
-      })
-      .catch(() => {
-        if (alive) {
-          setFlows([]);
-          setFlowsError("Couldn't load your ManyChat flows.");
-        }
-      });
-    return () => {
-      alive = false;
-    };
-  }, [chatbot.id]);
+  // Shared with the Link and Follow-up forms on this tab: one request, not three.
+  const { flows, flowsError } = useManychatFlows(chatbot.id);
 
   function markDirty() {
     setDirty(true);

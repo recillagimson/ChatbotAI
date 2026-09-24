@@ -20,6 +20,9 @@ export default defineConfig({
       "tests/handoff-detect*.spec.ts",
       "tests/openai-retry*.spec.ts",
       "tests/dashboard-row-bounds*.spec.ts",
+      "tests/analytics-identity*.spec.ts",
+      "tests/manychat-flows*.spec.ts",
+      "tests/cache-live-reads*.spec.ts",
     ],
   },
   resolve: {

@@ -254,7 +254,13 @@ export default async function StatisticsPage({
 const getOverviewCached = cache(
   async (from: string, to: string, chatbotId: string | null) => {
     const supabase = await createClient();
-    return getAnalyticsOverview(supabase, { from, to, chatbotId });
+    // The EFFECTIVE user, not the JWT's: under "View as client" the JWT is the
+    // superadmin's, and passing nothing made this report the superadmin's own
+    // account. getCurrentUser is React-cached, so this adds no round trip, and
+    // it is fixed for the life of a request, so it need not join the cache key.
+    const user = await getCurrentUser();
+    if (!user) return { overview: null, problem: "failed" as const };
+    return getAnalyticsOverview(supabase, { from, to, chatbotId, userId: user.id });
   },
 );
 

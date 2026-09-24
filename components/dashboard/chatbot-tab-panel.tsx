@@ -106,6 +106,12 @@ export async function ChatbotTabPanel({
           from: month.from,
           to: month.to,
           chatbotId: id,
+          // The bot's OWNER. Under "View as client" the JWT on `supabase` is
+          // the superadmin's, so without this the Overview tab's median
+          // response time and delivery failures were the superadmin's own
+          // account's, not the client's. (The /admin per-bot page never renders
+          // this tab: it uses EDITING_CHATBOT_TABS, which excludes Overview.)
+          userId: ownerId,
         }),
       ]);
     kbCount = kb ?? 0;

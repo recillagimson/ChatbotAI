@@ -1,3 +1,13 @@
+-- =============================================================================
+-- SUPERSEDED by 2026-09-25-analytics-effective-user.sql once that is applied.
+-- DO NOT RE-RUN THIS FILE OR ITS ROLLBACK BLOCK AFTER THAT. Both CREATE OR
+-- REPLACE the 3-argument analytics_overview, but 09-25 changed the signature to
+-- 4 arguments (adding p_user_id), so this would add a SECOND overload beside it
+-- and every 3-argument call would fail as ambiguous (PGRST203). Kept as the
+-- record of the Phase 1 performance rewrite; the body lives on unchanged in
+-- 09-25 apart from how rows are scoped.
+-- =============================================================================
+--
 -- Phase 1 / plan 01-03: rewrite analytics_overview to drop its correlated subqueries.
 --
 -- THE PROBLEM

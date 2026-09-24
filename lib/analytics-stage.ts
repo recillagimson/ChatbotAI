@@ -56,6 +56,11 @@ export async function loadStageMembers(
       to,
       chatbotId,
       limit,
+      // Same userId the "subscribed" branch below already filters by. Before
+      // this was passed, the RPC scoped by the JWT instead, so under "View as
+      // client" these three stages came from one account and subscribed from
+      // another, inside the same drill-down.
+      userId,
     });
     return list.map((r) => ({
       id: r.id,

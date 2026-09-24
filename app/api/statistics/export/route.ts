@@ -86,6 +86,9 @@ export async function GET(request: NextRequest) {
         // The funnel's own drill-down pages 8 at a time; an export is the place
         // where you want the whole stage, so ask for a real ceiling instead.
         limit: 5000,
+        // The effective user. Without it, under "View as client" this CSV listed
+        // the SUPERADMIN'S OWN contacts under the client's name.
+        userId: user.id,
       });
       rows = list.map((r) => ({
         id: r.id,
@@ -134,6 +137,7 @@ export async function GET(request: NextRequest) {
     from,
     to,
     chatbotId,
+    userId: user.id,
   });
 
   if (!overview) {

@@ -63,11 +63,17 @@ export default async function DashboardPage({
 
   const [current, previous, { data: attention }, { count: repliesThisMonth }, { rows: tagRows }] =
     await Promise.all([
-      getAnalyticsOverview(supabase, { from: week.from, to: week.to, chatbotId: botId }),
+      getAnalyticsOverview(supabase, {
+        from: week.from,
+        to: week.to,
+        chatbotId: botId,
+        userId: user!.id,
+      }),
       getAnalyticsOverview(supabase, {
         from: prevFrom.toISOString(),
         to: prevTo.toISOString(),
         chatbotId: botId,
+        userId: user!.id,
       }),
       // The queue: threads where the AI stepped back and a human should close.
       (() => {

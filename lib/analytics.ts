@@ -106,14 +106,27 @@ const MISSING_FN_CODES = new Set(["PGRST202", "PGRST203", "42883"]);
 /** Postgres: canceling statement due to statement timeout. */
 const TIMEOUT_CODE = "57014";
 
+/**
+ * The report is for `opts.userId`, the EFFECTIVE user whose dashboard is being
+ * shown (getCurrentUser().id, or a bot's owner) - NOT whoever's JWT is on
+ * `supabase`. Those differ under "View as client", where the JWT is the
+ * superadmin's. Before p_user_id existed the RPC scoped by the JWT, so every
+ * analytics surface viewed-as a client showed the superadmin's own account.
+ *
+ * `userId` is required on purpose: a missing identity is a type error, not a
+ * silent fallback to the JWT. The database, not this code, enforces who may
+ * ask: analytics_scope_uid() honours p_user_id only for self or a superadmin
+ * and raises 42501 otherwise, with RLS still applying underneath.
+ */
 export async function getAnalyticsOverview(
   supabase: ServerClient,
-  opts: { from: string; to: string; chatbotId?: string | null }
+  opts: { from: string; to: string; chatbotId?: string | null; userId: string }
 ): Promise<AnalyticsResult> {
   const { data, error } = await supabase.rpc("analytics_overview", {
     p_from: opts.from,
     p_to: opts.to,
     p_chatbot_id: opts.chatbotId ?? null,
+    p_user_id: opts.userId,
   });
   if (error) {
     console.error("[analytics] overview failed", error);
@@ -132,9 +145,18 @@ export function classifyAnalyticsError(error: {
   return "failed";
 }
 
+/** Same identity contract as getAnalyticsOverview: the list is `opts.userId`'s. */
 export async function getStageConversations(
   supabase: ServerClient,
-  opts: { stage: FunnelStage; from: string; to: string; chatbotId?: string | null; limit?: number; offset?: number }
+  opts: {
+    stage: FunnelStage;
+    from: string;
+    to: string;
+    chatbotId?: string | null;
+    limit?: number;
+    offset?: number;
+    userId: string;
+  }
 ): Promise<StageConversation[]> {
   const { data, error } = await supabase.rpc("analytics_stage_conversations", {
     p_stage: opts.stage,
@@ -143,6 +165,7 @@ export async function getStageConversations(
     p_chatbot_id: opts.chatbotId ?? null,
     p_limit: opts.limit ?? 6,
     p_offset: opts.offset ?? 0,
+    p_user_id: opts.userId,
   });
   if (error) {
     console.error("[analytics] stage list failed", error);

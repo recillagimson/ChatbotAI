@@ -416,6 +416,23 @@ export async function POST(request: NextRequest) {
   // Auth is the per-chatbot webhook_secret (verified in 3a). We no longer hard-
   // match page_id: a single chatbot now spans channels (IG/Messenger/etc.) each
   // with its OWN ManyChat page_id, so a single stored page_id can't gate them all.
+  //
+  // DO NOT CACHE (chatbots row). Read live from Postgres on every inbound DM. Never put
+  // it behind Redis, unstable_cache or any other cross-request cache:
+  //  - It IS the auth check. webhook_secret is verified against this row just below, and
+  //    .eq("is_active", true) is the owner's off switch. A cached row keeps a rotated
+  //    secret working, and keeps a bot the owner just switched OFF replying, for the TTL.
+  //  - No server code can invalidate it. is_active, keyword_triggers, reply_model, the
+  //    welcome and link-flow settings and the prompt sections are written straight from
+  //    the BROWSER over PostgREST (ai-live-toggle, bot-active-toggle, keyword-triggers-
+  //    form, model-controls, chatbot-edit-form and others), so our code never sees them.
+  //  - user_id decides which account every row below is written to, and it changes when
+  //    a bot is transferred to another account.
+  //  - buildKbBlock rewrites retrieval_active whenever it differs from THIS row, so a
+  //    stale copy would rewrite that flag on every message.
+  //  - It is a primary-key lookup (0.16 ms in Postgres). Redis would trade one HTTP round
+  //    trip for another and save nothing.
+  // Enforced by tests/cache-live-reads.spec.ts.
   const { data: chatbot } = await supabase
     .from("chatbots")
     .select("*")
@@ -452,6 +469,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // DO NOT CACHE (subscriptions). Read live from Postgres on every inbound DM. Never put
+  // it behind Redis, unstable_cache or any other cross-request cache. This is the billing
+  // gate:
+  //  - A cancelled, unpaid or revoked account must stop spending model tokens on its very
+  //    next DM, and an account that just paid must get answered on its very next DM. A
+  //    TTL makes both wrong for its whole length, and the first one costs money.
+  //  - It has four writers: the Stripe webhook and the /billing checkout-success
+  //    reconcile (both through lib/billing.ts upsertSubscriptionRow), the admin
+  //    grant/revoke route, and hand edits in the Supabase dashboard. Hand edits can never
+  //    trigger an invalidation hook.
+  //  - hasActiveAccess already checks comp_expires_at against the clock, so a comp grant
+  //    expires on time without a refresh.
+  //  - It is an index lookup (0.11 ms in Postgres). A cache would save nothing.
+  // Enforced by tests/cache-live-reads.spec.ts.
   const { data: subscription } = await supabase
     .from("subscriptions")
     .select("status, comp_expires_at")

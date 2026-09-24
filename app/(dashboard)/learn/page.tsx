@@ -92,6 +92,7 @@ async function LearnBody({ sp }: { sp: { bot?: string; category?: string } }) {
       from: month.from,
       to: month.to,
       chatbotId: botId,
+      userId: user!.id,
     }),
     supabase
       .from("knowledge_base")

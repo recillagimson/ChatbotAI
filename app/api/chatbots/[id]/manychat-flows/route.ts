@@ -3,6 +3,11 @@ import { resolveChatbotAccess, ownerScope } from "@/lib/chatbot-access";
 import { resolveManychatApiKey, listManychatFlows } from "@/lib/manychat";
 
 export const runtime = "nodejs";
+// Records intent rather than fixing anything: on Next 15.0.7 this handler is
+// already dynamic (it reads cookies via resolveChatbotAccess, and GET route
+// handlers are no longer cached by default). It matches the other
+// authenticated handlers and survives a future Next default flipping back.
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/chatbots/[id]/manychat-flows
@@ -45,7 +50,9 @@ export async function GET(
 
   try {
     const flows = await listManychatFlows(apiKey);
-    return NextResponse.json({ flows });
+    // A tenant's flow list must never be stored by a CDN, a proxy or the
+    // browser's HTTP cache, where it could be served back to someone else.
+    return NextResponse.json({ flows }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (err) {
     return NextResponse.json(
       { error: "Couldn't load your ManyChat flows.", detail: err instanceof Error ? err.message : "error" },

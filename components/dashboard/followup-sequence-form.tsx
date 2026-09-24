@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition } from "react";
+import { useManychatFlows } from "@/components/dashboard/use-manychat-flows";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -49,22 +50,10 @@ export function FollowupSequenceForm({
   const [saved, setSaved] = useState(false);
   // Any edit flips dirty until a successful save - surfaced next to the Save button.
   const [dirty, setDirty] = useState(false);
-  // ManyChat flows for the per-step "deliver via flow" picker (Option B). Loaded
-  // once; null = loading, [] = none/failed (the picker just doesn't render).
-  const [flows, setFlows] = useState<{ ns: string; name: string }[] | null>(null);
-  const [flowsError, setFlowsError] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    fetch(`/api/chatbots/${chatbot.id}/manychat-flows`)
-      .then(async (r) => {
-        const j = await r.json().catch(() => null);
-        if (!alive) return;
-        if (r.ok && Array.isArray(j?.flows)) setFlows(j.flows);
-        else { setFlows([]); setFlowsError(j?.error ?? "Couldn't load your ManyChat flows."); }
-      })
-      .catch(() => { if (alive) { setFlows([]); setFlowsError("Couldn't load your ManyChat flows."); } });
-    return () => { alive = false; };
-  }, [chatbot.id]);
+  // ManyChat flows for the per-step "deliver via flow" picker (Option B), shared
+  // with the Welcome and Link forms on this tab so the three make one request.
+  // null = loading, [] = none/failed (the picker just doesn't render).
+  const { flows, flowsError } = useManychatFlows(chatbot.id);
 
   function markDirty() {
     setDirty(true);
