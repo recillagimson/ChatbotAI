@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, LifeBuoy, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import { SUPPORT_CONTACTS, SUPPORT_HOURS } from "@/lib/support-contacts";
 import { HighThriveLockup } from "@/components/brand/highthrive-mark";
 import {
@@ -60,6 +59,13 @@ export function SidebarNav({
       : ACCOUNT_NAV;
 
   async function signOut() {
+    // Imported here rather than at module scope on purpose. This component is
+    // in the dashboard shell, so a static import put the whole Supabase browser
+    // SDK (249 kB raw, measured) into the FIRST LOAD of every dashboard route -
+    // to serve a click most sessions never make. Deferring it to the handler
+    // moves the SDK into a chunk fetched on sign-out instead. Nothing here
+    // gates rendering on auth state, so there is no flash of wrong UI.
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     await supabase.auth.signOut();
     onNavigate?.();

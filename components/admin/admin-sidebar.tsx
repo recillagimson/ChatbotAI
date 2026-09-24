@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import { HighThriveLockup } from "@/components/brand/highthrive-mark";
 
 /** Live counts for the rail badges (pending change requests, new feedback). */
@@ -58,6 +57,10 @@ const ADMIN_ITEMS: AdminNavItem[] = [
 function useSignOut() {
   const router = useRouter();
   return async () => {
+    // Deferred like the client-side shell: AdminSidebar is reached from
+    // app/(admin)/layout.tsx, so a static import put the Supabase browser SDK
+    // into the first load of every admin route to serve one sign-out click.
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");

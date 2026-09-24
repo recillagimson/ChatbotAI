@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 
 /**
  * The workspace master switch - "AI replies are live".
@@ -38,6 +37,12 @@ export function AiLiveToggle({
     const next = !on;
     setOn(next); // optimistic
     setError(null);
+    // Deferred like the two sign-out handlers: this toggle sits in the dashboard
+    // shell via Topbar, so a static import put the Supabase browser SDK in the
+    // first load of every dashboard route. The switch has already moved
+    // optimistically by this line, so the extra module fetch is invisible; a
+    // failure still rolls the switch back below.
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     const { error: dbError } = await supabase
       .from("chatbots")

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Script from "next/script";
+import { JetBrains_Mono } from "next/font/google";
 import { COMPANY } from "@/lib/company";
 import { PricingPlans } from "@/components/landing/pricing-plans";
 import { Faq } from "@/components/landing/faq";
@@ -146,6 +147,19 @@ function BrandMark({ size = 26 }: { size?: number }) {
   );
 }
 
+// Declared here, not in app/layout.tsx, because this page and /book-a-call are
+// the only two that paint it. next/font preloads one file per family for every
+// route under the layout that declares it, so keeping it in the root layout
+// cost every signed-in route a 30.6 kB preload it never used. The .variable
+// class goes on this page's root wrapper below, which encloses every `mono`
+// user, so --font-mono resolves exactly as before.
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+  weight: ["400", "500"],
+});
+
 const container = "mx-auto max-w-[1120px] px-6";
 const primaryCta =
   "inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(145deg,#F2C85C,#C9952A)] font-semibold text-[#141414] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] transition hover:brightness-105";
@@ -156,7 +170,7 @@ export default function LandingPage() {
 
   return (
     <div
-      className="min-h-dvh font-[family-name:var(--font-display)] text-[#F4F1EA] antialiased"
+      className={`${jetbrainsMono.variable} min-h-dvh font-[family-name:var(--font-display)] text-[#F4F1EA] antialiased`}
       style={{
         backgroundColor: "#0A0A0C",
         backgroundImage:

@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { SsCard } from "@/components/ss/card";
 import { SsButton, SsChip } from "@/components/ss/controls";
 import { Trash2, Pencil, Check, X, Loader2 } from "lucide-react";
@@ -102,6 +101,11 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
     if (!confirm("Delete this knowledge entry?")) return;
     setRemoved((s) => new Set(s).add(id));
     startTransition(async () => {
+      // Same deferral as the dashboard shell: this delete is the only Supabase
+      // call in the file, so a static import pulled the whole browser SDK into
+      // the first load of /knowledge-base. The row is already hidden
+      // optimistically above, and a failure restores it below.
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const { error } = await supabase
         .from("knowledge_base")

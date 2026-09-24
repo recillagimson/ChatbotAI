@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Script from "next/script";
+import { JetBrains_Mono } from "next/font/google";
 import { COMPANY } from "@/lib/company";
 import { HighThriveMark } from "@/components/brand/highthrive-mark";
 
@@ -47,6 +48,17 @@ const ON_THE_CALL = [
   "You see it answer an actual message before the call ends",
 ];
 
+// Declared here rather than in app/layout.tsx: this page and the landing are
+// the only two that paint it, and a root-layout declaration made every
+// signed-in route preload a 30.6 kB family it never uses. The .variable class
+// goes on the root wrapper below, which encloses every `mono` user here.
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+  weight: ["400", "500"],
+});
+
 const container = "mx-auto w-full max-w-[1120px] px-6";
 const mono = "font-[family-name:var(--font-mono)]";
 
@@ -56,7 +68,7 @@ export default function BookACallPage() {
 
   return (
     <div
-      className="flex min-h-dvh flex-col font-[family-name:var(--font-display)] text-[#F4F1EA] antialiased"
+      className={`${jetbrainsMono.variable} flex min-h-dvh flex-col font-[family-name:var(--font-display)] text-[#F4F1EA] antialiased`}
       style={{
         backgroundColor: "#0A0A0C",
         backgroundImage:

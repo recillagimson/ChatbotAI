@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { Bell, ChevronDown, LogOut, Search, Settings, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { AiLiveToggle } from "@/components/dashboard/ai-live-toggle";
 import { BotSwitcher } from "@/components/dashboard/bot-switcher";
@@ -100,6 +99,12 @@ function UserMenu({
   const initial = first.charAt(0).toUpperCase() || "?";
 
   async function signOut() {
+    // Deferred for the same reason as sidebar-nav.tsx: Topbar is in the
+    // dashboard shell, so a static import of the Supabase browser SDK landed in
+    // the first load of every dashboard route for a sign-out click most
+    // sessions never make. No auth-state subscription lives here, so moving the
+    // fetch to the handler changes nothing a user can see.
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");
