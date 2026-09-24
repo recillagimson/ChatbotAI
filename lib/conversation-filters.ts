@@ -114,7 +114,10 @@ export function buildConversationsHref(
   const page = "page" in patch ? Math.max(1, Math.floor(patch.page ?? 1) || 1) : 1;
   const params = new URLSearchParams();
   if (m.platform) params.set("platform", m.platform);
-  if (m.chatbot) params.set("chatbot", m.chatbot);
+  // Written as `?bot=`, the same param the shell's BotSwitcher reads, so the
+  // switcher chip keeps showing the scoped bot after a filter click. `?chatbot=`
+  // is still read (lib/inbox-params.ts) for old bookmarks, never written.
+  if (m.chatbot) params.set("bot", m.chatbot);
   if (m.tag) params.set("tag", m.tag);
   if (m.quality) params.set("quality", m.quality);
   if (m.range) params.set("range", m.range);

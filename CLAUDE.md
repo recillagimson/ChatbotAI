@@ -2,6 +2,8 @@
 
 > This file is auto-loaded every time Claude opens this project. It tells future Claude (or a fresh session) where we are and what's next. **Read this first.**
 
+**Codemaps:** before exploring the code, read `docs/CODEMAPS/architecture.md`, then the one map that fits the task (`backend.md`, `frontend.md`, `data.md`, `dependencies.md`). They are local only (`docs/` is gitignored). If they are missing or their header date is old, regenerate them with `/ecc:update-codemaps`.
+
 ## What this project is
 
 A SaaS platform (**SpeedSettr** - www.speedsettr.com) that auto-replies to Instagram and Messenger DMs using AI. Setty.ai-style. Small businesses subscribe at $997/mo and get a chatbot trained on their FAQ.

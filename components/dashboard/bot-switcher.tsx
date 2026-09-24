@@ -61,7 +61,9 @@ function BotSwitcherInner({
   // Scope lives in the URL, and the switcher sits in the layout - which can't
   // read searchParams - so it resolves its own. An id that isn't in this user's
   // bot list falls back to "All chatbots" rather than showing a phantom scope.
-  const requested = params.get("bot");
+  // `?chatbot=` is the inbox's legacy spelling (old bookmarks); read it too so
+  // the chip matches what lib/inbox-params.ts scopes the list to.
+  const requested = params.get("bot") ?? params.get("chatbot");
   const active = bots.find((b) => b.id === requested) ?? null;
   const scopedBotId = active?.id ?? null;
   const totalThreads = bots.reduce((s, b) => s + b.threads, 0);
@@ -101,6 +103,9 @@ function BotSwitcherInner({
     const next = new URLSearchParams(params.toString());
     if (botId) next.set("bot", botId);
     else next.delete("bot");
+    // Drop the legacy spelling too, or "All chatbots" would leave the inbox
+    // still scoped by a stale `?chatbot=`.
+    next.delete("chatbot");
     // Switching scope invalidates any page cursor you were on.
     next.delete("page");
     const qs = next.toString();

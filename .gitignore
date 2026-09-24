@@ -18,6 +18,7 @@ next-env.d.ts
 scripts/
 docs/
 .sdd-briefs/
+.reports/
 
 # local env backups
 .env*.bak*
