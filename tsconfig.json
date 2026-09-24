@@ -17,5 +17,9 @@
     "paths": { "@/*": ["./*"] }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // scripts/ is gitignored (116 local diagnostic files, zero tracked), so Vercel
+  // never receives it. But "include": ["**/*.ts"] made `next build` typecheck it
+  // anyway, so a rotted local script failed the local build while CI stayed
+  // green. Excluding it makes the local build reproduce the Vercel build.
+  "exclude": ["node_modules", "scripts"]
 }
