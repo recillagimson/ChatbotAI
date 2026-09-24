@@ -9,6 +9,7 @@ import { PageBody, PageHeader, PageShell, EmptyState } from "@/components/ss/pag
 import { SsCard } from "@/components/ss/card";
 import { SsLinkButton } from "@/components/ss/controls";
 import { num } from "@/lib/format";
+import { KB_PREVIEW_CHARS, KB_LIST_MAX_ENTRIES } from "@/lib/kb-config";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ async function KnowledgeBaseBody({ sp }: { sp: { bot?: string } }) {
   const workspace = await getWorkspace(sp.bot ?? null);
   const botId = workspace?.scopedBotId ?? null;
 
-  const [{ data: chatbots }, { data: entries }] = await Promise.all([
+  const [{ data: chatbots }, { data: kbRows }] = await Promise.all([
     supabase
       .from("chatbots")
       .select("id, name")
@@ -60,12 +61,43 @@ async function KnowledgeBaseBody({ sp }: { sp: { bot?: string } }) {
       .order("created_at"),
     supabase
       .from("knowledge_base")
-      .select("*, chatbots(name)")
+      .select(
+        "id, chatbot_id, title, source_type, indexed, needs_review, created_at, content, chatbots(name)"
+      )
       .eq("user_id", user!.id)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(KB_LIST_MAX_ENTRIES),
   ]);
 
-  const all = entries ?? [];
+  // Trim the bodies HERE rather than in the query: PostgREST's select syntax has
+  // no `left(content, n)` - it supports aliases and casts, not arbitrary SQL
+  // functions - so a server-side trim would need a generated column plus a schema
+  // reload. The Postgres -> server hop still carries the full text, but that is
+  // intra-region (functions syd1, project ap-southeast-2). What this removes is
+  // the BROWSER payload, which carried every entry's whole body twice per load,
+  // once in the SSR HTML and once again in the RSC flight payload, bounded by
+  // nothing but MAX_KB_CHARS_PER_CHATBOT. The editor fetches the real text
+  // per-entry from GET /api/knowledge-base/[id].
+  //
+  // The `chatbots(name)` embed is a to-one object at runtime, but the untyped
+  // client infers an ARRAY for it, so normalize defensively - same treatment as
+  // app/(admin)/admin/clients/[id]/page.tsx:195-204. This only became visible
+  // once the select stopped being `*`, which had collapsed the whole row to `any`.
+  const all = ((kbRows ?? []) as unknown as Array<{
+    id: string;
+    chatbot_id: string;
+    title: string;
+    content: string | null;
+    source_type: string;
+    created_at: string;
+    indexed?: boolean;
+    needs_review?: boolean;
+    chatbots: { name: string } | { name: string }[] | null;
+  }>).map(({ content, chatbots, ...rest }) => ({
+    ...rest,
+    chatbots: Array.isArray(chatbots) ? chatbots[0] ?? null : chatbots,
+    content_preview: (content ?? "").slice(0, KB_PREVIEW_CHARS),
+  }));
   const scoped = botId ? all.filter((e) => e.chatbot_id === botId) : all;
   const indexed = scoped.filter((e) => e.indexed === true).length;
 
@@ -149,7 +181,7 @@ async function KnowledgeBaseBody({ sp }: { sp: { bot?: string } }) {
               </span>
             </SsCard>
 
-            <KnowledgeBaseManager chatbots={chatbots} entries={entries ?? []} />
+            <KnowledgeBaseManager chatbots={chatbots} entries={all} />
           </>
         )}
     </>

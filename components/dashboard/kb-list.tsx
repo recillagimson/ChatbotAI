@@ -10,7 +10,9 @@ import { Trash2, Pencil, Check, X, Loader2 } from "lucide-react";
 type Entry = {
   id: string;
   title: string;
-  content: string;
+  /** First KB_PREVIEW_CHARS of the body, not the whole thing. The list used to
+   *  carry every entry's full text; the editor now fetches it on demand. */
+  content_preview: string;
   source_type: string;
   created_at: string;
   chatbots: { name: string } | null;
@@ -32,12 +34,33 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
   const [draftContent, setDraftContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  // The list only holds a preview, so opening the editor is now a round trip.
+  // This is which entry that request is in flight for.
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  function startEdit(e: Entry) {
-    setEditingId(e.id);
-    setDraftTitle(e.title);
-    setDraftContent(e.content);
+  /**
+   * Open the inline editor on the entry's REAL body. The list prop only carries
+   * KB_PREVIEW_CHARS of it, so seeding the textarea from `content_preview` would
+   * silently truncate the entry on the next save - the save sends whatever is in
+   * the box. Hence the fetch, and hence the editor staying closed until it lands.
+   */
+  async function startEdit(e: Entry) {
     setEditError(null);
+    setLoadingId(e.id);
+    try {
+      const res = await fetch(`/api/knowledge-base/${e.id}`);
+      if (!res.ok) throw new Error(String(res.status));
+      const { content } = (await res.json()) as { content?: string };
+      setDraftTitle(e.title);
+      setDraftContent(content ?? "");
+      setEditingId(e.id);
+    } catch {
+      // Opening the editor could not fail before this change, so say what went
+      // wrong rather than opening an empty box the user would then save over.
+      setEditError("Couldn't load this entry. Check your connection and try again.");
+    } finally {
+      setLoadingId(null);
+    }
   }
 
   function cancelEdit() {
@@ -171,9 +194,14 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
                       variant="ghost"
                       size="icon"
                       onClick={() => startEdit(e)}
+                      disabled={loadingId === e.id}
                       aria-label="Edit entry"
                     >
-                      <Pencil className="h-4 w-4" />
+                      {loadingId === e.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Pencil className="h-4 w-4" />
+                      )}
                     </SsButton>
                     <SsButton
                       variant="ghost"
@@ -209,9 +237,20 @@ export function KnowledgeBaseList({ entries }: { entries: Entry[] }) {
                   </p>
                 </div>
               ) : (
-                <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed text-ss-body">
-                  {e.content}
-                </p>
+                <>
+                  <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed text-ss-body">
+                    {e.content_preview}
+                  </p>
+                  {/* startEdit can now fail before the editor opens, and the error
+                      block above only exists inside the editing branch. Without
+                      this, a failed load would leave the pencil doing nothing with
+                      no explanation. */}
+                  {editError && editingId === null && (
+                    <p role="alert" className="mt-2 text-sm text-ss-rose-ink">
+                      {editError}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </SsCard>

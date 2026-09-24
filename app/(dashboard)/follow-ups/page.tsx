@@ -113,10 +113,24 @@ async function FollowUpsQueue({
   const workspace = await getWorkspace(sp.bot ?? null);
   const botId = workspace?.scopedBotId ?? null;
 
+  // One clock for the whole render, so the edge the rows are fetched against is
+  // the same edge they are bucketed against.
+  const now = Date.now();
+  const lookbackIso = queueLookbackIso(now);
+
   // Paged rather than `.limit(2000)`: PostgREST caps a request at 1,000 rows
   // silently, so the limit form quietly worked the oldest thousand threads and
   // called that the queue. On a 2,453-thread account that hid real work AND
   // disagreed with the sidebar badge, which truncated a different slice.
+  //
+  // Bounded to the reach window - the same `.gte` the sidebar badge already uses
+  // (lib/workspace.ts:187). A thread whose lead has been quiet longer than
+  // MAX_REACH_HOURS can only bucket "expired" or "n/a", never open/closing/manual,
+  // so this changes no list on this page; it just stops paging the dormant tail.
+  // It also removes a live cliff: this fetch orders ASCENDING and stops at
+  // DEFAULT_MAX_ROWS (20,000), so the largest account, at 16,608 threads, was 83%
+  // of the way to silently fetching its 20,000 OLDEST rows and rendering an empty
+  // queue with every pill reading zero.
   const { rows: fetched, truncated } = await fetchAllRows<
     WindowConversation & {
       id: string;
@@ -137,6 +151,7 @@ async function FollowUpsQueue({
           "id, contact_name, contact_username, platform, last_message_at, status, confirmed_at, user_muted_at, bot_off_at, tag, chatbot_id, manychat_subscriber_id, manychat_page_id, manychat_live_chat_url, followup_resolved_at, followup_resolved_hi, chatbots(name)"
         )
         .eq("user_id", user!.id)
+        .gte("last_message_at", lookbackIso)
         .order("last_message_at", { ascending: true })
         .range(from, to);
       if (botId) q = q.eq("chatbot_id", botId);
@@ -145,20 +160,55 @@ async function FollowUpsQueue({
     { label: "follow-up queue" }
   );
 
-  const now = Date.now();
-
   // Re-anchor every thread on the LEAD's last message. Without this a thread you
   // hand-replied to would read as freshly active - `last_message_at` counts your
   // own send - and would drift back into the queue a day later with its
   // seven-day edge pushed out. The lead answering is what clears a thread from
   // this screen; your nudge is not.
-  const { rows: all, activity } = await withLeadClock(
-    supabase,
-    fetched,
-    queueLookbackIso(now)
-  );
+  const { rows: all, activity } = await withLeadClock(supabase, fetched, lookbackIso);
 
-  const counts = countWindows(all, now);
+  // The dormant tail is no longer fetched, so the "expired" count it used to
+  // produce is asked for directly: a HEAD request returns the number with zero
+  // rows on the wire. These filters are `followupBlocked` (lib/followup.ts) plus
+  // windowBucket's platform test restated in PostgREST - the one place that rule
+  // is duplicated, because there is no row here to run the pure function on.
+  // `status`, `tag` and `platform` are all NOT NULL in the schema, so `not.in` is
+  // exact; there is no three-valued-logic hole to defend against.
+  //
+  // This cannot be derived from workspace_conversation_rollup: that returns a
+  // plain per-chatbot count(*) with no followupBlocked gate and no platform gate,
+  // so it would fold in the non-active and confirmed/muted/bot-off threads and
+  // print the inflated figure as a fact.
+  let expiredQuery = supabase
+    .from("conversations")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user!.id)
+    .lt("last_message_at", lookbackIso)
+    .eq("status", "active")
+    .is("confirmed_at", null)
+    .is("user_muted_at", null)
+    .is("bot_off_at", null)
+    .not("tag", "in", "(disqualified,bot,starting_later)")
+    // Telegram and TikTok have no send window at all, so windowBucket calls those
+    // "n/a", never "expired". Every other value maps to instagram via toPlatform.
+    .not("platform", "in", "(telegram,tiktok)");
+  if (botId) expiredQuery = expiredQuery.eq("chatbot_id", botId);
+  const { count: dormantExpired, error: expiredError } = await expiredQuery;
+  if (expiredError) {
+    // Without this a failed read renders "Nothing has passed 7 days yet." as a
+    // statement of fact. Matches the logging in lib/supabase/paginate.ts.
+    console.error("[follow-ups] expired count failed", expiredError);
+  }
+
+  // `expired` is the only counter whose inputs the reach bound changed. The rows
+  // still fetched carry the in-window expiries (a WhatsApp thread past its 24h,
+  // or one you hand-replied to whose lead then went quiet); the dormant tail is
+  // added back from the count above. open/closing/manual are untouched.
+  const windows = countWindows(all, now);
+  const counts = {
+    ...windows,
+    expired: windows.expired + (dormantExpired ?? 0),
+  };
 
   // The one queue, bucketed. `waiting` is the default because it's the only
   // bucket that costs money when ignored. Longest-waiting first, measured from

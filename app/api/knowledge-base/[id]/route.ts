@@ -19,6 +19,35 @@ const Body = z.object({
   content: z.string().min(1).max(100_000),
 });
 
+/**
+ * Fetch ONE entry's full body. The KB list only ships a KB_PREVIEW_CHARS preview
+ * now, so the inline editor asks for the real text when you click Edit.
+ *
+ * Deliberately reuses resolveKbWriteByEntry rather than a looser read check: for
+ * knowledge-base entries the readable set and the writable set are the same (your
+ * own entries, or any entry when you are a superadmin on /admin), so the write
+ * resolver is the correct guard and there is no second policy to keep in sync.
+ * This adds no new read privilege - it makes an already-readable row reachable
+ * per-entry instead of only via a page render.
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  const access = await resolveKbWriteByEntry(id);
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.status === 401 ? "unauthorized" : "entry not found" },
+      { status: access.status }
+    );
+  }
+
+  // The resolver already fetched the row, so there is nothing more to query.
+  return NextResponse.json({ content: (access.entry.content as string | null) ?? "" });
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

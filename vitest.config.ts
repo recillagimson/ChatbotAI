@@ -19,6 +19,7 @@ export default defineConfig({
       "tests/spam-detect*.spec.ts",
       "tests/handoff-detect*.spec.ts",
       "tests/openai-retry*.spec.ts",
+      "tests/dashboard-row-bounds*.spec.ts",
     ],
   },
   resolve: {

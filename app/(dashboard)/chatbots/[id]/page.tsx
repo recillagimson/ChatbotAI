@@ -35,9 +35,19 @@ export default async function ChatbotDetailPage({
   const supabase = await createClient();
   const user = await getCurrentUser();
 
-  // Only what the header needs: the row itself, plus the two channel counts the
-  // subtitle reads (fetched here so every tab renders a connected bot correctly).
-  const [{ data: chatbot }, { count: igCount }, { count: fbCount }] =
+  // Only what the header needs: the row itself, plus whether each channel has any
+  // thread at all (fetched here so every tab renders a connected bot correctly).
+  //
+  // Existence probes, not `count: "exact"`. The subtitle only ever asks "is this
+  // channel live", so aggregating every conversation the bot owns to answer a
+  // yes/no was scanning the bot's whole history twice on every tab click - and
+  // this route is force-dynamic, so every click is a full re-render. `.limit(1)`
+  // lets Postgres stop at the first matching row.
+  //
+  // NOTE the Overview tab's counts in components/dashboard/chatbot-tab-panel.tsx
+  // are deliberately NOT probes: it renders the actual numbers ("1,204 threads"),
+  // so those have to stay `count: "exact"`.
+  const [{ data: chatbot }, { data: igRows }, { data: fbRows }] =
     await Promise.all([
       supabase
         .from("chatbots")
@@ -47,22 +57,24 @@ export default async function ChatbotDetailPage({
         .single(),
       supabase
         .from("conversations")
-        .select("*", { count: "exact", head: true })
+        .select("id")
         .eq("chatbot_id", id)
-        .or("platform.is.null,platform.eq.instagram"),
+        .or("platform.is.null,platform.eq.instagram")
+        .limit(1),
       supabase
         .from("conversations")
-        .select("*", { count: "exact", head: true })
+        .select("id")
         .eq("chatbot_id", id)
-        .eq("platform", "messenger"),
+        .eq("platform", "messenger")
+        .limit(1),
     ]);
 
   if (!chatbot) notFound();
 
   const liveChannels = [
-    { key: "instagram" as const, label: platformLabel("instagram"), count: igCount ?? 0 },
-    { key: "messenger" as const, label: platformLabel("messenger"), count: fbCount ?? 0 },
-  ].filter((c) => c.count > 0);
+    { key: "instagram" as const, label: platformLabel("instagram"), live: (igRows?.length ?? 0) > 0 },
+    { key: "messenger" as const, label: platformLabel("messenger"), live: (fbRows?.length ?? 0) > 0 },
+  ].filter((c) => c.live);
 
   return (
     <PageShell>

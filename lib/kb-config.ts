@@ -41,3 +41,16 @@ export const EMBED_MAX_BATCH = Number(process.env.EMBED_MAX_BATCH ?? 256);
 
 /** Per-chatbot total KB chars cap (bounds embedding cost + sync latency). */
 export const MAX_KB_CHARS_PER_CHATBOT = Number(process.env.MAX_KB_CHARS_PER_CHATBOT ?? 2_000_000);
+
+/** How much of an entry's body the /knowledge-base list ships to the browser.
+ *  The list renders a `line-clamp-4` paragraph, which holds roughly 600-700 chars
+ *  at 1920px, so this is sized to fill the clamp and no more. The full body is
+ *  fetched per-entry on demand when you click Edit (GET /api/knowledge-base/[id]).
+ *  Before this cap the page shipped every entry's whole body, serialized twice
+ *  (SSR HTML + RSC flight payload), with nothing bounding it but
+ *  MAX_KB_CHARS_PER_CHATBOT. */
+export const KB_PREVIEW_CHARS = Number(process.env.KB_PREVIEW_CHARS ?? 800);
+
+/** Page-size bound for the KB list. The largest workspace today has 7 entries, so
+ *  nobody hits this; it exists so the page cannot become unbounded as KBs grow. */
+export const KB_LIST_MAX_ENTRIES = Number(process.env.KB_LIST_MAX_ENTRIES ?? 500);

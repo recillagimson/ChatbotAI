@@ -17,7 +17,9 @@ type Entry = {
   id: string;
   chatbot_id: string;
   title: string;
-  content: string;
+  /** First KB_PREVIEW_CHARS of the body. The full text is never sent to the
+   *  browser with the list; the editor fetches it per-entry on demand. */
+  content_preview: string;
   source_type: string;
   created_at: string;
   chatbots: { name: string } | null;

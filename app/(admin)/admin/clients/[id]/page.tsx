@@ -16,6 +16,7 @@ import { SsChip, SsLinkButton, SsStatus } from "@/components/ss/controls";
 import { StatCard } from "@/components/ss/stat";
 import { num } from "@/lib/format";
 import { hasActiveAccess, isComp } from "@/lib/access";
+import { KB_PREVIEW_CHARS } from "@/lib/kb-config";
 import type {
   Profile,
   Subscription,
@@ -91,7 +92,8 @@ type AdminKbEntry = {
   id: string;
   chatbot_id: string;
   title: string;
-  content: string;
+  /** Preview only - the list never carries full bodies. See KB_PREVIEW_CHARS. */
+  content_preview: string;
   source_type: string;
   created_at: string;
   chatbots: { name: string } | null;
@@ -196,12 +198,20 @@ export default async function AdminClientDetailPage({
   // normalize defensively before handing entries to KnowledgeBaseList.
   const kbByChatbot = new Map<string, AdminKbEntry[]>();
   for (const row of (kbData ?? []) as unknown as Array<
-    Omit<AdminKbEntry, "chatbots"> & {
+    Omit<AdminKbEntry, "chatbots" | "content_preview"> & {
+      content: string | null;
       chatbots: { name: string } | { name: string }[] | null;
     }
   >) {
     const chatbots = Array.isArray(row.chatbots) ? row.chatbots[0] ?? null : row.chatbots;
-    const entry: AdminKbEntry = { ...row, chatbots };
+    // Trim here for the same reason the dashboard page does: PostgREST cannot
+    // express left(content, n), and the list only ever renders a clamped preview.
+    const { content, ...rest } = row;
+    const entry: AdminKbEntry = {
+      ...rest,
+      chatbots,
+      content_preview: (content ?? "").slice(0, KB_PREVIEW_CHARS),
+    };
     const list = kbByChatbot.get(entry.chatbot_id) ?? [];
     list.push(entry);
     kbByChatbot.set(entry.chatbot_id, list);
