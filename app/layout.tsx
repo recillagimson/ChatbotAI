@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 // Body / UI font. Locked to Plus Jakarta Sans by the SpeedSettr dashboard
@@ -88,6 +89,17 @@ export default function RootLayout({
     <html lang="en" className={`${jakarta.variable} ${outfit.variable}`}>
       <body className="min-h-screen bg-background font-sans antialiased">
         {children}
+        {/* Field LCP, INP and CLS from real visitors. Nothing in this repo has
+            ever measured those, so every front-end change so far has been
+            argued from build-time bytes alone.
+
+            It goes in the ROOT layout, so the landing is included. That is
+            deliberate: the landing is the page whose LCP actually decides
+            whether a visitor stays, and it already loads third-party script
+            (link.msgsndr.com/js/form_embed.js for the GHL calendar), so this
+            is not the first one. Requires Speed Insights to be enabled for the
+            project in the Vercel dashboard; it is inert until then. */}
+        <SpeedInsights />
       </body>
     </html>
   );
