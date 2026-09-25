@@ -51,6 +51,8 @@ function AttachmentView({ att }: { att: SignedAttachment }) {
         <img
           src={att.url}
           alt={att.name}
+          loading="lazy"
+          decoding="async"
           className="max-h-24 rounded-chip border border-ss-line"
         />
       </a>

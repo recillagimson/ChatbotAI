@@ -14,6 +14,7 @@ import { SsAvatar, SsChip } from "@/components/ss/controls";
 import { ChannelChip } from "@/components/ss/channel";
 import { contactDisplayName, contactHandle } from "@/lib/contact";
 import { signAttachment } from "@/lib/storage";
+import { newestImageIds } from "@/lib/thread-media";
 import { botNameOf } from "@/lib/utils";
 import { shortDate } from "@/lib/format";
 import { TAG_LABEL, tagOf } from "@/lib/conversation-tags";
@@ -90,6 +91,13 @@ export default async function ConversationDetailPage({
   for (const [mid, url] of signed) {
     if (url) mediaUrls.set(mid, url);
   }
+
+  // The newest images are on screen once ChatScroll pins the thread to its
+  // bottom, so they load eagerly; every older one loads as the operator
+  // scrolls up. Only messages whose URL resolved render an attachment at all.
+  const eagerImages = newestImageIds(
+    (messages ?? []).filter((m) => mediaUrls.has(m.id)),
+  );
 
   if (conversation.unread_count > 0) {
     await supabase
@@ -196,7 +204,11 @@ export default async function ConversationDetailPage({
           return (
             <div key={m.id} className="contents">
               {newDay && <DayDivider label={dayLabel(m.created_at)} />}
-              <MessageBubble message={m} mediaUrl={mediaUrls.get(m.id)} />
+              <MessageBubble
+                message={m}
+                mediaUrl={mediaUrls.get(m.id)}
+                eagerMedia={eagerImages.has(m.id)}
+              />
             </div>
           );
         })}

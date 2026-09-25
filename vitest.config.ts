@@ -25,6 +25,8 @@ export default defineConfig({
       "tests/cache-live-reads*.spec.ts",
       "tests/chat-scroll*.spec.ts",
       "tests/stats-range*.spec.ts",
+      "tests/thread-media*.spec.ts",
+      "tests/lazy-media*.spec.ts",
     ],
   },
   resolve: {

@@ -15,8 +15,13 @@ import { HighThriveMark } from "@/components/brand/highthrive-mark";
  * inside a box. Same dark + gold look as the landing.
  */
 
-// The GHL embed as issued for this calendar. Keep the iframe id as GHL wrote it
-// (widget id + timestamp): form_embed.js uses it to find the frame it resizes.
+// The GHL embed as issued for this calendar. Keep it eager and keep form_embed.js
+// afterInteractive: form_embed.js hides every booking iframe it has not
+// initialized (off-screen at left -9999px) until the widget inside posts its
+// one-time handshake, so a loading="lazy" frame would never load and never show,
+// and a script deferred past window load can miss the handshake. The id is only
+// a label: form_embed.js keeps any id it finds and matches the widget by its
+// window, so the landing's differently derived id is fine.
 const GHL_BOOKING_SRC =
   "https://api.leadconnectorhq.com/widget/booking/8ny6hFE7IdLDazoS4MCw";
 const GHL_IFRAME_ID = "8ny6hFE7IdLDazoS4MCw_1790022979475";

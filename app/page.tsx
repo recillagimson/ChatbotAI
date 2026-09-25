@@ -690,6 +690,14 @@ export default function LandingPage() {
               </p>
               {isGhlBooking ? (
                 <>
+                  {/* Keep this embed as GHL issues it: an eager iframe plus
+                      form_embed.js afterInteractive. form_embed.js hides every
+                      booking iframe it has not initialized (off-screen at
+                      left -9999px) until the widget inside posts its one-time
+                      handshake, so a loading="lazy" frame would never load and
+                      never show, and a script deferred past window load can
+                      miss the handshake. The id is only a label: form_embed.js
+                      keeps any id and matches the widget by its window. */}
                   <div className="mt-6 overflow-hidden rounded-2xl border border-[#A06E08]/25 bg-white">
                     <iframe
                       src={BOOKING_URL}

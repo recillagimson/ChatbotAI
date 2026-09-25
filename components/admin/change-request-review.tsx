@@ -216,6 +216,8 @@ export function ChangeRequestReview({
                               <img
                                 src={img.url}
                                 alt={img.name}
+                                loading="lazy"
+                                decoding="async"
                                 className="max-h-32 rounded border border-ss-line"
                               />
                             </a>

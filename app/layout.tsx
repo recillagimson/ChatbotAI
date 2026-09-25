@@ -95,10 +95,11 @@ export default function RootLayout({
 
             It goes in the ROOT layout, so the landing is included. That is
             deliberate: the landing is the page whose LCP actually decides
-            whether a visitor stays, and it already loads third-party script
-            (link.msgsndr.com/js/form_embed.js for the GHL calendar), so this
-            is not the first one. Requires Speed Insights to be enabled for the
-            project in the Vercel dashboard; it is inert until then. */}
+            whether a visitor stays. The GHL calendar's third-party script
+            (link.msgsndr.com/js/form_embed.js) loads on /book-a-call, and on
+            the landing only once NEXT_PUBLIC_BOOKING_URL is set, so this is
+            not the app's first one. Requires Speed Insights to be enabled for
+            the project in the Vercel dashboard; it is inert until then. */}
         <SpeedInsights />
       </body>
     </html>
