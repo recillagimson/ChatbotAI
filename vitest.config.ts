@@ -29,6 +29,7 @@ export default defineConfig({
       "tests/lazy-media*.spec.ts",
       "tests/requests-pane*.spec.ts",
       "tests/keyed-suspense*.spec.ts",
+      "tests/middleware-matcher*.spec.ts",
     ],
   },
   resolve: {
