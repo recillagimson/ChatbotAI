@@ -178,7 +178,10 @@ export default async function ConversationDetailPage({
         }
       />
 
-      <ChatScroll className="ss-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-5 py-6 sm:px-6">
+      <ChatScroll
+        className="ss-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-5 py-6 sm:px-6"
+        count={(messages ?? []).length}
+      >
         {!messages?.length && (
           <p className="py-10 text-center text-[12.5px] text-ss-muted">
             No messages yet on this thread.

@@ -209,7 +209,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
             Reset chat
           </Button>
         </div>
-        <ChatScroll className="flex-1 min-h-0 p-4 space-y-3">
+        <ChatScroll className="flex-1 min-h-0 p-4 space-y-3" count={messages.length}>
           {messages.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">
               Message the bot to test it. Then use &ldquo;Train this reply&rdquo; under any bot message to teach it what to say instead.

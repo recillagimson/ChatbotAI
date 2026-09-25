@@ -266,7 +266,7 @@ export function RequestChat({
         </div>
       ) : (
         // Thread state
-        <ChatScroll className="min-h-0 flex-1 px-4 py-6 sm:px-6">
+        <ChatScroll className="min-h-0 flex-1 px-4 py-6 sm:px-6" count={messages.length}>
           <div className="mx-auto max-w-2xl space-y-4">
             {messages.map((m, i) =>
               m.role === "user" ? (
