@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { CalendarRange, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RangeKey } from "@/lib/analytics";
+import { customRangeToPush } from "@/lib/stats-range";
 
 type RangePill = { key: RangeKey; label: string };
 
@@ -54,19 +56,49 @@ export function StatsControlsBar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // The custom range as the two inputs hold it, which is often not a range the
+  // page can show yet: a date input reports "" while a segment is half-typed
+  // and a wrong complete date after the first digit of a year. The edit lives
+  // here until customRangeToPush says it is a real range; the URL only ever
+  // gets that.
+  const [draft, setDraft] = useState({ from: customFrom ?? "", to: customTo ?? "" });
+  // The range this bar last navigated to (a preset pill counts as no range),
+  // or the committed one when none of ours is in flight.
+  const sent = useRef({ from: customFrom ?? "", to: customTo ?? "" });
+
+  // The committed URL changed. When its range is the one this bar last
+  // navigated to, the draft already holds it, or an edit the user has started
+  // since, so it is left alone. Anything else is authoritative and replaces the
+  // draft: Back or Forward, the sidebar link, or another control (the top-bar
+  // scope switcher builds its URL from the committed params) superseding a date
+  // push that had not landed yet. Keyed on the whole query for that last case,
+  // where the range itself does not change.
+  const committedQs = searchParams.toString();
+  useEffect(() => {
+    const from = customFrom ?? "";
+    const to = customTo ?? "";
+    if (from === sent.current.from && to === sent.current.to) return;
+    sent.current = { from, to };
+    setDraft({ from, to });
+  }, [customFrom, customTo, committedQs]);
+
   function push(qs: string) {
     router.push(`${pathname}?${qs}`, { scroll: false });
   }
 
   function handleRangePill(key: RangeKey) {
+    setDraft({ from: "", to: "" });
+    sent.current = { from: "", to: "" };
     push(withParams(searchParams, { range: key, from: null, to: null }));
   }
 
   function handleCustomDate(which: "from" | "to", val: string) {
-    const from = which === "from" ? val : (customFrom ?? "");
-    const to = which === "to" ? val : (customTo ?? "");
-    if (from && to) push(withParams(searchParams, { from, to, range: null }));
-    else push(withParams(searchParams, { from: null, to: null }));
+    const next = { ...draft, [which]: val };
+    setDraft(next);
+    const range = customRangeToPush(next.from, next.to, sent.current);
+    if (!range) return;
+    sent.current = range;
+    push(withParams(searchParams, { ...range, range: null }));
   }
 
   const custom = !!(customFrom && customTo);
@@ -114,7 +146,7 @@ export function StatsControlsBar({
         <input
           id="stats-from"
           type="date"
-          value={customFrom ?? ""}
+          value={draft.from}
           onChange={(e) => handleCustomDate("from", e.target.value)}
           className="bg-transparent text-[12px] leading-none tabular-nums text-ss-ink outline-none"
         />
@@ -127,7 +159,7 @@ export function StatsControlsBar({
         <input
           id="stats-to"
           type="date"
-          value={customTo ?? ""}
+          value={draft.to}
           onChange={(e) => handleCustomDate("to", e.target.value)}
           className="bg-transparent text-[12px] leading-none tabular-nums text-ss-ink outline-none"
         />

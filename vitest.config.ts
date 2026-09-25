@@ -23,6 +23,7 @@ export default defineConfig({
       "tests/analytics-identity*.spec.ts",
       "tests/manychat-flows*.spec.ts",
       "tests/cache-live-reads*.spec.ts",
+      "tests/stats-range*.spec.ts",
     ],
   },
   resolve: {
