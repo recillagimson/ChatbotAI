@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -30,6 +31,7 @@ import { ChannelChip } from "@/components/ss/channel";
 import { NavyPanel, PanelDivider, PanelEyebrow } from "@/components/ss/panel";
 import { StatBlock } from "@/components/ss/stat";
 import { AxisTicks, LegendRow, ProportionBar, Sparkbars } from "@/components/ss/charts";
+import { Sk, SkCard, SkCardHead, SkNavyPanel, SkRows } from "@/components/ss/skeleton";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +49,34 @@ export default async function DashboardPage({
   searchParams: Promise<{ bot?: string }>;
 }) {
   const sp = await searchParams;
+
+  // Scoping to another chatbot only changes `?bot=`, so loading.tsx never fires
+  // for it, and the previous bot's numbers sat on screen until the new ones had
+  // rendered. This boundary is what puts a skeleton on that switch. The header
+  // reads nothing, so it stays outside and never blinks.
+  return (
+    <PageShell>
+      <PageHeader
+        title="Overview"
+        description={longDate()}
+        actions={
+          <SsLinkButton href="/conversations" variant="outline" size="md">
+            Open the inbox
+          </SsLinkButton>
+        }
+      />
+
+      <PageBody>
+        <Suspense key={sp.bot ?? "all"} fallback={<DashboardBodySkeleton />}>
+          <DashboardBody sp={sp} />
+        </Suspense>
+      </PageBody>
+    </PageShell>
+  );
+}
+
+/** Everything on the Overview that is read: setup, speed to lead, the queue, the chatbots, the tag mix. */
+async function DashboardBody({ sp }: { sp: { bot?: string } }) {
   const supabase = await createClient();
   const user = await getCurrentUser();
   const workspace = await getWorkspace(sp.bot ?? null);
@@ -160,18 +190,7 @@ export default async function DashboardPage({
     bots.some((b) => !b.unconnected);
 
   return (
-    <PageShell>
-      <PageHeader
-        title="Overview"
-        description={longDate()}
-        actions={
-          <SsLinkButton href="/conversations" variant="outline" size="md">
-            Open the inbox
-          </SsLinkButton>
-        }
-      />
-
-      <PageBody>
+    <>
         {/* ---- Setup strip ------------------------------------------------ */}
         <SetupStrip
           subscriptionActive={!!workspace?.subscriptionActive}
@@ -519,8 +538,7 @@ export default async function DashboardPage({
             </div>
           </SsCard>
         </div>
-      </PageBody>
-    </PageShell>
+    </>
   );
 }
 
@@ -531,6 +549,56 @@ const TAG_SWATCH = [
   "bg-ss-rose-soft",
   "bg-ss-rule",
 ];
+
+/**
+ * The body's in-page skeleton, shown while a chatbot scope is being applied.
+ * The in-page twin of loading.tsx, which only covers arriving at the route: the
+ * same blocks, minus the header, which stays mounted above this boundary. The
+ * grid matches the real page (1.55fr) so nothing shifts when the data lands.
+ * The sr-only status is absolutely positioned, so it takes no slot in
+ * PageBody's flex gap.
+ */
+function DashboardBodySkeleton() {
+  return (
+    <>
+      <span role="status" className="sr-only">
+        Loading your overview
+      </span>
+      <Sk className="h-[54px] w-full rounded-panel" tone="on-page" />
+      <SkNavyPanel height="h-[210px]" />
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <SkCard className="p-0">
+          <div className="p-[22px]">
+            <SkCardHead />
+          </div>
+          <SkRows rows={3} />
+        </SkCard>
+        <SkCard className="p-0">
+          <div className="p-[22px]">
+            <SkCardHead width="w-32" />
+          </div>
+          <SkRows rows={2} avatar={false} />
+        </SkCard>
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <SkCard>
+          <SkCardHead />
+          <Sk className="mt-4 h-3 w-full rounded-full" />
+          <div className="mt-4 flex flex-col gap-2.5">
+            <Sk className="h-[12px] w-full" />
+            <Sk className="h-[12px] w-full" />
+            <Sk className="h-[12px] w-2/3" />
+          </div>
+        </SkCard>
+        <SkCard>
+          <SkCardHead width="w-28" />
+          <Sk className="mt-4 h-[52px] w-full rounded-chip" />
+          <Sk className="mt-2.5 h-[52px] w-full rounded-chip" />
+        </SkCard>
+      </div>
+    </>
+  );
+}
 
 /**
  * The setup checklist, which the design collapses to a single line the moment

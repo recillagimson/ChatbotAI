@@ -15,6 +15,7 @@ import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { RequestComposer } from "@/components/dashboard/request-composer";
 import { DiffView } from "@/components/dashboard/diff-view";
 import { CATEGORY_LABELS, SECTION_LABELS } from "@/lib/change-categories";
+import { createdRequestHref } from "@/lib/requests-pane";
 import type { ChangeCategory, ChangeProposal, SectionColumn } from "@/lib/types";
 import { Sparkles, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -143,7 +144,10 @@ export function RequestChat({
         setStatus((s) => s ?? "draft");
         if (!crId) {
           setCrId(newId);
-          router.replace(`/requests?id=${newId}`);
+          // Keeps ?project= so the page's Suspense key (lib/requests-pane.ts) does
+          // not change: the reply the user is reading stays up while the page
+          // re-renders as the saved thread, instead of swapping to a skeleton.
+          router.replace(createdRequestHref(chatbotId, newId));
         }
       }
     } catch (err) {

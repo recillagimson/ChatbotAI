@@ -13,7 +13,7 @@ export default function DashboardLoading() {
     <SkPage label="Loading your overview" title="w-36" actions={1}>
       <Sk className="h-[54px] w-full rounded-panel" tone="on-page" />
       <SkNavyPanel height="h-[210px]" />
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <SkCard className="p-0">
           <div className="p-[22px]">
             <SkCardHead />
@@ -27,7 +27,7 @@ export default function DashboardLoading() {
           <SkRows rows={2} avatar={false} />
         </SkCard>
       </div>
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <SkCard>
           <SkCardHead />
           <Sk className="mt-4 h-3 w-full rounded-full" />

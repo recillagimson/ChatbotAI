@@ -27,6 +27,8 @@ export default defineConfig({
       "tests/stats-range*.spec.ts",
       "tests/thread-media*.spec.ts",
       "tests/lazy-media*.spec.ts",
+      "tests/requests-pane*.spec.ts",
+      "tests/keyed-suspense*.spec.ts",
     ],
   },
   resolve: {

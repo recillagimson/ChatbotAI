@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { signAttachment } from "@/lib/storage";
@@ -7,6 +8,8 @@ import type { ChangeCategory, ChangeProposal, Chatbot, SectionColumn, Transcript
 import { Plus, FolderClosed, History as HistoryIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SsDot } from "@/components/ss/controls";
+import { requestsPaneKey } from "@/lib/requests-pane";
+import { Sk, SkRows } from "@/components/ss/skeleton";
 
 type CrStatus = "draft" | "pending" | "approved" | "applied" | "rejected";
 
@@ -36,10 +39,27 @@ function greetingFor(name: string | null): string {
   return name ? `${part}, ${name}` : part;
 }
 
+type RequestsParams = { id?: string; project?: string; category?: string };
+
+/**
+ * Request Changes: a rail of chatbots and past requests beside the open thread.
+ *
+ * Every control here changes only the query string, which never re-shows
+ * loading.tsx. So the centre pane keys its own boundary (lib/requests-pane.ts
+ * explains the key): switching to another request shows a pane skeleton at
+ * once, instead of leaving the previous thread up with no sign anything is
+ * happening until the new one has fully rendered.
+ *
+ * The rail stays OUTSIDE that boundary, so a click never remounts it and its
+ * scroll position and keyboard focus survive; with the whole view keyed, every
+ * History click threw the list back to the top. It reads only its own lists
+ * and resolves the open request from them, never from the thread read, so it
+ * does not wait on the thread.
+ */
 export default async function RequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string; project?: string; category?: string }>;
+  searchParams: Promise<RequestsParams>;
 }) {
   const sp = await searchParams;
   const user = await getCurrentUser();
@@ -68,103 +88,15 @@ export default async function RequestsPage({
   const firstName = profile?.full_name ? profile.full_name.split(" ")[0] : null;
   const greeting = greetingFor(firstName);
 
-  // Resolve the selected thread (only when ?id is present and owned by the user).
-  type Thread = {
-    id: string;
-    chatbot_id: string;
-    status: CrStatus;
-    category: ChangeCategory;
-    transcript: TranscriptMessage[];
-    proposed: ChangeProposal | null;
-    title: string | null;
-  };
-  let thread: Thread | null = null;
-  if (sp.id) {
-    const { data: cr } = await supabase
-      .from("change_requests")
-      .select("id, chatbot_id, status, category, transcript, proposed, title")
-      .eq("id", sp.id)
-      .eq("user_id", user!.id)
-      .maybeSingle();
-    if (cr) {
-      thread = cr as unknown as Thread;
-    }
-  }
-
-  // Determine mode + the props the chat host needs.
-  const isThread = !!thread;
-  const activeProjectId = isThread
-    ? thread!.chatbot_id
+  // The open request and its chatbot, for the rail's highlight. History is the
+  // same user_id-scoped rows the pane reads the thread from, so this agrees with
+  // the pane without waiting on it.
+  const openRequest = sp.id ? (history.find((h) => h.id === sp.id) ?? null) : null;
+  const activeProjectId = openRequest
+    ? openRequest.chatbot_id
     : sp.project && projects.some((p) => p.id === sp.project)
       ? sp.project
       : null;
-  const activeProjectName =
-    projects.find((p) => p.id === activeProjectId)?.name ?? null;
-
-  // Category: a loaded thread uses its stored category; a new request takes it
-  // from the ?category= deep-link (the "Request a change" CTAs), else defaults.
-  const isValidCategory = (v?: string): v is ChangeCategory =>
-    v === "personality" || v === "offers" || v === "rebuttals" || v === "other" || v === "overall";
-  const activeCategory: ChangeCategory = thread
-    ? thread.category
-    : isValidCategory(sp.category)
-      ? sp.category
-      : "personality";
-
-  // Current text of the active project's sections - the "before" side of the
-  // proposal review. `currentSection` is the single targeted section (single-section
-  // categories); `currentSections` is all three, for the "overall" multi-diff.
-  // Empty for no project / empty sections.
-  let currentSection = "";
-  let currentSections: Record<SectionColumn, string> = {
-    persona_section: "",
-    offers_section: "",
-    rebuttals_section: "",
-  };
-  if (activeProjectId) {
-    const { data: secBot } = await supabase
-      .from("chatbots")
-      .select("persona_section, offers_section, rebuttals_section")
-      .eq("id", activeProjectId)
-      .eq("user_id", user!.id)
-      .maybeSingle();
-    if (secBot) {
-      const bot = secBot as Pick<Chatbot, SectionColumn>;
-      currentSections = {
-        persona_section: bot.persona_section ?? "",
-        offers_section: bot.offers_section ?? "",
-        rebuttals_section: bot.rebuttals_section ?? "",
-      };
-      const col = sectionColumnFor(activeCategory);
-      currentSection = col ? currentSections[col] : "";
-    }
-  }
-
-  // Sign user-message image paths + carry doc file names for a loaded thread.
-  type ViewMessage = {
-    role: "user" | "assistant";
-    content: string;
-    images?: { name: string; url: string | null }[];
-    files?: { name: string }[];
-  };
-  let initialTranscript: ViewMessage[] = [];
-  if (thread && Array.isArray(thread.transcript)) {
-    initialTranscript = await Promise.all(
-      thread.transcript.map(async (m): Promise<ViewMessage> => {
-        const files = m.files?.length ? m.files.map((f) => ({ name: f.name })) : undefined;
-        if (m.role === "user" && m.images && m.images.length) {
-          const images = await Promise.all(
-            m.images.map(async (im) => ({
-              name: im.name,
-              url: await signAttachment(supabase, im.path),
-            }))
-          );
-          return { role: m.role, content: m.content, images, ...(files ? { files } : {}) };
-        }
-        return { role: m.role, content: m.content, ...(files ? { files } : {}) };
-      })
-    );
-  }
 
   const needsYou = history.filter((h) => h.status === "draft").length;
 
@@ -177,7 +109,7 @@ export default async function RequestsPage({
             href="/requests"
             className={cn(
               "flex items-center justify-center gap-2 rounded-ctl-lg px-3 py-3 text-[13px] font-semibold leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo",
-              !isThread && !activeProjectId
+              !openRequest && !activeProjectId
                 ? "bg-ss-indigo text-ss-on-accent hover:bg-ss-indigo-600"
                 : "border border-ss-line text-ss-ink hover:bg-ss-chip"
             )}
@@ -202,7 +134,7 @@ export default async function RequestsPage({
           ) : (
             <ul className="flex flex-col gap-[3px]">
               {projects.map((proj) => {
-                const active = !isThread && activeProjectId === proj.id;
+                const active = !openRequest && activeProjectId === proj.id;
                 return (
                   <li key={proj.id}>
                     <Link
@@ -241,7 +173,7 @@ export default async function RequestsPage({
           ) : (
             <ul className="flex flex-col gap-1.5">
               {history.map((h) => {
-                const active = isThread && thread!.id === h.id;
+                const active = openRequest?.id === h.id;
                 const meta = STATUS_META[h.status] ?? STATUS_META.draft;
                 return (
                   <li key={h.id}>
@@ -291,20 +223,161 @@ export default async function RequestsPage({
 
       {/* ---- Center pane: the conversation and the proposed diff --------- */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-ss-page-alt">
-        <RequestChat
-          key={thread ? thread.id : (activeProjectId ?? "new") + "-" + activeCategory}
-          changeRequestId={thread ? thread.id : null}
-          chatbotId={activeProjectId}
-          projectName={activeProjectName}
-          greeting={greeting}
-          initialTranscript={initialTranscript}
-          initialProposal={thread ? thread.proposed : null}
-          initialStatus={thread ? thread.status : null}
-          initialCategory={activeCategory}
-          currentSection={currentSection}
-          currentSections={currentSections}
-          hasProjects={projects.length > 0}
-        />
+        <Suspense key={requestsPaneKey(sp)} fallback={<RequestsPaneSkeleton />}>
+          <RequestsPane sp={sp} userId={user!.id} projects={projects} greeting={greeting} />
+        </Suspense>
+      </div>
+    </div>
+  );
+}
+
+/** The centre pane: the open thread, or the composer for a new request. */
+async function RequestsPane({
+  sp,
+  userId,
+  projects,
+  greeting,
+}: {
+  sp: RequestsParams;
+  userId: string;
+  projects: { id: string; name: string }[];
+  greeting: string;
+}) {
+  const supabase = await createClient();
+
+  // Resolve the selected thread (only when ?id is present and owned by the user).
+  type Thread = {
+    id: string;
+    chatbot_id: string;
+    status: CrStatus;
+    category: ChangeCategory;
+    transcript: TranscriptMessage[];
+    proposed: ChangeProposal | null;
+    title: string | null;
+  };
+  let thread: Thread | null = null;
+  if (sp.id) {
+    const { data: cr } = await supabase
+      .from("change_requests")
+      .select("id, chatbot_id, status, category, transcript, proposed, title")
+      .eq("id", sp.id)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (cr) {
+      thread = cr as unknown as Thread;
+    }
+  }
+
+  // Determine mode + the props the chat host needs.
+  const isThread = !!thread;
+  const activeProjectId = isThread
+    ? thread!.chatbot_id
+    : sp.project && projects.some((p) => p.id === sp.project)
+      ? sp.project
+      : null;
+  const activeProjectName =
+    projects.find((p) => p.id === activeProjectId)?.name ?? null;
+
+  // Category: a loaded thread uses its stored category; a new request takes it
+  // from the ?category= deep-link (the "Request a change" CTAs), else defaults.
+  const isValidCategory = (v?: string): v is ChangeCategory =>
+    v === "personality" || v === "offers" || v === "rebuttals" || v === "other" || v === "overall";
+  const activeCategory: ChangeCategory = thread
+    ? thread.category
+    : isValidCategory(sp.category)
+      ? sp.category
+      : "personality";
+
+  // Current text of the active project's sections - the "before" side of the
+  // proposal review. `currentSection` is the single targeted section (single-section
+  // categories); `currentSections` is all three, for the "overall" multi-diff.
+  // Empty for no project / empty sections.
+  let currentSection = "";
+  let currentSections: Record<SectionColumn, string> = {
+    persona_section: "",
+    offers_section: "",
+    rebuttals_section: "",
+  };
+  if (activeProjectId) {
+    const { data: secBot } = await supabase
+      .from("chatbots")
+      .select("persona_section, offers_section, rebuttals_section")
+      .eq("id", activeProjectId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (secBot) {
+      const bot = secBot as Pick<Chatbot, SectionColumn>;
+      currentSections = {
+        persona_section: bot.persona_section ?? "",
+        offers_section: bot.offers_section ?? "",
+        rebuttals_section: bot.rebuttals_section ?? "",
+      };
+      const col = sectionColumnFor(activeCategory);
+      currentSection = col ? currentSections[col] : "";
+    }
+  }
+
+  // Sign user-message image paths + carry doc file names for a loaded thread.
+  type ViewMessage = {
+    role: "user" | "assistant";
+    content: string;
+    images?: { name: string; url: string | null }[];
+    files?: { name: string }[];
+  };
+  let initialTranscript: ViewMessage[] = [];
+  if (thread && Array.isArray(thread.transcript)) {
+    initialTranscript = await Promise.all(
+      thread.transcript.map(async (m): Promise<ViewMessage> => {
+        const files = m.files?.length ? m.files.map((f) => ({ name: f.name })) : undefined;
+        if (m.role === "user" && m.images && m.images.length) {
+          const images = await Promise.all(
+            m.images.map(async (im) => ({
+              name: im.name,
+              url: await signAttachment(supabase, im.path),
+            }))
+          );
+          return { role: m.role, content: m.content, images, ...(files ? { files } : {}) };
+        }
+        return { role: m.role, content: m.content, ...(files ? { files } : {}) };
+      })
+    );
+  }
+
+  return (
+    <RequestChat
+      key={thread ? thread.id : (activeProjectId ?? "new") + "-" + activeCategory}
+      changeRequestId={thread ? thread.id : null}
+      chatbotId={activeProjectId}
+      projectName={activeProjectName}
+      greeting={greeting}
+      initialTranscript={initialTranscript}
+      initialProposal={thread ? thread.proposed : null}
+      initialStatus={thread ? thread.status : null}
+      initialCategory={activeCategory}
+      currentSection={currentSection}
+      currentSections={currentSections}
+      hasProjects={projects.length > 0}
+    />
+  );
+}
+
+/**
+ * The centre pane's skeleton while another request loads: loading.tsx's centre
+ * half. The rail is already on screen beside it.
+ */
+function RequestsPaneSkeleton() {
+  return (
+    <div role="status" aria-busy="true" className="flex min-h-0 flex-1 flex-col">
+      <span className="sr-only">Loading the request</span>
+      <div className="flex-none border-b border-ss-line bg-ss-surface px-6 py-4">
+        <Sk className="h-[16px] w-40" />
+        <Sk className="mt-2.5 h-[12px] w-32" />
+      </div>
+      <div className="min-h-0 flex-1 overflow-hidden bg-ss-page-alt">
+        <SkRows rows={4} avatar={false} />
+      </div>
+      <div className="flex-none border-t border-ss-line bg-ss-surface px-6 py-4">
+        <Sk className="h-[76px] w-full rounded-ctl-lg" />
       </div>
     </div>
   );
