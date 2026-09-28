@@ -4,7 +4,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/admin";
 import { draftChangeRequest } from "@/lib/openai-changes";
 import { sectionColumnFor } from "@/lib/change-categories";
-import type { SectionEdit } from "@/lib/types";
+import { buildChangeFinal, planPublish, type LiveSections } from "@/lib/change-final";
+import { MAX_SECTION_CHARS } from "@/lib/section-edits";
 import { MAX_KB_CHARS_PER_CHATBOT } from "@/lib/kb-config";
 import { indexEntry } from "@/lib/retrieval";
 import type { Chatbot, ChangeRequest, ChangeFinal } from "@/lib/types";
@@ -14,27 +15,36 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const KbEntry = z.object({ title: z.string().min(1).max(200), content: z.string().min(1).max(100_000) });
+
+// What Approve carries. Sections are capped at MAX_SECTION_CHARS (200k), not the
+// old 20k: live sections run to ~100k characters, and the old cap made every
+// Offers/Rebuttals request on those bots impossible to approve.
+const ApproveFields = {
+  section_content: z.string().max(MAX_SECTION_CHARS).optional(), // single-section categories
+  sections: z                                                      // "overall": each affected section
+    .array(
+      z.object({
+        section: z.enum(["persona_section", "offers_section", "rebuttals_section"]),
+        section_content: z.string().max(MAX_SECTION_CHARS),
+      })
+    )
+    .max(3)
+    .optional(),
+  system_prompt: z.string().max(20_000).optional(),   // LEGACY: old requests still publish into system_prompt
+  kb_entries: z.array(KbEntry).max(50).optional(),
+  admin_note: z.string().max(4000).optional(),
+};
+
 const Body = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("approve"),
-    section_content: z.string().max(20_000).optional(), // revised section text (single-section categories)
-    sections: z                                          // "overall": each affected section in full
-      .array(
-        z.object({
-          section: z.enum(["persona_section", "offers_section", "rebuttals_section"]),
-          section_content: z.string().max(20_000),
-        })
-      )
-      .max(3)
-      .optional(),
-    system_prompt: z.string().max(20_000).optional(),   // LEGACY: old requests still publish into system_prompt
-    kb_entries: z.array(KbEntry).max(50).optional(),
-    admin_note: z.string().max(4000).optional(),
-  }),
+  z.object({ action: z.literal("approve"), ...ApproveFields }),
+  // One step for the common case: approve exactly what's on screen and publish it.
+  z.object({ action: z.literal("approve_publish"), ...ApproveFields }),
   z.object({ action: z.literal("reject"), admin_note: z.string().max(4000).optional() }),
   z.object({ action: z.literal("regenerate"), adminGuidance: z.string().max(4000).optional() }),
   z.object({ action: z.literal("publish") }),
 ]);
+
+type Db = Awaited<ReturnType<typeof createClient>>;
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireSuperadmin();
@@ -61,35 +71,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ ok: true });
   }
 
-  if (body.action === "approve") {
-    const sectionCol = sectionColumnFor(cr.category); // null for "other"/"overall"
-    const sc = body.section_content?.trim();
-    const sp = body.system_prompt?.trim();
-    // "overall": each affected section, trimmed + deduped (first edit per section wins).
-    const seenSection = new Set<string>();
-    const sections: SectionEdit[] = (body.sections ?? [])
-      .map((s) => ({ section: s.section, section_content: s.section_content.trim() }))
-      .filter((s) => {
-        if (!s.section_content || seenSection.has(s.section)) return false;
-        seenSection.add(s.section);
-        return true;
-      });
-    const final: ChangeFinal = {
-      // Single-section categories store the revised section + its target column;
-      // "overall" stores every affected section; legacy rows keep system_prompt.
-      ...(sectionCol && sc ? { section: sectionCol, section_content: sc } : {}),
-      ...(sections.length ? { sections } : {}),
-      ...(sp ? { system_prompt: sp } : {}),
-      ...(body.kb_entries && body.kb_entries.length
-        ? { kb_entries: body.kb_entries.map((e) => ({ title: e.title.trim(), content: e.content.trim() })) }
-        : {}),
-    };
+  if (body.action === "approve" || body.action === "approve_publish") {
+    // Carries the proposal's edits + base fingerprint (see lib/change-final.ts), so
+    // Publish can re-check the text against the live section.
+    const final = buildChangeFinal({
+      category: cr.category,
+      proposed: cr.proposed,
+      section_content: body.section_content,
+      sections: body.sections,
+      system_prompt: body.system_prompt,
+      kb_entries: body.kb_entries,
+    });
     const { error } = await supabase
       .from("change_requests")
       .update({ status: "approved", final, admin_note: body.admin_note ?? null, reviewed_by: admin.id, reviewed_at: nowIso })
       .eq("id", id);
     if (error) return NextResponse.json({ error: "Could not approve." }, { status: 500 });
-    return NextResponse.json({ ok: true });
+    if (body.action === "approve") return NextResponse.json({ ok: true });
+    // Approved above; if the publish below is refused, the request stays approved
+    // (not live) and the reason comes back to the reviewer.
+    return publish(supabase, cr, final, id, nowIso);
   }
 
   if (body.action === "regenerate") {
@@ -143,14 +144,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (cr.status !== "approved") {
     return NextResponse.json({ error: "Approve the request before publishing." }, { status: 400 });
   }
-  const final = (cr.final ?? {}) as ChangeFinal;
+  return publish(supabase, cr, (cr.final ?? {}) as ChangeFinal, id, nowIso);
+}
 
-  // Need the chatbot OWNER's user_id (for KB rows) + current KB size (for the cap).
-  const { data: chatbot } = await supabase
-    .from("chatbots").select("id, user_id").eq("id", cr.chatbot_id).maybeSingle();
-  if (!chatbot) return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
-  const ownerId = (chatbot as { user_id: string }).user_id;
-
+/**
+ * Make an approved change live. Re-checks every section against its LIVE text
+ * (planPublish): unchanged since drafting -> the approved text; changed -> the
+ * edits re-applied on top; otherwise 409 with the reason, and nothing is written.
+ * The section write is a compare-and-set on chatbots.updated_at, so a write that
+ * lands between the read and this update is never overwritten.
+ */
+async function publish(
+  supabase: Db,
+  cr: ChangeRequest,
+  final: ChangeFinal,
+  id: string,
+  nowIso: string
+): Promise<NextResponse> {
   const entries = final.kb_entries ?? [];
   if (entries.length) {
     const { data: sizeRows } = await supabase
@@ -162,30 +172,52 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
-  // Apply the prompt (live) - by id; admin RLS overlay authorizes it.
-  // "overall" writes each affected section; single-section categories write the one
-  // target column; legacy requests (old shape, no section) publish into system_prompt.
-  const publishCol = sectionColumnFor(cr.category);
-  if (final.sections && final.sections.length) {
-    // One column per section. Build a single update object so all sections publish
-    // atomically (last write per column wins - cleanSections already deduped).
-    const patch: Record<string, string> = {};
-    for (const s of final.sections) {
-      const content = s.section_content.trim();
-      if (content) patch[s.section] = content;
+  // Read the live sections, plan against them, then write - a compare-and-set on
+  // updated_at. Any update to the bot row moves updated_at (even an unrelated
+  // setting), so one miss is retried from a fresh read before giving up.
+  let ownerId = "";
+  let plan: Extract<ReturnType<typeof planPublish>, { ok: true }> | null = null;
+  for (let attempt = 0; attempt < 2 && !plan; attempt++) {
+    // The chatbot OWNER's user_id (for KB rows), the live sections and updated_at.
+    const { data: chatbot } = await supabase
+      .from("chatbots")
+      .select("id, user_id, updated_at, persona_section, offers_section, rebuttals_section, system_prompt")
+      .eq("id", cr.chatbot_id)
+      .maybeSingle();
+    if (!chatbot) return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
+    const bot = chatbot as LiveSections & { id: string; user_id: string; updated_at: string };
+    ownerId = bot.user_id;
+
+    const attemptPlan = planPublish(cr.category, final, bot);
+    if (!attemptPlan.ok) {
+      return NextResponse.json(
+        {
+          error: `Not published: ${attemptPlan.conflicts.join(" ")} Use Regenerate to draft it again from the current text.`,
+        },
+        { status: 409 }
+      );
     }
-    if (Object.keys(patch).length) {
-      const { error } = await supabase.from("chatbots").update(patch).eq("id", cr.chatbot_id);
-      if (error) return NextResponse.json({ error: "Could not update the chatbot sections." }, { status: 500 });
+
+    // Apply the prompt (live) - by id; admin RLS overlay authorizes it. One update
+    // for every column, so an "overall" request publishes atomically.
+    if (!Object.keys(attemptPlan.patch).length) {
+      plan = attemptPlan;
+      break;
     }
-  } else if (publishCol && final.section_content && final.section_content.trim()) {
-    const { error } = await supabase
-      .from("chatbots").update({ [publishCol]: final.section_content.trim() }).eq("id", cr.chatbot_id);
-    if (error) return NextResponse.json({ error: "Could not update the chatbot section." }, { status: 500 });
-  } else if (final.system_prompt && final.system_prompt.trim()) {
-    const { error } = await supabase
-      .from("chatbots").update({ system_prompt: final.system_prompt.trim() }).eq("id", cr.chatbot_id);
-    if (error) return NextResponse.json({ error: "Could not update the chatbot prompt." }, { status: 500 });
+    const { data: written, error } = await supabase
+      .from("chatbots")
+      .update(attemptPlan.patch)
+      .eq("id", cr.chatbot_id)
+      .eq("updated_at", bot.updated_at)
+      .select("id");
+    if (error) return NextResponse.json({ error: "Could not update the chatbot." }, { status: 500 });
+    if (written && written.length > 0) plan = attemptPlan;
+  }
+  if (!plan) {
+    return NextResponse.json(
+      { error: "The bot was updated at the same moment. Publish again to re-check against the new text." },
+      { status: 409 }
+    );
   }
 
   // Insert + index KB entries with the OWNER's user_id (never the admin's).
@@ -205,7 +237,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       )
       .select("id, chatbot_id, user_id, content");
     if (insertErr || !insertedRows) {
-      return NextResponse.json({ error: "Could not add the knowledge-base entries." }, { status: 500 });
+      // The prompt change may already be live at this point. Publishing again is
+      // safe: sections that already hold the approved text are left as they are,
+      // and the entries insert as one batch.
+      return NextResponse.json(
+        {
+          error: Object.keys(plan.patch).length
+            ? "The prompt change is live, but adding the knowledge entries failed. Click Publish again to add them; it won't repeat the prompt change."
+            : "Could not add the knowledge-base entries.",
+        },
+        { status: 500 }
+      );
     }
     const svc = createServiceClient();
     for (const inserted of insertedRows as { id: string; chatbot_id: string; user_id: string; content: string }[]) {
@@ -213,9 +255,27 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
+  // Record exactly what went live (after any re-apply), so the Applied view shows
+  // the real text rather than the pre-merge approval.
+  const liveFinal: ChangeFinal = plan.rebased.length
+    ? {
+        ...final,
+        ...(final.section && plan.patch[final.section] ? { section_content: plan.patch[final.section] } : {}),
+        ...(final.sections
+          ? {
+              sections: final.sections.map((s) =>
+                plan.patch[s.section] ? { ...s, section_content: plan.patch[s.section] } : s
+              ),
+            }
+          : {}),
+      }
+    : final;
+
   const { error: stErr } = await supabase
-    .from("change_requests").update({ status: "applied", applied_at: nowIso }).eq("id", id);
+    .from("change_requests")
+    .update({ status: "applied", applied_at: nowIso, final: liveFinal })
+    .eq("id", id);
   if (stErr) return NextResponse.json({ error: "Applied, but failed to update status." }, { status: 500 });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, rebased: plan.rebased });
 }

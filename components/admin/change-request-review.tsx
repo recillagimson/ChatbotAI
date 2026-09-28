@@ -11,10 +11,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { DiffView } from "@/components/dashboard/diff-view";
+import { EditsView } from "@/components/dashboard/edits-view";
+import { ProposalTryout } from "@/components/dashboard/proposal-tryout";
 import { CATEGORY_LABELS, SECTION_LABELS } from "@/lib/change-categories";
 import type { ChangeRequest, SectionColumn } from "@/lib/types";
 
-type Action = "approve" | "reject" | "regenerate" | "publish";
+type Action = "approve" | "approve_publish" | "reject" | "regenerate" | "publish";
 
 type EditableKbEntry = { title: string; content: string; include: boolean };
 
@@ -59,6 +61,11 @@ export function ChangeRequestReview({
         ? ""
         : (request.proposed?.system_prompt ?? chatbot.system_prompt ?? "")
   );
+  // While the text on screen is exactly what the AI proposed, its targeted edits
+  // describe the change; once the reviewer edits it by hand, a full diff does.
+  const proposedAsIs =
+    !!(request.proposed?.edits?.length || request.proposed?.append) &&
+    systemPrompt.trim() === (request.proposed?.section_content ?? "").trim();
   // "overall" - one editable revised text per affected section (initialized from the
   // AI proposal). Approve sends these as `sections`.
   const [sections, setSections] = useState<{ section: SectionColumn; content: string }[]>(
@@ -112,11 +119,12 @@ export function ChangeRequestReview({
     }
   }
 
-  function handleApprove() {
+  /** Exactly what's on screen: the (possibly edited) text, included KB entries, note. */
+  function approvePayload(): Record<string, unknown> {
     const kb_entries = kbEntries
       .filter((e) => e.include)
       .map(({ title, content }) => ({ title, content }));
-    run("approve", {
+    return {
       // Single-section categories publish into their section column; "overall"
       // publishes each affected section; legacy "other" rows carry system_prompt.
       ...(isSingleSection
@@ -132,7 +140,22 @@ export function ChangeRequestReview({
             : {}),
       kb_entries,
       admin_note: adminNote || undefined,
-    });
+    };
+  }
+
+  function handleApprove() {
+    run("approve", approvePayload());
+  }
+
+  function handleApprovePublish() {
+    if (
+      !window.confirm(
+        "Approve and publish to the live bot now? This changes what the client's bot says."
+      )
+    ) {
+      return;
+    }
+    run("approve_publish", approvePayload());
   }
 
   function handleReject() {
@@ -291,13 +314,22 @@ export function ChangeRequestReview({
         <SsCard className="p-[22px]">
           <SsCardHead titleAs="h3" title={`Proposed ${sectionLabel}`} />
           <div className="mt-4 space-y-3">
-            {isSingleSection && (
-              <DiffView
-                label={sectionLabel}
-                before={currentSection}
-                after={systemPrompt}
-              />
-            )}
+            {isSingleSection &&
+              // Each targeted edit on its own while the text is as proposed; once the
+              // reviewer edits it by hand, a whole-section diff of their version.
+              (proposedAsIs ? (
+                <EditsView
+                  label={sectionLabel}
+                  edits={request.proposed?.edits}
+                  append={request.proposed?.append}
+                />
+              ) : (
+                <DiffView
+                  label={sectionLabel}
+                  before={currentSection}
+                  after={systemPrompt}
+                />
+              ))}
             <Label htmlFor="proposed-system-prompt" className={isSingleSection ? "text-xs font-medium uppercase tracking-wide text-ss-muted" : "sr-only"}>
               {isSingleSection ? "Revised (after) - editable" : "Proposed system prompt"}
             </Label>
@@ -318,6 +350,12 @@ export function ChangeRequestReview({
                 </pre>
               </details>
             )}
+            {isSingleSection && !readOnly && request.proposed?.section && systemPrompt.trim() && (
+              <ProposalTryout
+                chatbotId={chatbot.id}
+                overrides={{ [request.proposed.section]: systemPrompt }}
+              />
+            )}
           </div>
         </SsCard>
       )}
@@ -332,13 +370,21 @@ export function ChangeRequestReview({
                 No section changes proposed - this request only adds knowledge (below).
               </p>
             ) : (
-              sections.map((s, i) => (
+              sections.map((s, i) => {
+                const p = request.proposed?.sections?.find((x) => x.section === s.section);
+                const asIs =
+                  !!p && !!(p.edits?.length || p.append) && s.content.trim() === p.section_content.trim();
+                return (
                 <div key={s.section} className="space-y-3 border-b border-ss-hair pb-6 last:border-b-0 last:pb-0">
-                  <DiffView
-                    label={SECTION_LABELS[s.section]}
-                    before={currentSections[s.section] ?? ""}
-                    after={s.content}
-                  />
+                  {asIs ? (
+                    <EditsView label={SECTION_LABELS[s.section]} edits={p?.edits} append={p?.append} />
+                  ) : (
+                    <DiffView
+                      label={SECTION_LABELS[s.section]}
+                      before={currentSections[s.section] ?? ""}
+                      after={s.content}
+                    />
+                  )}
                   <Label
                     htmlFor={`section-${s.section}`}
                     className="text-xs font-medium uppercase tracking-wide text-ss-muted"
@@ -353,7 +399,16 @@ export function ChangeRequestReview({
                     disabled={readOnly}
                   />
                 </div>
-              ))
+                );
+              })
+            )}
+            {!readOnly && sections.some((s) => s.content.trim()) && (
+              <ProposalTryout
+                chatbotId={chatbot.id}
+                overrides={Object.fromEntries(
+                  sections.filter((s) => s.content.trim()).map((s) => [s.section, s.content])
+                )}
+              />
             )}
           </div>
         </SsCard>
@@ -462,10 +517,19 @@ export function ChangeRequestReview({
                 type="button"
                 size="lg"
                 variant="primary"
+                onClick={handleApprovePublish}
+                disabled={busy !== null}
+              >
+                {busy === "approve_publish" ? "Publishing…" : "Approve & publish"}
+              </SsButton>
+              <SsButton
+                type="button"
+                size="lg"
+                variant="outline"
                 onClick={handleApprove}
                 disabled={busy !== null}
               >
-                {busy === "approve" ? "Approving…" : "Approve"}
+                {busy === "approve" ? "Approving…" : "Approve only"}
               </SsButton>
               <SsButton
                 type="button"
@@ -477,6 +541,11 @@ export function ChangeRequestReview({
                 {busy === "reject" ? "Rejecting…" : "Reject"}
               </SsButton>
             </div>
+            <p className="text-xs text-ss-muted">
+              Approve &amp; publish makes it live now. Approve only saves it for a later
+              publish. Either way, publishing re-checks the bot&apos;s current text first,
+              so a change made since this was drafted is never overwritten.
+            </p>
             <div className="space-y-2 border-t border-ss-hair pt-4">
               <Label htmlFor="guidance">Regenerate the draft (optional guidance)</Label>
               <div className="flex flex-wrap gap-3">
@@ -495,9 +564,7 @@ export function ChangeRequestReview({
                   onClick={handleRegenerate}
                   disabled={busy !== null}
                 >
-                  {busy === "regenerate"
-                    ? "Regenerating…"
-                    : "Regenerate with Sonnet"}
+                  {busy === "regenerate" ? "Regenerating…" : "Regenerate draft"}
                 </SsButton>
               </div>
             </div>

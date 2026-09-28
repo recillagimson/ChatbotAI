@@ -153,6 +153,10 @@ export default async function AdminRequestReviewPage({
           </Callout>
         ) : chatbot ? (
           <ChangeRequestReview
+            // Remount on every change to the request (a Regenerate, an approve):
+            // the review keeps its editable copy of the proposal in state, and a
+            // stale copy would otherwise be what gets approved and published.
+            key={`${cr.id}:${cr.updated_at}`}
             request={cr}
             chatbot={{
               id: chatbot.id,

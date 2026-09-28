@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionField } from "@/components/dashboard/section-field";
+import { SectionHistory } from "@/components/dashboard/section-history";
 import { Textarea } from "@/components/ui/textarea";
 import { clampDebounceSeconds, MIN_DEBOUNCE_SECONDS, MAX_DEBOUNCE_SECONDS } from "@/lib/debounce";
 import type { Chatbot } from "@/lib/types";
@@ -163,6 +164,19 @@ export function ChatbotEditForm({
           placeholder="Who the bot is and how it sounds - its name, voice, tone, and personality. e.g. 'You are Max, a warm, upbeat concierge for Acme…'"
           helper="This defines the bot's voice and identity. Upload a file (PDF, Word, or text) to drop its contents in, then edit. Safety rules and your Knowledge (below) are added automatically."
         />
+        <div className="mt-1.5">
+          {/* After a restore the form's copy must match the live text, or a later
+              Save would write the old text back over it. */}
+          <SectionHistory
+            chatbotId={chatbot.id}
+            section="persona_section"
+            label="Personality"
+            onRestored={(content) => {
+              setPersona(content);
+              setSaved(false);
+            }}
+          />
+        </div>
       </div>
 
       {/* 2 & 3. Offers and Rebuttals - read-only for owners (changed via Request
@@ -183,6 +197,17 @@ export function ChatbotEditForm({
               placeholder="Offers, services, what's included/excluded, pricing, and links."
               helper="Admin: editing directly - saves to the live bot, bypassing the Request Change review."
             />
+            <div className="mt-1.5">
+              <SectionHistory
+                chatbotId={chatbot.id}
+                section="offers_section"
+                label="Offers"
+                onRestored={(content) => {
+                  setOffers(content);
+                  setSaved(false);
+                }}
+              />
+            </div>
           </div>
           <div id="rebuttals" className="scroll-mt-4">
             <h3 className="sr-only">Rebuttals</h3>
@@ -198,11 +223,23 @@ export function ChatbotEditForm({
               placeholder="Common objections and how to handle them, plus FAQs."
               helper="Admin: editing directly - saves to the live bot, bypassing the Request Change review."
             />
+            <div className="mt-1.5">
+              <SectionHistory
+                chatbotId={chatbot.id}
+                section="rebuttals_section"
+                label="Rebuttals"
+                onRestored={(content) => {
+                  setRebuttals(content);
+                  setSaved(false);
+                }}
+              />
+            </div>
           </div>
         </>
       ) : (
         <>
           <ReadOnlySection
+            chatbotId={chatbot.id}
             anchorId="offers"
             heading="Offers"
             title="Offers & services / inclusions & exclusions / links"
@@ -210,6 +247,7 @@ export function ChatbotEditForm({
             category="offers"
           />
           <ReadOnlySection
+            chatbotId={chatbot.id}
             anchorId="rebuttals"
             heading="Rebuttals"
             title="Rebuttals & FAQs"
@@ -241,12 +279,14 @@ export function ChatbotEditForm({
  * pre-scoped to this section.
  */
 function ReadOnlySection({
+  chatbotId,
   anchorId,
   heading,
   title,
   value,
   category,
 }: {
+  chatbotId: string;
   anchorId: string;
   heading: string;
   title: string;
@@ -274,6 +314,12 @@ function ReadOnlySection({
       <p className="text-xs text-muted-foreground">
         Edited through the team-reviewed Request Change flow, not here.
       </p>
+      {/* Owners can see the history; the server decides who may restore it. */}
+      <SectionHistory
+        chatbotId={chatbotId}
+        section={category === "offers" ? "offers_section" : "rebuttals_section"}
+        label={heading}
+      />
     </div>
   );
 }

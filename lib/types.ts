@@ -257,23 +257,48 @@ export type ChangeCategory = "personality" | "offers" | "rebuttals" | "other" | 
 /** A prompt-section column that a proposal can revise. */
 export type SectionColumn = "persona_section" | "offers_section" | "rebuttals_section";
 
-/** One section's full revised text - the unit of an "overall" multi-section edit. */
-export interface SectionEdit {
-  section: SectionColumn;
-  section_content: string; // FULL revised text for that section (a replacement, not a diff)
+/** One targeted change to a prompt section: `find` is copied word for word from
+ *  the current text, `replace` is its new wording ("" deletes it). Applied by
+ *  lib/section-edits.ts, never by the model. */
+export interface TextEdit {
+  find: string;
+  replace: string;
 }
 
-export interface ChangeProposal {
+/**
+ * How a proposal changes one section, and what it was drafted against. The AI
+ * proposes `edits` / `append` (or, for an empty or short section, a whole new
+ * text); the server applies them and stores the result as `section_content`,
+ * plus `base_hash`, the fingerprint of the section text they were applied to.
+ * Apply / Publish re-checks that fingerprint against the live text (see
+ * rebaseOnLive), so a stale proposal can't silently undo a newer change.
+ */
+export interface SectionChangeFields {
+  edits?: TextEdit[];
+  append?: string;
+  base_hash?: string;
+}
+
+/** One section's revised text - the unit of an "overall" multi-section edit. */
+export interface SectionEdit extends SectionChangeFields {
+  section: SectionColumn;
+  section_content: string; // the section's FULL new text (computed from the edits)
+}
+
+export interface ChangeProposal extends SectionChangeFields {
   section?: SectionColumn;                          // column the section_content targets (single-section categories)
-  section_content?: string;                        // FULL revised text for the targeted section
-  sections?: SectionEdit[];                         // "overall" only: every section the request affects, each in full
+  section_content?: string;                        // FULL new text for the targeted section
+  sections?: SectionEdit[];                         // "overall" only: every section the request affects
   system_prompt?: string;                          // LEGACY - still honored for old rows; omitted/empty = no change
   kb_entries?: { title: string; content: string }[]; // NEW kb entries to add (may be omitted/empty)
   summary: string;                                 // plain-English "what changed and why" for the team
 }
 
-// The team-finalized payload chosen at Approve (no summary needed).
-export interface ChangeFinal {
+// The team-finalized payload chosen at Approve (no summary needed). Carries the
+// proposal's edits + base fingerprint so Publish can re-check against live text;
+// when the team rewrites the text by hand the edits are dropped and only the
+// fingerprint remains (a hand-edited text can't be re-applied, only checked).
+export interface ChangeFinal extends SectionChangeFields {
   section?: SectionColumn;
   section_content?: string;
   sections?: SectionEdit[];                         // "overall" only: sections published together
@@ -326,6 +351,9 @@ export interface TranscriptMessage {
   role: "user" | "assistant";
   content: string;
   images?: { path: string; name: string }[];  // storage paths (user messages only)
-  files?: { path: string; name: string; type: string }[];  // document attachments read as text (user messages only)
+  // Document attachments read as text (user messages only). `text` is the extracted
+  // text, saved the first time the chat reads the file so later turns don't download
+  // and re-parse it; it never goes back to the browser (see withoutFileText).
+  files?: { path: string; name: string; type: string; text?: string }[];
   created_at: string;
 }

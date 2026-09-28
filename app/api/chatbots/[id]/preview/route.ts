@@ -3,9 +3,13 @@ import { resolveChatbotAccess, ownerScope } from "@/lib/chatbot-access";
 import { buildKbBlock, isEmptyKbBlock } from "@/lib/retrieval";
 import { generateReply } from "@/lib/anthropic";
 import { renderTrainedResponses, isUsableTrainingPair } from "@/lib/training";
+import { pickSectionOverrides } from "@/lib/change-categories";
 import type { Chatbot, Message, TrainingPair } from "@/lib/types";
 
 export const runtime = "nodejs";
+// Like every other AI-calling route: the reply below can take a single retry, and
+// without this the platform default could cut it off before the route answers.
+export const maxDuration = 60;
 
 const MAX_LEN = 2000;
 const MAX_HISTORY = 40;
@@ -53,6 +57,12 @@ export async function POST(
   ).single<Chatbot>();
   if (error || !chatbot) return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
 
+  // Optional proposed section texts, so a Request Changes proposal can be tried
+  // before it goes live. Only the three prompt sections can be swapped in (see
+  // pickSectionOverrides); every other setting stays the bot's own.
+  const overrides = pickSectionOverrides(body?.sectionsOverride);
+  const bot: Chatbot = overrides ? { ...chatbot, ...overrides } : chatbot;
+
   // Optional unsaved working set so the owner can "try" a correction before saving.
   const pairs: TrainingPair[] = Array.isArray(body?.trainingPairsOverride)
     ? (body.trainingPairsOverride as TrainingPair[])
@@ -61,13 +71,13 @@ export async function POST(
   // Which prompt path this bot actually uses (mirror of buildSystemPrompt's gate),
   // so the trainer can show the owner whether their persona/system_prompt is even read.
   const hasSections = !!(
-    chatbot.persona_section?.trim() ||
-    chatbot.offers_section?.trim() ||
-    chatbot.rebuttals_section?.trim()
+    bot.persona_section?.trim() ||
+    bot.offers_section?.trim() ||
+    bot.rebuttals_section?.trim()
   );
   const promptMode = hasSections
     ? "section"
-    : chatbot.system_prompt?.trim()
+    : bot.system_prompt?.trim()
       ? "legacy"
       : "generic";
 
@@ -80,7 +90,7 @@ export async function POST(
   try {
     const kb = await buildKbBlock({ supabase: access.db, chatbot, history, userMessage });
     const { text } = await generateReply({
-      chatbot,
+      chatbot: bot,
       kbBlock: kb.block,
       history,
       userMessage,
@@ -89,6 +99,9 @@ export async function POST(
       turnInstruction: null,
       scheduledStart: null,
       trainedResponses: renderTrainedResponses(pairs),
+      // One retry on a transient provider error (429 / 5xx / timeout), as the
+      // live webhook does; a blip here used to dead-end the owner's test.
+      retries: 1,
     });
     // Diagnostics so the owner can SEE why a reply looked "off" - an empty KB
     // (kbChars 0 in retrieval mode = the model got no knowledge base for this

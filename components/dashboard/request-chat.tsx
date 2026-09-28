@@ -14,6 +14,8 @@ import {
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { RequestComposer } from "@/components/dashboard/request-composer";
 import { DiffView } from "@/components/dashboard/diff-view";
+import { EditsView } from "@/components/dashboard/edits-view";
+import { ProposalTryout } from "@/components/dashboard/proposal-tryout";
 import { CATEGORY_LABELS, SECTION_LABELS } from "@/lib/change-categories";
 import { createdRequestHref } from "@/lib/requests-pane";
 import type { ChangeCategory, ChangeProposal, SectionColumn } from "@/lib/types";
@@ -360,27 +362,50 @@ export function RequestChat({
                 <CardContent className="space-y-4">
                   <p className="whitespace-pre-wrap break-words text-sm">{proposal.summary}</p>
 
-                  {/* Section change → highlighted diff (removed red / added green). */}
+                  {/* Section change → each targeted edit on its own, or (for a short
+                      section rewritten whole) a highlighted diff of the section. */}
                   {proposal.section_content && proposal.section_content.trim() && (
-                    <DiffView
-                      label={CATEGORY_LABELS[category]}
-                      before={currentSection}
-                      after={proposal.section_content}
-                    />
+                    proposal.edits?.length || proposal.append ? (
+                      <EditsView
+                        label={CATEGORY_LABELS[category]}
+                        edits={proposal.edits}
+                        append={proposal.append}
+                      />
+                    ) : (
+                      <DiffView
+                        label={CATEGORY_LABELS[category]}
+                        before={currentSection}
+                        after={proposal.section_content}
+                      />
+                    )
                   )}
 
-                  {/* "Overall" → one diff per affected section. */}
+                  {/* "Overall" → one view per affected section. */}
                   {proposal.sections && proposal.sections.length > 0 && (
                     <div className="space-y-4">
-                      {proposal.sections.map((s) => (
-                        <DiffView
-                          key={s.section}
-                          label={SECTION_LABELS[s.section]}
-                          before={currentSections[s.section] ?? ""}
-                          after={s.section_content}
-                        />
-                      ))}
+                      {proposal.sections.map((s) =>
+                        s.edits?.length || s.append ? (
+                          <EditsView
+                            key={s.section}
+                            label={SECTION_LABELS[s.section]}
+                            edits={s.edits}
+                            append={s.append}
+                          />
+                        ) : (
+                          <DiffView
+                            key={s.section}
+                            label={SECTION_LABELS[s.section]}
+                            before={currentSections[s.section] ?? ""}
+                            after={s.section_content}
+                          />
+                        )
+                      )}
                     </div>
+                  )}
+
+                  {/* Try the proposed text in the sandbox before applying or submitting. */}
+                  {chatbotId && status !== "applied" && proposalOverrides(proposal) && (
+                    <ProposalTryout chatbotId={chatbotId} overrides={proposalOverrides(proposal)!} />
                   )}
 
                   {/* Legacy proposals (old shape) still show the system prompt. */}
@@ -482,6 +507,16 @@ export function RequestChat({
       </div>
     </div>
   );
+}
+
+/** The proposed section texts to try in the sandbox, or null when the proposal
+ *  changes no section (knowledge-only, or a legacy proposal with no column). */
+function proposalOverrides(p: ChangeProposal): Partial<Record<SectionColumn, string>> | null {
+  if (p.sections?.length) {
+    return Object.fromEntries(p.sections.map((s) => [s.section, s.section_content]));
+  }
+  if (p.section && p.section_content?.trim()) return { [p.section]: p.section_content };
+  return null;
 }
 
 const STATUS_LABEL: Record<CrStatus, string> = {

@@ -133,18 +133,27 @@ export async function POST(request: NextRequest) {
 
     // Resolve DOCUMENT attachments to text and fold them into the message so the
     // assistant reads the file content. Extraction failures are noted, not fatal.
+    // Each file is read ONCE: its text is kept on the transcript entry (f.text) and
+    // reused on every later turn, instead of downloading and re-parsing every
+    // attachment in the thread on every message. A failed read is not kept, so a
+    // transient storage error is retried next turn.
     let content = m.content;
     for (const f of m.files ?? []) {
       let block: string;
-      try {
-        const got = await downloadAsBuffer(supabase, f.path);
-        if (!got) throw new Error("file not found");
-        const text = (await extractTextFromFile({ buffer: got.buffer, name: f.name })).trim();
-        block = text
-          ? text.slice(0, MAX_DOC_CHARS) + (text.length > MAX_DOC_CHARS ? "\n…(truncated)" : "")
-          : "(no readable text found in this file)";
-      } catch {
-        block = "(could not read this file - it may be scanned, encrypted, or an unsupported format)";
+      if (typeof f.text === "string") {
+        block = f.text;
+      } else {
+        try {
+          const got = await downloadAsBuffer(supabase, f.path);
+          if (!got) throw new Error("file not found");
+          const text = (await extractTextFromFile({ buffer: got.buffer, name: f.name })).trim();
+          block = text
+            ? text.slice(0, MAX_DOC_CHARS) + (text.length > MAX_DOC_CHARS ? "\n…(truncated)" : "")
+            : "(no readable text found in this file)";
+          f.text = block;
+        } catch {
+          block = "(could not read this file - it may be scanned, encrypted, or an unsupported format)";
+        }
       }
       content += `\n\n--- Attached knowledge file: ${f.name} ---\n${block}`;
     }
@@ -221,5 +230,16 @@ export async function POST(request: NextRequest) {
     crId = inserted.id;
   }
 
-  return NextResponse.json({ id: crId, transcript: finalTranscript, proposal: proposal ?? null });
+  return NextResponse.json({
+    id: crId,
+    transcript: withoutFileText(finalTranscript),
+    proposal: proposal ?? null,
+  });
+}
+
+/** The transcript as the browser gets it: extracted document text stays server-side. */
+function withoutFileText(transcript: TranscriptMessage[]): TranscriptMessage[] {
+  return transcript.map((m) =>
+    m.files?.length ? { ...m, files: m.files.map(({ text: _text, ...f }) => f) } : m
+  );
 }

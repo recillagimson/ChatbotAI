@@ -62,3 +62,27 @@ export function isOverallCategory(category: ChangeCategory): category is "overal
 export function autoAppliesWithoutApproval(category: ChangeCategory): boolean {
   return category === "personality";
 }
+
+/** Largest prompt-section text we store, publish or preview (matches
+ *  MAX_SECTION_EXTRACT_CHARS). Lives here, not in lib/section-edits.ts, because
+ *  client components import this file and that one needs node:crypto. */
+export const MAX_SECTION_CHARS = 200_000;
+
+/**
+ * The proposed section texts a sandbox preview may swap in ("try this change
+ * before it goes live"). Only the three prompt sections, only strings, never an
+ * oversized one: the preview must not become a way to change any other setting
+ * of the bot it runs as. Returns null when there is nothing usable.
+ */
+export function pickSectionOverrides(raw: unknown): Partial<Record<SectionColumn, string>> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const out: Partial<Record<SectionColumn, string>> = {};
+  for (const col of ALL_SECTION_COLUMNS) {
+    const v = o[col];
+    if (typeof v !== "string") continue;
+    if (v.length > MAX_SECTION_CHARS) return null;
+    out[col] = v;
+  }
+  return Object.keys(out).length ? out : null;
+}

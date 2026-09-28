@@ -31,6 +31,10 @@ export default defineConfig({
       "tests/keyed-suspense*.spec.ts",
       "tests/middleware-matcher*.spec.ts",
       "tests/knowledge-in-prompt*.spec.ts",
+      "tests/section-edits*.spec.ts",
+      "tests/change-requests-safety*.spec.ts",
+      "tests/section-versions*.spec.ts",
+      "tests/change-assistant-repair*.spec.ts",
     ],
   },
   resolve: {

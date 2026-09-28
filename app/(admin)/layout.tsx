@@ -24,12 +24,14 @@ export default async function AdminLayout({
 
   // Rail badges: work waiting across all clients. Head-only counts (superadmin RLS
   // sees every row). Best-effort - a count failure just hides the badge.
+  // Requests count "approved" too: an approved request is NOT live until someone
+  // publishes it, and counting only "pending" hid exactly the forgotten ones.
   const supabase = await createClient();
   const [{ count: requests }, { count: feedback }] = await Promise.all([
     supabase
       .from("change_requests")
       .select("id", { count: "exact", head: true })
-      .eq("status", "pending"),
+      .in("status", ["pending", "approved"]),
     supabase
       .from("feedback")
       .select("id", { count: "exact", head: true })
