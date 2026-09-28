@@ -10,8 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 export function KnowledgeBaseForm({
   chatbotId,
 }: {
-  // The selected chatbot is owned by the parent (KnowledgeBaseManager) so the
-  // file list and this form stay in sync. The chatbot selector lives there, not here.
+  // The chatbot comes from the parent (the Knowledge section of a bot's Prompt
+  // tab, or the admin client page), so this form never picks one itself.
   chatbotId: string;
 }) {
   const router = useRouter();

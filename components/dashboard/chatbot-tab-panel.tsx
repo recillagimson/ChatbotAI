@@ -15,6 +15,8 @@ import { BotActiveToggle } from "@/components/dashboard/bot-active-toggle";
 import { ManychatKeyField } from "@/components/dashboard/manychat-key-field";
 import { WebhookSecretField } from "@/components/dashboard/webhook-secret-field";
 import { BotTrainer } from "@/components/dashboard/bot-trainer";
+import { KnowledgeSection } from "@/components/dashboard/knowledge-section";
+import { ScrollToHash } from "@/components/dashboard/scroll-to-hash";
 import { Sk, SkCard, SkCardHead } from "@/components/ss/skeleton";
 import { SsCard, SsCardHead, SsCardLink } from "@/components/ss/card";
 import { SsChip, SsStatus } from "@/components/ss/controls";
@@ -210,9 +212,9 @@ export async function ChatbotTabPanel({
                   suffix={
                     kbCount === 0
                       ? "no entries - it will guess"
-                      : kbCount < 6
-                        ? "entries - thin"
-                        : "entries"
+                      : kbCount === 1
+                        ? "entry on file"
+                        : "entries on file"
                   }
                 />
                 {deliveryFailures > 0 && (
@@ -430,16 +432,31 @@ export async function ChatbotTabPanel({
           </>
         )}
 
-        {/* ── Prompt ── */}
+        {/* ── Prompt & Knowledge ──
+            The prompt sections and the bot's knowledge on one tab, each section
+            saying how it is changed: Personality is saved with the form below,
+            Offers and Rebuttals go through the team-reviewed Request Change flow
+            (admins edit them in place), and Knowledge entries go live as soon as
+            they are added or edited. */}
         {tab === "prompt" && (
-          <SsCard className="p-[22px]">
-            <SsCardHead
-              title="Personality &amp; instructions"
-              description="The name, AI instructions and tone. Changes apply to new replies right away."
-              className="mb-5"
-            />
-            <ChatbotEditForm chatbot={safeChatbot} canEditSections={canEditSections} />
-          </SsCard>
+          <>
+            <PromptJumpLinks />
+            <SsCard className="p-[22px]">
+              <SsCardHead
+                titleAs="h2"
+                title="Prompt"
+                description={
+                  canEditSections
+                    ? "The name, reply timing and the three prompt sections. As an admin you can edit all three here; saving applies to new replies right away."
+                    : "The name, reply timing and the three prompt sections. Personality is yours to edit; Offers and Rebuttals are managed by the SpeedSettr team."
+                }
+                className="mb-5"
+              />
+              <ChatbotEditForm chatbot={safeChatbot} canEditSections={canEditSections} />
+            </SsCard>
+            <KnowledgeSection chatbot={safeChatbot} />
+            <ScrollToHash />
+          </>
         )}
 
         {/* ── Keywords ── */}
@@ -610,8 +627,8 @@ export async function ChatbotTabPanel({
 /**
  * The ranked gap list. Ordered by cost: a bot that can't send at all beats a bot
  * that answers badly, which beats a bot that hasn't been trained. Tab-local links
- * are relative to `basePath`; the global CTAs (/follow-ups, /knowledge-base,
- * /statistics) only render on the client dashboard's Overview tab.
+ * are relative to `basePath`; the global CTAs (/follow-ups, /statistics) only
+ * render on the client dashboard's Overview tab.
  */
 function buildFixes(ctx: {
   basePath: string;
@@ -657,16 +674,16 @@ function buildFixes(ctx: {
       urgent: true,
     });
   }
-  if (ctx.kbCount < 6) {
+  // Only an EMPTY knowledge base is a gap. A count threshold is not: every
+  // production bot carries one uploaded document, so "fewer than N entries" said
+  // every bot was thin.
+  if (ctx.kbCount === 0) {
     out.push({
-      title:
-        ctx.kbCount === 0
-          ? "No knowledge entries yet"
-          : `Only ${ctx.kbCount} knowledge ${ctx.kbCount === 1 ? "entry" : "entries"}`,
-      body: "Bots with six or more entries go off-script about a third as often. Add pricing, timelines and refund rules first.",
-      href: "/knowledge-base",
-      cta: "Add entries",
-      urgent: ctx.kbCount === 0,
+      title: "No knowledge on file yet",
+      body: "Without it the bot has no facts to cite, so it guesses at prices and policies. Upload your document or paste the key facts.",
+      href: `${ctx.basePath}?tab=prompt#knowledge`,
+      cta: "Add knowledge",
+      urgent: true,
     });
   }
   if (ctx.trained === 0) {
@@ -701,6 +718,34 @@ function Code({ children }: { children: ReactNode }) {
     <code className="rounded-[5px] bg-ss-chip px-1.5 py-0.5 font-mono text-[11.5px] text-ss-ink">
       {children}
     </code>
+  );
+}
+
+/**
+ * In-page links to each section of the Prompt & Knowledge tab. Plain hash
+ * anchors (no router round trip); the targets carry scroll-mt so the heading is
+ * not tucked under the page's top edge.
+ */
+function PromptJumpLinks() {
+  const links = [
+    { id: "personality", label: "Personality" },
+    { id: "offers", label: "Offers" },
+    { id: "rebuttals", label: "Rebuttals" },
+    { id: "knowledge", label: "Knowledge" },
+  ];
+  return (
+    <nav aria-label="Sections on this tab" className="flex flex-wrap items-center gap-1.5">
+      <span className="ss-eyebrow mr-1 text-ss-muted">Jump to</span>
+      {links.map((l) => (
+        <a
+          key={l.id}
+          href={`#${l.id}`}
+          className="rounded-full border border-ss-line bg-ss-surface px-3 py-1.5 text-[12px] font-semibold leading-none text-ss-body transition-colors hover:text-ss-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-indigo"
+        >
+          {l.label}
+        </a>
+      ))}
+    </nav>
   );
 }
 
@@ -762,7 +807,27 @@ export function ChatbotTabSkeleton({ tab }: { tab: ChatbotTabKey }) {
     );
   }
 
-  // Prompt, Keywords, Training, Follow-ups, Media - all an editor surface.
+  if (tab === "prompt") {
+    return (
+      <>
+        <Sk className="h-[30px] w-80 max-w-full rounded-full" tone="on-page" />
+        <SkCard className="p-6">
+          <SkCardHead width="w-24" />
+          <Sk className="mt-5 h-[42px] w-full rounded-ctl-lg" />
+          <Sk className="mt-4 h-[220px] w-full rounded-ctl-lg" />
+          <Sk className="mt-4 h-[140px] w-full rounded-ctl-lg" />
+          <Sk className="mt-4 h-[40px] w-32 rounded-ctl-lg" />
+        </SkCard>
+        <SkCard className="p-6">
+          <SkCardHead width="w-28" />
+          <Sk className="mt-4 h-[64px] w-full rounded-chip" />
+          <Sk className="mt-4 h-[120px] w-full rounded-ctl-lg" />
+        </SkCard>
+      </>
+    );
+  }
+
+  // Keywords, Training, Follow-ups, Media - all an editor surface.
   return (
     <SkCard className="p-6">
       <SkCardHead width="w-36" />

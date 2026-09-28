@@ -99,25 +99,23 @@ export const LESSONS: Lesson[] = [
     summary:
       "How one well-written entry stops a whole category of off-script replies.",
     gradient: ["#5A4413", "#B4862A"],
+    // Only an EMPTY knowledge base is a signal. Most bots carry one uploaded
+    // document, so an entry count says nothing about how much the bot knows.
     signal: (s) =>
-      s.kbEntries < 6
-        ? s.kbEntries === 0
-          ? "You have no knowledge entries - the bot is guessing"
-          : `You have ${s.kbEntries} ${s.kbEntries === 1 ? "entry" : "entries"} - thin`
-        : null,
+      s.kbEntries === 0 ? "You have no knowledge entries - the bot is guessing" : null,
     body: [
       {
         heading: "One entry, one idea",
         paragraphs: [
-          "A knowledge entry is a chunk of information the AI is allowed to state as fact: a price list, a refund policy, a timeline, an FAQ answer. The retrieval that feeds your bot works best when each entry covers one idea, because it pulls the entries closest to what the lead asked - and a single sprawling document matches everything and answers nothing.",
+          "A knowledge entry is information the AI is allowed to state as fact: a price list, a refund policy, a timeline, an FAQ answer. When your knowledge grows large, the bot searches it and pulls the passages closest to what the lead asked, so clear headings and one idea per paragraph help it find the right part.",
           "Write it the way you'd explain it to a new hire on their first day. Full sentences, no shorthand, no internal codenames the bot will repeat back to a stranger.",
         ],
       },
       {
         heading: "Start with the questions you already lose",
         paragraphs: [
-          "The fastest six entries to write are the six questions your leads ask before they buy: what it costs, what's included, how fast someone starts, what happens if it doesn't work, who it isn't for, and how to pay.",
-          "Bots with six or more entries go off-script roughly a third as often as bots with one. That's the single highest-leverage hour you can spend in this product.",
+          "The fastest things to write down are the six questions your leads ask before they buy: what it costs, what's included, how fast someone starts, what happens if it doesn't work, who it isn't for, and how to pay.",
+          "Every one of those you answer is a question the bot no longer has to guess at.",
         ],
       },
       {

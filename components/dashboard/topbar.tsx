@@ -35,8 +35,7 @@ export function Topbar({
     <header className="hidden h-[68px] shrink-0 items-center gap-4 border-b border-ss-line bg-ss-surface px-[30px] lg:flex">
       <BotSwitcher bots={bots} />
       <p className="hidden truncate text-[11.5px] leading-none text-ss-faint xl:block">
-        Scopes Conversations, Follow-ups, Statistics &amp; Knowledge Base · ⌘K
-        opens it
+        Scopes Conversations, Follow-ups &amp; Statistics · ⌘K opens it
       </p>
 
       <div className="ml-auto flex items-center gap-3">

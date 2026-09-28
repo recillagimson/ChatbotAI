@@ -30,6 +30,7 @@ export default defineConfig({
       "tests/requests-pane*.spec.ts",
       "tests/keyed-suspense*.spec.ts",
       "tests/middleware-matcher*.spec.ts",
+      "tests/knowledge-in-prompt*.spec.ts",
     ],
   },
   resolve: {

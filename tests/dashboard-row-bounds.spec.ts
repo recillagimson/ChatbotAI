@@ -65,33 +65,34 @@ describe("/follow-ups fetches only the reach window", () => {
   });
 });
 
-describe("/knowledge-base ships previews, not bodies", () => {
-  const page = read("app/(dashboard)/knowledge-base/page.tsx");
+// The list moved from the /knowledge-base page into the Knowledge section of each
+// chatbot's Prompt tab (components/dashboard/knowledge-section.tsx). The bound it
+// guards is the same one: never ship every entry's whole body to the browser.
+describe("the Knowledge section ships previews, not bodies", () => {
+  const section = read("components/dashboard/knowledge-section.tsx");
   const list = read("components/dashboard/kb-list.tsx");
-  const manager = read("components/dashboard/kb-manager.tsx");
 
-  it("no longer selects * from knowledge_base", () => {
-    expect(page).not.toMatch(/\.select\(\s*"\*,\s*chatbots\(name\)"\s*\)/);
+  it("does not select * from knowledge_base", () => {
+    expect(section).not.toMatch(/\.select\(\s*"\*/);
   });
 
   it("bounds the page size", () => {
-    expect(page).toMatch(/\.limit\(KB_LIST_MAX_ENTRIES\)/);
+    expect(section).toMatch(/\.limit\(KB_LIST_MAX_ENTRIES\)/);
   });
 
   it("truncates the body before it reaches the client component", () => {
-    expect(page).toMatch(
+    expect(section).toMatch(
       /content_preview:\s*\(content\s*\?\?\s*""\)\.slice\(0,\s*KB_PREVIEW_CHARS\)/
     );
   });
 
-  it("all three copies of the Entry shape carry content_preview, not content", () => {
-    // Three, not two: the dashboard page renders KnowledgeBaseManager, which
-    // holds its own copy, and only IT renders KnowledgeBaseList. Missing that
-    // file is why an earlier pass would have typechecked locally and still
-    // failed the Vercel build.
+  it("every copy of the Entry shape carries content_preview, not content", () => {
+    // The Knowledge section renders KnowledgeBaseList directly; the admin client
+    // page renders it too, from its own copy of the shape. Missing one of these
+    // is how an earlier pass typechecked locally and still failed the Vercel build.
     for (const [name, src] of [
       ["kb-list", list],
-      ["kb-manager", manager],
+      ["knowledge-section", section],
       ["admin client detail", read("app/(admin)/admin/clients/[id]/page.tsx")],
     ] as const) {
       expect(src, `${name} still declares content: string`).not.toMatch(

@@ -145,57 +145,73 @@ export function ChatbotEditForm({
         </p>
       </div>
 
-      {/* 1. Personality / Tone - directly editable. */}
-      <SectionField
-        id="edit-persona"
-        label="Personality / Tone"
-        value={persona}
-        onChange={(next) => {
-          setPersona(next);
-          setSaved(false);
-        }}
-        rows={10}
-        placeholder="Who the bot is and how it sounds - its name, voice, tone, and personality. e.g. 'You are Max, a warm, upbeat concierge for Acme…'"
-        helper="This defines the bot's voice and identity. Upload a file (PDF, Word, or text) to drop its contents in, then edit. Safety rules and the knowledge base are added automatically."
-      />
+      {/* 1. Personality / Tone - directly editable. The wrapper ids are the
+          targets of the tab's "Jump to" links. */}
+      <div id="personality" className="scroll-mt-4">
+        {/* Screen-reader heading: the jump links name four sections, so each is
+            reachable by heading navigation, not only the Knowledge card. */}
+        <h3 className="sr-only">Personality</h3>
+        <SectionField
+          id="edit-persona"
+          label="Personality / Tone"
+          value={persona}
+          onChange={(next) => {
+            setPersona(next);
+            setSaved(false);
+          }}
+          rows={10}
+          placeholder="Who the bot is and how it sounds - its name, voice, tone, and personality. e.g. 'You are Max, a warm, upbeat concierge for Acme…'"
+          helper="This defines the bot's voice and identity. Upload a file (PDF, Word, or text) to drop its contents in, then edit. Safety rules and your Knowledge (below) are added automatically."
+        />
+      </div>
 
       {/* 2 & 3. Offers and Rebuttals - read-only for owners (changed via Request
           Change, team-reviewed); directly editable for admins (own bots + view-as). */}
       {canEditSections ? (
         <>
-          <SectionField
-            id="edit-offers"
-            label="Offers & services / inclusions & exclusions / links"
-            value={offers}
-            onChange={(next) => {
-              setOffers(next);
-              setSaved(false);
-            }}
-            rows={7}
-            placeholder="Offers, services, what's included/excluded, pricing, and links."
-            helper="Admin: editing directly - saves to the live bot, bypassing the Request Change review."
-          />
-          <SectionField
-            id="edit-rebuttals"
-            label="Rebuttals & FAQs"
-            value={rebuttals}
-            onChange={(next) => {
-              setRebuttals(next);
-              setSaved(false);
-            }}
-            rows={7}
-            placeholder="Common objections and how to handle them, plus FAQs."
-            helper="Admin: editing directly - saves to the live bot, bypassing the Request Change review."
-          />
+          <div id="offers" className="scroll-mt-4">
+            <h3 className="sr-only">Offers</h3>
+            <SectionField
+              id="edit-offers"
+              label="Offers & services / inclusions & exclusions / links"
+              value={offers}
+              onChange={(next) => {
+                setOffers(next);
+                setSaved(false);
+              }}
+              rows={7}
+              placeholder="Offers, services, what's included/excluded, pricing, and links."
+              helper="Admin: editing directly - saves to the live bot, bypassing the Request Change review."
+            />
+          </div>
+          <div id="rebuttals" className="scroll-mt-4">
+            <h3 className="sr-only">Rebuttals</h3>
+            <SectionField
+              id="edit-rebuttals"
+              label="Rebuttals & FAQs"
+              value={rebuttals}
+              onChange={(next) => {
+                setRebuttals(next);
+                setSaved(false);
+              }}
+              rows={7}
+              placeholder="Common objections and how to handle them, plus FAQs."
+              helper="Admin: editing directly - saves to the live bot, bypassing the Request Change review."
+            />
+          </div>
         </>
       ) : (
         <>
           <ReadOnlySection
+            anchorId="offers"
+            heading="Offers"
             title="Offers & services / inclusions & exclusions / links"
             value={chatbot.offers_section}
             category="offers"
           />
           <ReadOnlySection
+            anchorId="rebuttals"
+            heading="Rebuttals"
             title="Rebuttals & FAQs"
             value={chatbot.rebuttals_section}
             category="rebuttals"
@@ -225,16 +241,21 @@ export function ChatbotEditForm({
  * pre-scoped to this section.
  */
 function ReadOnlySection({
+  anchorId,
+  heading,
   title,
   value,
   category,
 }: {
+  anchorId: string;
+  heading: string;
   title: string;
   value: string | null;
   category: "offers" | "rebuttals";
 }) {
   return (
-    <div className="space-y-2">
+    <div id={anchorId} className="scroll-mt-4 space-y-2">
+      <h3 className="sr-only">{heading}</h3>
       <div className="flex items-center justify-between gap-2">
         <Label>{title}</Label>
         <Button asChild variant="outline" size="sm">

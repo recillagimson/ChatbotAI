@@ -14,7 +14,6 @@ import {
   MessagesSquare,
   SendHorizontal,
   BarChart3,
-  BookOpen,
   GraduationCap,
   MessageSquareText,
   Sparkles,
@@ -64,7 +63,8 @@ export const WORKSPACE_NAV: NavItem[] = [
     badgeTone: "amber",
   },
   { href: "/statistics", label: "Statistics", short: "Stats", icon: BarChart3 },
-  { href: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
+  // No Knowledge Base item: knowledge belongs to one bot, so it lives in that
+  // bot's Prompt tab. /knowledge-base still resolves for old links (it redirects).
   { href: "/learn", label: "Learn", icon: GraduationCap },
   { href: "/feedback", label: "Feedback", icon: MessageSquareText },
   { href: "/requests", label: "Request Changes", icon: Sparkles },
@@ -104,7 +104,6 @@ export const IMPERSONATION_HREFS = new Set([
   "/conversations",
   "/follow-ups",
   "/statistics",
-  "/knowledge-base",
   "/learn",
   "/requests",
 ]);
