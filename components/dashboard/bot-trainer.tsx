@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +10,14 @@ import { Switch } from "@/components/ui/switch";
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { MessageBubble } from "@/components/dashboard/message-bubble";
 import type { Chatbot, TrainingPair } from "@/lib/types";
-import { isUsableTrainingPair } from "@/lib/training";
+import type { KeywordPreviewPlan, PreviewItem } from "@/lib/trainer-preview";
+import {
+  isUsableTrainingPair,
+  trainedResponsesTokens,
+  MAX_TRAINING_PAIRS,
+  MAX_SCENARIO_CHARS,
+  MAX_TRAINED_REPLY_CHARS,
+} from "@/lib/training";
 
 /** Per-reply diagnostics from the preview route - surfaces WHY a reply looked off
  *  (empty KB, which prompt path, how many corrections applied). */
@@ -32,6 +38,9 @@ type ChatMsg = {
   content: string;
   created_at: string;
   diag?: Diag;
+  /** What the lead would receive, in order: separate DMs, link flows, media. */
+  items?: PreviewItem[];
+  keyword?: KeywordPreviewPlan;
 };
 
 function newId(): string {
@@ -55,11 +64,16 @@ function toEditable(pairs: unknown): TrainingPair[] {
 }
 
 /**
- * Bot Trainer: a live sandbox chat (left) + a saved-scenarios manager (right). Correcting
- * a bot reply mints a TrainingPair (scenario = the preceding user message, reply = what the
- * owner typed, bad_reply = the bot's original). "Save training" persists via the owner's RLS
- * client. The sandbox transcript is ephemeral (never stored). Pairs are sent as
- * trainingPairsOverride so corrections take effect immediately before saving.
+ * Bot Trainer: a live sandbox chat (left) + the saved corrections (right).
+ *
+ * Correcting a sandbox reply SAVES AT ONCE (POST /api/chatbots/[id]/training-pairs),
+ * like "Correct this reply" in Conversations - there is no separate step to forget.
+ * Editing the list on the right is saved with "Save training" (PUT), which the
+ * server refuses if the stored list changed since this tab loaded it, so a stale
+ * tab can never drop a correction added elsewhere. The sandbox transcript is
+ * ephemeral; the working list is sent as trainingPairsOverride so edits can be
+ * tried before saving. Replies are shown as the lead would get them: separate
+ * DMs, link and media sends, and keyword triggers applied as they are live.
  */
 export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
   const router = useRouter();
@@ -67,17 +81,38 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  // Keyword groups that already fired in THIS test chat, so a repeat behaves like one.
+  const [keywordFired, setKeywordFired] = useState<string[]>([]);
 
   const [pairs, setPairs] = useState<TrainingPair[]>(toEditable(chatbot.training_pairs));
+  // The stored list as last seen: sent with Save so the server can refuse a stale save.
+  const [base, setBase] = useState<unknown>(Array.isArray(chatbot.training_pairs) ? chatbot.training_pairs : []);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [draftScenario, setDraftScenario] = useState<Record<string, string>>({});
   const [draftExact, setDraftExact] = useState<Record<string, boolean>>({});
   const [openDraft, setOpenDraft] = useState<string | null>(null);
+  const [draftSaving, setDraftSaving] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [savedCorrection, setSavedCorrection] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Unsaved list edits: warn before the tab closes or reloads.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const atCap = pairs.length >= MAX_TRAINING_PAIRS;
+  const tokens = trainedResponsesTokens(pairs);
 
   function markDirty() {
     setDirty(true);
@@ -96,13 +131,33 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
       const res = await fetch(`/api/chatbots/${chatbot.id}/preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userMessage: text, history, trainingPairsOverride: pairs.filter((p) => p.enabled) }),
+        body: JSON.stringify({
+          userMessage: text,
+          history,
+          trainingPairsOverride: pairs.filter((p) => p.enabled),
+          keywordFired,
+        }),
       });
       const j = await res.json().catch(() => null);
       if (!res.ok || typeof j?.text !== "string") {
         setChatError(j?.error ?? "The bot couldn't reply - try again.");
       } else {
-        setMessages((prev) => [...prev, { id: newId(), role: "assistant", content: j.text, created_at: new Date().toISOString(), diag: j.diag }]);
+        const kw = j.keyword as KeywordPreviewPlan | undefined;
+        if (kw && "fires" in kw && kw.fires) {
+          setKeywordFired((f) => (f.includes(kw.groupId) ? f : [...f, kw.groupId]));
+        }
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            role: "assistant",
+            content: j.text,
+            created_at: new Date().toISOString(),
+            diag: j.diag,
+            items: Array.isArray(j.items) ? j.items : undefined,
+            keyword: kw,
+          },
+        ]);
       }
     } catch {
       setChatError("Network error - try again.");
@@ -116,30 +171,42 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
     return "";
   }
 
-  function saveCorrection(assistantId: string, botReply: string) {
+  /** Save one correction right away (the sandbox's "Train this reply"). */
+  async function saveCorrection(assistantId: string, botReply: string) {
     const reply = (drafts[assistantId] ?? "").trim();
     // Scenario defaults to the preceding user message but is editable - and
-    // REQUIRED, so a correction on a first message (no preceding user text) can't
-    // be minted with a blank scenario that would be silently dropped on save.
+    // REQUIRED, so a correction on a first message can't be saved without one.
     const scenario = (draftScenario[assistantId] ?? precedingUser(assistantId)).trim();
-    if (!reply || !scenario) return;
-    setPairs((prev) => [
-      ...prev,
-      {
-        id: newId(),
-        scenario,
-        reply,
-        bad_reply: botReply,
-        exact: !!draftExact[assistantId],
-        note: null,
-        enabled: true,
-      },
-    ]);
-    setDrafts((d) => ({ ...d, [assistantId]: "" }));
-    setDraftScenario((d) => ({ ...d, [assistantId]: "" }));
-    setDraftExact((d) => ({ ...d, [assistantId]: false }));
-    setOpenDraft(null);
-    markDirty();
+    if (!reply || !scenario || draftSaving) return;
+    setDraftSaving(assistantId);
+    setDraftError(null);
+    try {
+      const res = await fetch(`/api/chatbots/${chatbot.id}/training-pairs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pair: { scenario, reply, bad_reply: botReply, exact: !!draftExact[assistantId], enabled: true },
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.pair) {
+        setDraftError((data && data.error) || "Could not save the correction.");
+        return;
+      }
+      // Keep any unsaved edits on the right; add the saved correction; remember
+      // the stored list so a later Save of those edits is not refused.
+      setPairs((prev) => [...prev, ...toEditable([data.pair])]);
+      setBase(data.pairs);
+      setDrafts((d) => ({ ...d, [assistantId]: "" }));
+      setDraftScenario((d) => ({ ...d, [assistantId]: "" }));
+      setDraftExact((d) => ({ ...d, [assistantId]: false }));
+      setOpenDraft(null);
+      setSavedCorrection(assistantId);
+    } catch {
+      setDraftError("Network error - try again.");
+    } finally {
+      setDraftSaving(null);
+    }
   }
 
   function patchPair(id: string, next: Partial<TrainingPair>) {
@@ -151,6 +218,7 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
     markDirty();
   }
   function addPair() {
+    if (atCap) return;
     setPairs((prev) => [...prev, { id: newId(), scenario: "", reply: "", bad_reply: null, exact: false, note: null, enabled: true }]);
     markDirty();
   }
@@ -169,31 +237,29 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
         note: p.note?.trim() || null,
         enabled: p.enabled,
       }));
-    const supabase = createClient();
-    // .select() so a 0-row write (RLS/permission, wrong bot) is DETECTED instead of
-    // silently showing "Saved ✓". router.refresh() reconciles the server data.
-    const { data, error } = await supabase
-      .from("chatbots")
-      .update({ training_pairs: cleaned })
-      .eq("id", chatbot.id)
-      .select("id");
-    setSaving(false);
-    if (error) {
-      setSaveError(error.message);
-      return;
+    try {
+      const res = await fetch(`/api/chatbots/${chatbot.id}/training-pairs`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pairs: cleaned, base }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setSaveError((data && data.error) || "Couldn't save your corrections. Nothing was changed.");
+        return;
+      }
+      setBase(data.pairs);
+      setSaved(true);
+      setDirty(false);
+      router.refresh();
+    } catch {
+      setSaveError("Network error - nothing was saved. Try again.");
+    } finally {
+      setSaving(false);
     }
-    if (!data || data.length === 0) {
-      setSaveError(
-        "Couldn't save - the change didn't reach the database (you may not have permission on this bot). Nothing was saved."
-      );
-      return;
-    }
-    setSaved(true);
-    setDirty(false);
-    router.refresh();
   }
 
-  // Enabled pairs missing a scenario or reply - silently dropped on save/at reply
+  // Enabled pairs missing a scenario or reply - dropped on save and unused at reply
   // time, so surface them instead (the "my edit did nothing" trap).
   const incompleteEnabled = pairs.filter(
     (p) => p.enabled && !(p.scenario.trim() && p.reply.trim())
@@ -204,33 +270,60 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
       {/* Left: sandbox chat */}
       <div className="lg:col-span-2 flex flex-col rounded-md border min-h-[28rem]">
         <div className="flex items-center justify-between border-b px-3 py-2">
-          <span className="text-sm font-medium">Test chat - sandbox (nothing here is saved to your inbox)</span>
-          <Button type="button" variant="ghost" size="sm" onClick={() => { setMessages([]); setOpenDraft(null); }}>
+          <span className="text-sm font-medium">
+            Test chat - shown as Instagram delivers it (nothing here is saved to your inbox)
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setMessages([]);
+              setOpenDraft(null);
+              setKeywordFired([]);
+              setSavedCorrection(null);
+            }}
+          >
             Reset chat
           </Button>
         </div>
         <ChatScroll className="flex-1 min-h-0 p-4 space-y-3" count={messages.length}>
           {messages.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Message the bot to test it. Then use &ldquo;Train this reply&rdquo; under any bot message to teach it what to say instead.
+              Message the bot as a lead would. Replies show up the way a lead gets them. Use &ldquo;Train this reply&rdquo; under any bot message to teach it what to say instead.
             </p>
           )}
           {messages.map((m) => (
             <div key={m.id} className="space-y-1">
-              <MessageBubble message={m} />
+              {m.role === "assistant" && m.keyword && <KeywordNote plan={m.keyword} />}
+              {m.role === "assistant" && m.items && m.items.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                  {m.items.map((it, k) => (
+                    <PreviewItemView key={k} item={it} message={m} index={k} />
+                  ))}
+                </div>
+              ) : (
+                <MessageBubble message={m} />
+              )}
               {m.role === "assistant" && m.diag && <DiagLine diag={m.diag} />}
-              {m.role === "assistant" && (
+              {m.role === "assistant" && savedCorrection === m.id && (
+                <p role="status" className="text-right text-[11px] text-ss-green-ink">
+                  Correction saved. The bot uses it from its next reply.
+                </p>
+              )}
+              {m.role === "assistant" && m.keyword?.kind !== "canned" && (
                 <div className="flex justify-end">
                   <div className="w-[75%]">
                     {openDraft === m.id ? (
                       <div className="space-y-2 rounded-md border bg-background p-2">
                         <Label htmlFor={`corr-scen-${m.id}`} className="text-xs">
-                          When the contact says (scenario)
+                          When a lead says something like
                         </Label>
                         <Input
                           id={`corr-scen-${m.id}`}
                           value={draftScenario[m.id] ?? precedingUser(m.id)}
                           onChange={(e) => setDraftScenario((d) => ({ ...d, [m.id]: e.target.value }))}
+                          maxLength={MAX_SCENARIO_CHARS}
                           placeholder="what is your price"
                         />
                         <Label htmlFor={`corr-${m.id}`} className="text-xs">
@@ -241,8 +334,12 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
                           rows={2}
                           value={drafts[m.id] ?? ""}
                           onChange={(e) => setDrafts((d) => ({ ...d, [m.id]: e.target.value }))}
+                          maxLength={MAX_TRAINED_REPLY_CHARS}
                           placeholder="What should it have said here?"
                         />
+                        {draftError && openDraft === m.id && (
+                          <p role="alert" className="text-xs text-destructive">{draftError}</p>
+                        )}
                         <div className="flex items-center justify-between">
                           <label className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Switch checked={!!draftExact[m.id]} onCheckedChange={(v) => setDraftExact((d) => ({ ...d, [m.id]: v }))} />
@@ -254,19 +351,31 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
                               type="button"
                               size="sm"
                               disabled={
+                                draftSaving !== null ||
                                 !(drafts[m.id] ?? "").trim() ||
                                 !(draftScenario[m.id] ?? precedingUser(m.id)).trim()
                               }
-                              onClick={() => saveCorrection(m.id, m.content)}
+                              onClick={() => void saveCorrection(m.id, m.content)}
                             >
-                              Add
+                              {draftSaving === m.id ? "Saving…" : "Save correction"}
                             </Button>
                           </div>
                         </div>
                       </div>
                     ) : (
                       <div className="flex justify-end">
-                        <Button type="button" variant="ghost" size="sm" className="text-xs" onClick={() => setOpenDraft(m.id)}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
+                          disabled={atCap}
+                          title={atCap ? `This bot already has ${MAX_TRAINING_PAIRS} corrections.` : undefined}
+                          onClick={() => {
+                            setDraftError(null);
+                            setOpenDraft(m.id);
+                          }}
+                        >
                           Train this reply
                         </Button>
                       </div>
@@ -291,18 +400,25 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
         </div>
       </div>
 
-      {/* Right: saved scenarios */}
+      {/* Right: saved corrections */}
       <div className="lg:col-span-1 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">Saved scenarios ({pairs.length})</h3>
+          <h3 className="text-sm font-medium">
+            Saved corrections ({pairs.length} of {MAX_TRAINING_PAIRS})
+          </h3>
           {dirty && <span className="text-xs text-ss-amber-soft">Unsaved</span>}
         </div>
         <p className="text-[11px] leading-snug text-muted-foreground">
-          When a contact&rsquo;s message matches a Scenario, the bot answers with that Reply - it takes precedence over the knowledge base for that scenario. Click <strong>Save training</strong> to apply it to the live bot.
+          When a lead&rsquo;s message matches a situation below, the bot answers with that reply. It takes precedence over the knowledge base for that situation. Corrections you make in the chat, or from Conversations, save at once; edits to this list need <strong>Save training</strong>.
         </p>
+        {tokens > 0 && (
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            These corrections add about {tokens.toLocaleString()} tokens to every reply the bot sends.
+          </p>
+        )}
         {pairs.length === 0 && (
           <p className="rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
-            No trained scenarios yet. Correct a bot reply on the left, or add one below.
+            No corrections yet. Correct a bot reply on the left or in Conversations, or add one below.
           </p>
         )}
         <div className="space-y-3">
@@ -316,12 +432,23 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
                 <Button type="button" variant="ghost" size="sm" onClick={() => removePair(p.id)}>Remove</Button>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Scenario</Label>
-                <Input value={p.scenario} onChange={(e) => patchPair(p.id, { scenario: e.target.value })} placeholder="what is your price" />
+                <Label className="text-xs">When a lead says something like</Label>
+                <Input
+                  value={p.scenario}
+                  onChange={(e) => patchPair(p.id, { scenario: e.target.value })}
+                  maxLength={MAX_SCENARIO_CHARS}
+                  placeholder="what is your price"
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Reply</Label>
-                <Textarea rows={2} value={p.reply} onChange={(e) => patchPair(p.id, { reply: e.target.value })} placeholder="What to say in this scenario" />
+                <Textarea
+                  rows={2}
+                  value={p.reply}
+                  onChange={(e) => patchPair(p.id, { reply: e.target.value })}
+                  maxLength={MAX_TRAINED_REPLY_CHARS}
+                  placeholder="What to say in this situation"
+                />
               </div>
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Switch checked={!!p.exact} onCheckedChange={(v) => patchPair(p.id, { exact: v })} />
@@ -332,29 +459,82 @@ export function BotTrainer({ chatbot }: { chatbot: Chatbot }) {
                   ? "Sends this reply word for word."
                   : "Keeps your wording and facts, said in the bot's own voice."}
               </p>
-              {p.enabled && !(p.scenario.trim() && p.reply.trim()) && (
+              {p.enabled && !isUsableTrainingPair(p) && (
                 <p className="text-[11px] text-ss-amber-soft">
-                  Needs both a Scenario and a Reply to take effect.
+                  Needs both a situation and a reply to take effect.
                 </p>
               )}
             </div>
           ))}
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={addPair}>+ Add scenario</Button>
+        <Button type="button" variant="outline" size="sm" onClick={addPair} disabled={atCap}>
+          + Add correction
+        </Button>
+        {atCap && (
+          <p className="text-[11px] text-muted-foreground">
+            That&rsquo;s the most a bot can use ({MAX_TRAINING_PAIRS}). Remove ones you no longer need to add more.
+          </p>
+        )}
         {incompleteEnabled > 0 && (
           <p className="rounded bg-ss-amber-bg px-2 py-1 text-xs text-ss-amber-ink">
-            {incompleteEnabled} enabled scenario{incompleteEnabled === 1 ? "" : "s"} {incompleteEnabled === 1 ? "is" : "are"} missing a Scenario or Reply - they won&rsquo;t be saved or used until both are filled.
+            {incompleteEnabled} enabled correction{incompleteEnabled === 1 ? "" : "s"} {incompleteEnabled === 1 ? "is" : "are"} missing a situation or reply - they won&rsquo;t be saved or used until both are filled.
           </p>
         )}
         {saveError && <p className="rounded bg-destructive/10 px-2 py-1 text-xs text-destructive">{saveError}</p>}
         <div className="flex items-center gap-2">
-          <Button type="button" onClick={() => void saveTraining()} disabled={saving}>
+          <Button type="button" onClick={() => void saveTraining()} disabled={saving || !dirty}>
             {saving ? "Saving…" : "Save training"}
           </Button>
           {saved && <span className="text-xs text-ss-green">Saved ✓</span>}
         </div>
       </div>
     </div>
+  );
+}
+
+/** One piece of the reply as the lead gets it: a DM bubble, a link flow, or media. */
+function PreviewItemView({ item, message, index }: { item: PreviewItem; message: ChatMsg; index: number }) {
+  if (item.kind === "text") {
+    return (
+      <MessageBubble
+        message={{ id: `${message.id}-${index}`, role: "assistant", content: item.text, created_at: message.created_at }}
+      />
+    );
+  }
+  if (item.kind === "flow") {
+    return (
+      <p className="self-end rounded-full border px-3 py-1 text-[11px] text-muted-foreground">
+        Sends your link: {item.name}
+      </p>
+    );
+  }
+  return item.found ? (
+    <p className="self-end rounded-full border px-3 py-1 text-[11px] text-muted-foreground">
+      Sends {item.mediaKind ?? "file"}: {item.label || item.key}
+    </p>
+  ) : (
+    <p className="self-end max-w-[80%] rounded-md bg-ss-amber-bg px-3 py-1.5 text-[11px] text-ss-amber-ink">
+      Tries to send &ldquo;{item.key}&rdquo;, but no file with that key is on the Media tab, so a lead gets nothing here.
+    </p>
+  );
+}
+
+/** How a keyword trigger changes this reply, as it would live. */
+function KeywordNote({ plan }: { plan: KeywordPreviewPlan }) {
+  if (plan.kind === "none" || plan.kind === "ai") return null;
+  const words = "keywords" in plan && plan.keywords.length ? ` (${plan.keywords.join(", ")})` : "";
+  const text =
+    plan.kind === "gated"
+      ? plan.questionsMayPass
+        ? "In a real DM from someone who hasn't used one of your keywords yet, this bot replies only if the message is a genuine question about your business (checked live). Below is what it says when it does reply."
+        : "In a real DM from someone who hasn't used one of your keywords yet, this bot doesn't reply at all (keyword-only mode). Below is what it says to a lead who already has."
+      : plan.kind === "canned"
+        ? `Your keyword trigger${words} answers this message, not the AI. Corrections here don't change it; edit that reply on the Keywords tab.`
+        : `Your keyword trigger${words} adds its instruction to this reply.`;
+  return (
+    <p className="self-end max-w-[80%] rounded-md bg-ss-amber-bg px-3 py-1.5 text-[11px] leading-snug text-ss-amber-ink">
+      {text}
+    </p>
   );
 }
 

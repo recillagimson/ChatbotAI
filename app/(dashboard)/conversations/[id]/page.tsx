@@ -6,6 +6,8 @@ import { requireSuperadmin } from "@/lib/admin";
 import { ConversationActions } from "@/components/dashboard/conversation-actions";
 import { ConversationReplyBox } from "@/components/dashboard/conversation-reply-box";
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
+import { CorrectReplyButton } from "@/components/dashboard/correct-reply-button";
+import { isCorrectableBotMessage } from "@/lib/training";
 import {
   MessageBubble,
   DayDivider,
@@ -209,6 +211,13 @@ export default async function ConversationDetailPage({
                 mediaUrl={mediaUrls.get(m.id)}
                 eagerMedia={eagerImages.has(m.id)}
               />
+              {isCorrectableBotMessage(m) && (
+                <CorrectReplyButton
+                  chatbotId={conversation.chatbot_id}
+                  leadMessage={leadMessageBefore(messages!, i)}
+                  botReply={m.content}
+                />
+              )}
             </div>
           );
         })}
@@ -233,6 +242,26 @@ export default async function ConversationDetailPage({
       />
     </div>
   );
+}
+
+/**
+ * The lead's message(s) an AI reply answered: the run of lead messages just
+ * before this reply's block (skipping earlier bubbles of the same reply), joined.
+ * Media-only rows carry no words to describe, so they are left out.
+ */
+function leadMessageBefore(
+  messages: { role: string; content: string | null }[],
+  index: number
+): string {
+  let j = index - 1;
+  while (j >= 0 && messages[j].role === "assistant") j--;
+  const parts: string[] = [];
+  while (j >= 0 && messages[j].role === "user") {
+    const c = (messages[j].content ?? "").trim();
+    if (c && c !== "(media message)") parts.unshift(c);
+    j--;
+  }
+  return parts.join("\n");
 }
 
 /** "TODAY", "YESTERDAY", or the date - the divider label between days. */

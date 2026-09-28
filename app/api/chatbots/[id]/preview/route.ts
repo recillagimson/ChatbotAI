@@ -4,6 +4,11 @@ import { buildKbBlock, isEmptyKbBlock } from "@/lib/retrieval";
 import { generateReply } from "@/lib/anthropic";
 import { renderTrainedResponses, isUsableTrainingPair } from "@/lib/training";
 import { pickSectionOverrides } from "@/lib/change-categories";
+import { firstMatchingGroup } from "@/lib/keyword-triggers";
+import { planKeywordForPreview, buildPreviewItems } from "@/lib/trainer-preview";
+import { planLinkFlow, planDeliveryBubbles } from "@/lib/link-flow";
+import { findAssetDirectives } from "@/lib/ai-media";
+import { fetchFollowupAssets, buildAssetCatalogBlock } from "@/lib/followup-assets";
 import type { Chatbot, Message, TrainingPair } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -87,7 +92,42 @@ export async function POST(
   const trainingActive = enabledPairs.filter((p) => isUsableTrainingPair(p)).length;
   const trainingSkipped = enabledPairs.length - trainingActive;
 
+  // Keyword triggers, applied as the live webhook would (lib/trainer-preview.ts).
+  // The sandbox tells us which groups already fired in THIS test chat, so a repeat
+  // behaves like a repeat. A canned keyword reply means the AI never runs live.
+  const fired: string[] = Array.isArray(body?.keywordFired)
+    ? (body.keywordFired as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 50)
+    : [];
+  const group = firstMatchingGroup(
+    userMessage,
+    bot.keyword_triggers ?? [],
+    bot.keyword_strict_enabled ?? false
+  );
+  const keyword = planKeywordForPreview({
+    group,
+    alreadyFired: !!group && fired.includes(group.id),
+    gateEnabled: bot.keyword_gate_enabled ?? false,
+    engaged: fired.length > 0,
+    answersQuestions: bot.keyword_gate_answer_questions ?? false,
+  });
+
+  if (keyword.kind === "canned") {
+    // The canned reply's asset sends regardless of AI media (as live).
+    const assets = keyword.assetKey ? await fetchFollowupAssets(access.db, bot.id) : [];
+    const items = buildPreviewItems(
+      planDeliveryBubbles([
+        { kind: "text", text: keyword.text },
+        ...(keyword.assetKey ? [{ kind: "media" as const, key: keyword.assetKey }] : []),
+      ]),
+      assets
+    );
+    return NextResponse.json({ text: keyword.text, items, keyword });
+  }
+
   try {
+    // The media library, only when the bot may send AI media (as live), so
+    // [[SEND_ASSET: key]] can be tested here too.
+    const assetLib = bot.ai_media_enabled ? await fetchFollowupAssets(access.db, bot.id) : [];
     const kb = await buildKbBlock({ supabase: access.db, chatbot, history, userMessage });
     const { text } = await generateReply({
       chatbot: bot,
@@ -95,20 +135,27 @@ export async function POST(
       history,
       userMessage,
       memorySummary: null,
-      mediaCatalog: null,
-      turnInstruction: null,
+      mediaCatalog: assetLib.length ? buildAssetCatalogBlock(assetLib) : null,
+      turnInstruction: keyword.kind === "instruction" ? keyword.instruction : null,
       scheduledStart: null,
       trainedResponses: renderTrainedResponses(pairs),
       // One retry on a transient provider error (429 / 5xx / timeout), as the
       // live webhook does; a blip here used to dead-end the owner's test.
       retries: 1,
     });
+    // What the lead would actually receive: link tokens and media directives
+    // stripped and delivered in place, text split into separate DMs.
+    const mediaMatches = bot.ai_media_enabled ? findAssetDirectives(text) : [];
+    const linkPlan = planLinkFlow({ replyText: text, chatbot: bot, platform: "instagram", mediaMatches });
+    const items = buildPreviewItems(planDeliveryBubbles(linkPlan.deliver), assetLib);
     // Diagnostics so the owner can SEE why a reply looked "off" - an empty KB
     // (kbChars 0 in retrieval mode = the model got no knowledge base for this
     // message), which prompt path is active, and how many corrections applied.
     const kbEmpty = isEmptyKbBlock(kb.block);
     return NextResponse.json({
-      text,
+      text: linkPlan.cleanText,
+      items,
+      keyword,
       diag: {
         promptMode,
         kbMode: kb.mode,
