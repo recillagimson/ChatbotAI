@@ -284,6 +284,70 @@ export function manychatSendRejection(json: unknown): string | null {
   return null;
 }
 
+/** First non-empty string anywhere in a (shallow) ManyChat error `details` value. */
+function firstDetailString(value: unknown, depth = 0): string | null {
+  if (depth > 4 || value == null) return null;
+  if (typeof value === "string") return value.trim() || null;
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const s = firstDetailString(v, depth + 1);
+      if (s) return s;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    for (const v of Object.values(value as Record<string, unknown>)) {
+      const s = firstDetailString(v, depth + 1);
+      if (s) return s;
+    }
+  }
+  return null;
+}
+
+/**
+ * ManyChat's own words for why a send failed, read from the error postSendContent
+ * throws, or null when ManyChat said nothing (a network error, an empty 5xx). Lets
+ * the composer show the real reason ("Unsupported message tag", "last interaction
+ * was over 24h ago") instead of a bare "Please try again". The error formats are
+ * postSendContent's:
+ *   "ManyChat send refused (HTTP 200): <message> (attempt n/m)"
+ *   "ManyChat send failed: <status> <body> (attempt n/m)"
+ * Dashes are converted (visible UI copy) and the result is capped at 200 chars.
+ * Pure + unit-tested.
+ */
+export function manychatFailureReason(err: unknown): string | null {
+  if (!(err instanceof Error)) return null;
+  const msg = err.message.replace(/\s*\(attempt \d+\/\d+\)\s*$/, "").trim();
+  let reason: string | null = null;
+  const refused = /^ManyChat send refused \(HTTP 200\):\s*([\s\S]*)$/.exec(msg);
+  if (refused) {
+    reason = refused[1];
+  } else {
+    // Only an HTTP response carries ManyChat's words; a transport error does not.
+    const failed = /^ManyChat send failed:\s*(\d{3})\s*([\s\S]*)$/.exec(msg);
+    if (failed) {
+      const body = failed[2].trim();
+      let json: unknown = null;
+      try {
+        json = JSON.parse(body);
+      } catch {
+        // Not JSON: the body text is ManyChat's (or its proxy's) message as-is.
+      }
+      if (json && typeof json === "object") {
+        const o = json as { message?: unknown; details?: unknown };
+        const main = typeof o.message === "string" ? o.message.trim() : "";
+        const detail = firstDetailString(o.details);
+        reason = main && detail && detail !== main ? `${main}: ${detail}` : main || detail;
+      } else {
+        reason = body;
+      }
+    }
+  }
+  const clean = sanitizeReply((reason ?? "").replace(/\s+/g, " ").trim());
+  if (!clean) return null;
+  return clean.length > 200 ? `${clean.slice(0, 199).trimEnd()}…` : clean;
+}
+
 /**
  * Low-level: POST a prebuilt `messages[]` to ManyChat's Send Content API with
  * retries. Shared by the text (sendManychatMessage) and media (sendManychatMedia)

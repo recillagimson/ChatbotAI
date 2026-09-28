@@ -84,8 +84,8 @@ export async function POST(
   // The WHOLE transcript is context for the follow-up (a re-engagement nudge picks
   // up where the conversation left off - unlike a reply, it isn't answering one
   // message). `human_agent` = the owner's own past manual replies are OUR side, so
-  // map them to `assistant`; generateReply only distinguishes assistant vs.
-  // everything-else, and mapping them to `user` would misattribute them to the lead.
+  // map them to `assistant` (generateReply applies the same rule; mapping them to
+  // `user` would misattribute them to the lead).
   const history = all.map((m) => ({
     role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
     content: m.content,

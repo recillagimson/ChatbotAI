@@ -71,13 +71,15 @@ export function leadLastMessageAt(c: WindowConversation): string {
 
 /**
  * How long a reply YOU send stays deliverable, counted from the lead's last
- * message. Seven days on Instagram/Messenger (the HUMAN_AGENT tag); on channels
- * with no such tag it's just the standard window, because a hand-sent reply gets
- * no more reach than an automated one. Null where the channel has no window.
+ * message. Seven days on Instagram/Messenger when you reply from ManyChat's Inbox
+ * (ManyChat applies the HUMAN_AGENT tag to those itself); on channels with no such
+ * tag it's just the standard window, because a hand-sent reply gets no more reach
+ * than an automated one. Null where the channel has no window.
  *
- * Deliberately mirrors `retryStillDeliverable` - that function decides whether a
- * send actually goes out, and a queue that disagreed with it would be offering
- * work the app can't do.
+ * This is ManyChat-Inbox reach, which is how the queue's leads are worked ("Open
+ * in ManyChat"). A send through OUR API (the composer, the reconcile cron) is
+ * always untagged and capped at the standard 24h window - ManyChat's API refuses
+ * HUMAN_AGENT (see lib/messaging-window.ts).
  */
 export function reachHours(platform: Platform): number | null {
   const meta = PLATFORM_META[platform];

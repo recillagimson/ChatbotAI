@@ -65,6 +65,16 @@ export function isTransientOpenAIError(err: unknown): boolean {
   return false;
 }
 
+/** A completed chat call. `text` may be "" (see finishReason/refusal for why). */
+export interface OpenAIChatResult {
+  text: string;
+  tokensUsed: number;
+  /** choices[0].finish_reason ("stop", "length", "content_filter", ...), or null. */
+  finishReason: string | null;
+  /** choices[0].message.refusal: the model's safety decline text, or null. */
+  refusal: string | null;
+}
+
 /** One chat completion attempt. Throws OpenAIChatError on non-2xx; the timeout keeps
  *  any single attempt bounded so a stalled call can't hang the caller. */
 async function openaiChatOnce(
@@ -77,7 +87,7 @@ async function openaiChatOnce(
     promptCacheKey?: string;
   },
   apiKey: string
-): Promise<{ text: string; tokensUsed: number }> {
+): Promise<OpenAIChatResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 20_000);
   try {
@@ -106,7 +116,10 @@ async function openaiChatOnce(
       );
     }
     const data = (await res.json()) as {
-      choices?: { message?: { content?: string | null }; finish_reason?: string }[];
+      choices?: {
+        message?: { content?: string | null; refusal?: string | null };
+        finish_reason?: string;
+      }[];
       usage?: { total_tokens?: number };
     };
     const choice = data.choices?.[0];
@@ -123,7 +136,17 @@ async function openaiChatOnce(
         true
       );
     }
-    return { text, tokensUsed: data.usage?.total_tokens ?? 0 };
+    // Any OTHER empty answer is returned, not thrown: finish_reason "stop" with no text
+    // is the model deliberately saying nothing (a persona's "go quiet so the human picks
+    // it up"), and a `refusal` is a safety decline. Neither is fixed by a retry. The
+    // reason travels with the result so the caller can act on it and log WHY.
+    const refusal = choice?.message?.refusal?.trim() || null;
+    return {
+      text,
+      tokensUsed: data.usage?.total_tokens ?? 0,
+      finishReason: choice?.finish_reason ?? null,
+      refusal,
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -153,7 +176,7 @@ export async function openaiChat(opts: {
   backoffMs?: number[];
   /** Injectable delay so the retry loop is unit-testable without real waits. */
   sleep?: (ms: number) => Promise<void>;
-}): Promise<{ text: string; tokensUsed: number }> {
+}): Promise<OpenAIChatResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
 

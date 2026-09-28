@@ -1,8 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { sendManychatMessage, resolveManychatApiKey } from "@/lib/manychat";
+import {
+  sendManychatMessage,
+  resolveManychatApiKey,
+  manychatFailureReason,
+} from "@/lib/manychat";
 import { toPlatform, canPushPlatform, platformLabel } from "@/lib/platforms";
-import { supportsHumanAgentTag } from "@/lib/messaging-window";
+import { manualReplyWindowClosed, manualReplyFailureMessage } from "@/lib/messaging-window";
+import { manychatConversationUrl } from "@/lib/manual-followups";
 
 export const runtime = "nodejs";
 
@@ -46,7 +51,7 @@ export async function POST(
   // filter is belt-and-suspenders and gives a clean 404 instead of an RLS empty.
   const { data: conversation, error } = await supabase
     .from("conversations")
-    .select("id, manychat_subscriber_id, chatbot_id, platform")
+    .select("id, manychat_subscriber_id, chatbot_id, platform, manychat_page_id, manychat_live_chat_url")
     .eq("id", id)
     .eq("user_id", user.id)
     .single();
@@ -87,24 +92,51 @@ export async function POST(
 
   // Deliver to the contact's channel first - if ManyChat rejects it, don't leave a
   // phantom "You" bubble in the thread that never actually reached the contact.
+  //
+  // UNTAGGED, exactly like the AI's own replies. ManyChat's API refuses
+  // message_tag "HUMAN_AGENT" (it applies that tag itself, only to messages typed in
+  // ManyChat's Inbox), and sending it here failed every manual reply from 2026-07-27
+  // to 2026-09-28. So a send from here reaches a lead within 24h of their last
+  // message; past that, the error below points the owner to ManyChat's Inbox.
   try {
     await sendManychatMessage({
       subscriberId: conversation.manychat_subscriber_id,
       text,
       apiKey,
       platform,
-      // A manual reply IS a human-agent response, so carry the HUMAN_AGENT tag on
-      // channels that support it (IG/Messenger). Harmless inside the 24h window;
-      // required to reach a lead who's been quiet up to 7 days (without it, the send
-      // fails outright the moment the standard window closes).
-      messageTag: supportsHumanAgentTag(platform) ? "HUMAN_AGENT" : undefined,
       // Per-chatbot: render Messenger links as URL buttons (a pasted link included).
       linkButtons: chatbot?.link_buttons_enabled === true,
     });
   } catch (err) {
     console.error("[conversation-reply] ManyChat send failed", err);
+    // The window anchor is the lead's last INBOUND message (last_message_at can't be
+    // used: this route stamps it on every manual send). Only read on failure, to
+    // explain it; a read error just means we don't mention the window.
+    const { data: lastIn } = await supabase
+      .from("messages")
+      .select("created_at")
+      .eq("conversation_id", id)
+      .eq("role", "user")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const lastInboundMs = lastIn?.created_at ? Date.parse(lastIn.created_at as string) : null;
     return NextResponse.json(
-      { error: `Couldn't deliver the message to ${platformLabel(platform)}. Please try again.` },
+      {
+        error: manualReplyFailureMessage({
+          platform,
+          reason: manychatFailureReason(err),
+          windowClosed: manualReplyWindowClosed(platform, lastInboundMs, Date.now()),
+        }),
+        // The same thread in ManyChat, where the owner can reply by hand (and, on
+        // Instagram/Messenger, for up to 7 days after the lead's last message).
+        manychatUrl: manychatConversationUrl({
+          liveChatUrl: conversation.manychat_live_chat_url,
+          pageId: conversation.manychat_page_id,
+          subscriberId: conversation.manychat_subscriber_id,
+          platform,
+        }),
+      },
       { status: 502 }
     );
   }

@@ -3,14 +3,14 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { sendManychatMessage, resolveManychatApiKey } from "@/lib/manychat";
 import { toPlatform, canPushPlatform } from "@/lib/platforms";
 import { splitIntoMessages } from "@/lib/message-split";
-import { retryStillDeliverable, retryMessageTag } from "@/lib/messaging-window";
+import { retryStillDeliverable } from "@/lib/messaging-window";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const LOOKBACK_DAYS = 7; // widest send window (IG HUMAN_AGENT) - older rows can't deliver anyway
+const LOOKBACK_DAYS = 7; // well past the 24h send window - older rows can't deliver anyway
 const MAX_ATTEMPTS = 5; // give up after this many reconcile retries
 const BATCH = 100;
 
@@ -24,8 +24,10 @@ function bump(map: Record<string, number>, key: string) {
  *  - only SINGLE-bubble messages are retried - a multi-bubble reply may have had
  *    some bubbles delivered before the failure, so re-sending would duplicate; those
  *    are marked 'abandoned' (surfaced, not resent).
- *  - only inside the channel's send window (24h, or 7d for a human_agent reply via
- *    HUMAN_AGENT); out-of-window rows are 'abandoned' (Instagram can't deliver them).
+ *  - only inside the channel's standard send window (24h), whoever wrote the row: the
+ *    retry is an untagged API send (ManyChat's API refuses HUMAN_AGENT; see
+ *    lib/messaging-window.ts); out-of-window rows are 'abandoned' (Instagram can't
+ *    deliver them).
  *  - capped at MAX_ATTEMPTS so a permanently-failing row can't loop forever.
  * A success flips the row to 'delivered'; postSendContent's own assume-delivered
  * logic keeps a re-send from duplicating on an ambiguous timeout.
@@ -107,7 +109,7 @@ async function run() {
       .maybeSingle();
     const lastInboundMs = lastIn?.created_at ? Date.parse(lastIn.created_at as string) : null;
 
-    if (!retryStillDeliverable(platform, row.role, lastInboundMs, nowMs)) {
+    if (!retryStillDeliverable(platform, lastInboundMs, nowMs)) {
       await setStatus(row.id, "abandoned");
       abandoned++; bump(reasons, "out_of_window");
       continue;
@@ -129,7 +131,6 @@ async function run() {
         text,
         apiKey,
         platform,
-        messageTag: retryMessageTag(platform, row.role),
       });
       await setStatus(row.id, "delivered");
       delivered++; bump(reasons, "delivered");

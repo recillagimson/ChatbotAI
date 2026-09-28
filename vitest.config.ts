@@ -36,6 +36,8 @@ export default defineConfig({
       "tests/section-versions*.spec.ts",
       "tests/training*.spec.ts",
       "tests/change-assistant-repair*.spec.ts",
+      "tests/manual-reply*.spec.ts",
+      "tests/ai-silence*.spec.ts",
     ],
   },
   resolve: {

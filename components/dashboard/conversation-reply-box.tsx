@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Send, Sparkles } from "lucide-react";
+import { ExternalLink, Lock, Send, Sparkles } from "lucide-react";
 import { SsButton } from "@/components/ss/controls";
 
 const MAX_LEN = 1000;
@@ -28,6 +28,9 @@ export function ConversationReplyBox({
   const router = useRouter();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // The thread in ManyChat, returned with a failed send: where the owner can reply
+  // by hand (past 24h that is the only way to reach an Instagram/Messenger lead).
+  const [manychatUrl, setManychatUrl] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [drafting, setDrafting] = useState(false);
 
@@ -50,6 +53,7 @@ export function ConversationReplyBox({
     const message = text.trim();
     if (!message || isPending || drafting) return;
     setError(null);
+    setManychatUrl(null);
     startTransition(async () => {
       try {
         const res = await fetch(`/api/conversations/${conversationId}/reply`, {
@@ -60,8 +64,10 @@ export function ConversationReplyBox({
         if (!res.ok) {
           const data = (await res.json().catch(() => null)) as {
             error?: string;
+            manychatUrl?: string;
           } | null;
           setError(data?.error ?? "Couldn't send. Please try again.");
+          setManychatUrl(data?.manychatUrl ?? null);
           return;
         }
         setText("");
@@ -77,6 +83,7 @@ export function ConversationReplyBox({
   function draftAiReply() {
     if (drafting || isPending) return;
     setError(null);
+    setManychatUrl(null);
     setDrafting(true);
     (async () => {
       try {
@@ -128,6 +135,20 @@ export function ConversationReplyBox({
       {error && (
         <p role="alert" className="mt-2 text-[12px] font-medium text-ss-rose-ink">
           {error}
+          {manychatUrl && (
+            <>
+              {" "}
+              <a
+                href={manychatUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-ss-ink underline underline-offset-2 hover:text-ss-indigo"
+              >
+                Open in ManyChat
+                <ExternalLink className="h-3 w-3" aria-hidden="true" />
+              </a>
+            </>
+          )}
         </p>
       )}
 

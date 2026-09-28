@@ -342,9 +342,12 @@ export async function generateReply(opts: {
   const images = opts.images ?? [];
 
   // Recent turns sent verbatim; older context comes from memorySummary. Keeps
-  // tokens predictable while remembering long chats.
+  // tokens predictable while remembering long chats. Only the LEAD's rows are the
+  // `user` side: the owner's manual replies (role human_agent) are the business
+  // speaking, so they go in as `assistant` - never as if the lead had written them
+  // (the same mapping suggest-reply, memory, lead-facts and flow-state use).
   const trimmed = opts.history.slice(-HISTORY_TURNS).map((m) => ({
-    role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+    role: m.role === "user" ? ("user" as const) : ("assistant" as const),
     content: m.content,
   }));
 
@@ -374,7 +377,7 @@ export async function generateReply(opts: {
     const replyModel = opts.ignoreReplyModel
       ? MODELS.reply()
       : resolveReplyModel(opts.chatbot.reply_model);
-    const { text, tokensUsed } = await openaiChat({
+    const { text, tokensUsed, finishReason, refusal } = await openaiChat({
       model: replyModel,
       system: systemText,
       messages: [...trimmed, currentTurn],
@@ -395,6 +398,10 @@ export async function generateReply(opts: {
       tokensUsed,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
+      // Why an empty `text` is empty (a deliberate "stop", a safety refusal, a
+      // content filter). The webhook logs it and treats the turn as silence.
+      finishReason,
+      refused: !!refusal,
     };
   }
 
@@ -456,6 +463,8 @@ export async function generateReply(opts: {
       (usage?.output_tokens ?? 0),
     cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
     cacheWriteTokens: usage?.cache_creation_input_tokens ?? 0,
+    finishReason: response.stop_reason ?? null,
+    refused: (response.stop_reason as string | null) === "refusal",
   };
 }
 

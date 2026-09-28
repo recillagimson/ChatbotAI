@@ -16,6 +16,7 @@ import {
   type PacedItem,
 } from "@/lib/manychat";
 import { generateReply } from "@/lib/anthropic";
+import { resolveAiReply, responseChannelReply } from "@/lib/ai-reply";
 import { planLinkFlow, linkSentMarker, planDeliveryBubbles, type LinkFlowDelivery } from "@/lib/link-flow";
 import { splitIntoMessages } from "@/lib/message-split";
 import { buildKbBlock } from "@/lib/retrieval";
@@ -1708,10 +1709,9 @@ export async function POST(request: NextRequest) {
     // flow-state ledger OFF still receives the sent-state / handoff blocks.
     const flowAndSentBlock = [flowStateBlock, sentStateBlock, handoffBlock].filter(Boolean).join("\n\n");
 
-    let replyText = "Thanks for the message, a teammate will follow up shortly.";
-    let tokens = 0;
+    let generated: Awaited<ReturnType<typeof generateReply>> | null = null;
     try {
-      const { text, tokensUsed } = await generateReply({
+      generated = await generateReply({
         chatbot,
         kbBlock: kb.block,
         history: priorHistory,
@@ -1748,12 +1748,24 @@ export async function POST(request: NextRequest) {
         retries: synchronous ? 1 : 2,
         timeoutMs: synchronous ? 8_000 : undefined,
       });
-      if (text) {
-        replyText = text;
-        tokens = tokensUsed;
-      }
     } catch (err) {
       console.error("[manychat-webhook] AI error", err);
+    }
+    // What this turn sends (lib/ai-reply.ts). A reply goes out as written. An EMPTY
+    // answer is deliberate SILENCE: the call worked and the model chose to say nothing,
+    // almost always because the client's prompt told it to ("go quiet so the human
+    // picks it up"). Nothing is sent and step 9a flags the thread needs_human so a
+    // person picks it up. Only a FAILED call (it threw) gets the canned fallback line;
+    // before 2026-09-28 a silent turn got it too, promising a teammate nobody sent.
+    const outcome = resolveAiReply(generated);
+    const silent = outcome.kind === "silent";
+    let replyText = outcome.kind === "silent" ? "" : outcome.text;
+    // Real tokens whenever the call completed: a silent turn was still generated/billed.
+    const tokens = generated?.tokensUsed ?? 0;
+    if (silent) {
+      console.warn(
+        `[manychat-webhook] AI chose not to reply (finish=${generated?.finishReason ?? "-"}, refused=${generated?.refused ? "yes" : "no"}); staying silent and flagging needs_human. bot=${chatbot.id} conversation=${conversationId}`
+      );
     }
 
     // 8a. AI media + link-via-ManyChat, in ONE ordered pass. Both the [[SEND_ASSET: key]]
@@ -1903,7 +1915,9 @@ export async function POST(request: NextRequest) {
       supabase.from("usage_log").insert({
         user_id: chatbot.user_id,
         chatbot_id: chatbot.id,
-        event_type: "ai_reply",
+        // A silent turn is not a sent reply (analytics count ai_reply rows as replies),
+        // but its tokens were spent, so they stay on the ai_silent row.
+        event_type: silent ? "ai_silent" : "ai_reply",
         tokens_used: tokens,
       }),
       supabase.from("usage_log").insert({
@@ -1931,8 +1945,11 @@ export async function POST(request: NextRequest) {
     // evaluateFollowup - AI replies stay on). Push channels only (background - no
     // latency on a synchronous response-channel reply), only while not already
     // confirmed (a confirmed thread is silenced upstream). Never blocks.
+    // A SILENT turn always flags needs_human (no classifier call, so no latency), on
+    // every channel and even with auto-tagging off: the bot said nothing on purpose,
+    // and "Needs attention" is how a person learns it's their turn.
     let tagWork: Promise<void> | undefined;
-    if (AUTO_TAG_ENABLED && !confirmedAt && canPushPlatform(platform)) {
+    if ((AUTO_TAG_ENABLED || silent) && !confirmedAt && (canPushPlatform(platform) || silent)) {
       const userMessage = effectiveMessage;
       // A media-only reply has no text; give the classifier a stand-in so a
       // "just paid!" answered with media still gets detected.
@@ -1955,9 +1972,10 @@ export async function POST(request: NextRequest) {
           // Fix E: when the handoff floor fired this turn (explicit human request or
           // distress), deterministically flag the thread needs_human instead of asking the
           // classifier - the DISENGAGE steer already told the bot to defer to a person.
+          // A silent turn (the model chose to say nothing) is flagged the same way.
           // resolveTagWrite still protects terminal/stickier tags, so this never clobbers a
           // subscribed/disqualified/bot thread.
-          const { tag, startOn, startNote } = handoff.handoff
+          const { tag, startOn, startNote } = handoff.handoff || silent
             ? { tag: "needs_human" as ConversationTag, startOn: null, startNote: null }
             : await classifyConversation({ userMessage, botReply, today });
           if (tag === "subscribed") {
@@ -2149,25 +2167,29 @@ export async function POST(request: NextRequest) {
   // sendContent type (canPush=true).
   // Media assets can't be pushed on response channels (no send API), so only the
   // text is returned here; AI media is a push-channel feature.
-  let replyText = "Thanks for the message, a teammate will follow up shortly.";
+  let syncResult: Awaited<ReturnType<typeof generateAndPersistReply>> = null;
   try {
     // On a normal response (non-push) channel the pre-reply disqualify screen is
     // skipped (it's gated by canPushPlatform). It could still evaluate on the rare
     // misconfig where a push-capable platform reaches this path with no API key -
-    // but a null (stood-down) result just falls back to the default replyText
-    // below, so this path never wrongly silences a lead.
-    const result = await generateAndPersistReply("single", true);
-    if (result) replyText = result.text;
+    // but a null (stood-down) result just falls back to the canned line (see
+    // responseChannelReply), so this path never wrongly silences a lead.
+    syncResult = await generateAndPersistReply("single", true);
   } catch (err) {
     console.error("[manychat-webhook] sync processing failed", err);
   }
+  // The turn's text ("" on a silent turn: no message is returned), or the canned line
+  // when processing threw / stood down.
+  const replyText = responseChannelReply(syncResult);
   // Refresh the rolling memory summary + known-facts list in the background (don't
-  // block the reply).
+  // block the reply), and let a silent turn's needs_human flag (step 9a) land.
+  const syncTagWork = syncResult?.tagWork;
   after(async () => {
     await Promise.allSettled([
       refreshConversationMemory({ supabase, conversationId: conversationId! }),
       refreshKnownFacts({ supabase, conversationId: conversationId! }),
       refreshFlowState({ supabase, conversationId: conversationId!, chatbotId: chatbot.id }),
+      syncTagWork ?? Promise.resolve(),
     ]);
   });
   return manychatReply(replyText, { ai_delivery: "response", platform });
