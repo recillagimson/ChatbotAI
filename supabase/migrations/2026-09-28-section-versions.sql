@@ -39,6 +39,11 @@ create policy "section versions: superadmin reads" on public.chatbot_section_ver
   for select using ( public.is_superadmin() );
 
 revoke insert, update, delete on public.chatbot_section_versions from anon, authenticated;
+-- Supabase's default privileges also hand the client roles TRUNCATE, REFERENCES
+-- and TRIGGER (TRUNCATE is not subject to row level security), and anon SELECT.
+-- Only signed-in reading is ever needed.
+revoke truncate, references, trigger on public.chatbot_section_versions from anon, authenticated;
+revoke select on public.chatbot_section_versions from anon;
 grant select on public.chatbot_section_versions to authenticated;
 
 create or replace function public.record_chatbot_section_versions()

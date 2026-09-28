@@ -45,6 +45,10 @@ describe("the migration", () => {
     const s = sql();
     expect(s).not.toMatch(/for (insert|update|delete|all)/i);
     expect(s).toMatch(/revoke insert, update, delete on public\.chatbot_section_versions from anon, authenticated/i);
+    // Supabase's defaults also grant TRUNCATE (not subject to RLS), REFERENCES,
+    // TRIGGER and anon SELECT; none is ever needed.
+    expect(s).toMatch(/revoke truncate, references, trigger on public\.chatbot_section_versions from anon, authenticated/i);
+    expect(s).toMatch(/revoke select on public\.chatbot_section_versions from anon/i);
   });
 
   it("records the OLD text from a security-definer trigger with a pinned search_path", () => {
