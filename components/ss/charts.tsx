@@ -56,7 +56,9 @@ export function Sparkbars({
                 : "bg-ss-indigo-300/30"
               : d.peak
                 ? "bg-ss-indigo"
-                : "bg-ss-indigo-200/60",
+                : // The chart-ramp gold: ~3.7:1 on the dark card surface and still
+                  // clearly dimmer than the peak (the old 200/60 was ~1.6:1).
+                  "bg-ss-indigo-250",
           )}
         />
       ))}

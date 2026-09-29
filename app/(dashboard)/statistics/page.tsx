@@ -1,4 +1,5 @@
 import { Suspense, cache } from "react";
+import { cookies } from "next/headers";
 import {
   AlertCircle,
   BarChart3,
@@ -25,7 +26,23 @@ import {
 import { getWorkspace } from "@/lib/workspace";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import { InboundFunnel } from "@/components/dashboard/stats/inbound-funnel";
+import { NewFollowersCard } from "@/components/dashboard/stats/new-followers-card";
 import { STAGE_KEYS, type StageKey } from "@/lib/analytics-stage";
+import {
+  followCardVisible,
+  followCoverage,
+  followPause,
+  followScope,
+  followSetupLinks,
+  followSkeleton,
+  getFollowReport,
+  probeFollowTracking,
+  type FollowSkeleton,
+} from "@/lib/follows";
+import {
+  FOLLOW_SETUP_HIDDEN_COOKIE,
+  followSetupHiddenFor,
+} from "@/lib/follow-setup-cookie";
 import { CONVERSATION_TAGS, TAG_LABEL, tagOf } from "@/lib/conversation-tags";
 import {
   buildSequenceReport,
@@ -174,11 +191,36 @@ export default async function StatisticsPage({
   // millisecond-apart `to` would give getOverviewCached distinct cache keys and the
   // analytics_overview RPC would fire twice. Sharing one snapshot makes the dedup real.
   const { rangeKey, customFrom, customTo, from, to } = resolveRange(sp);
-  const workspace = await getWorkspace(sp.bot ?? null);
+  // The follower probe runs beside the workspace read (both are small), so the
+  // skeleton can hold a place the size of the follower card that will land.
+  const [workspace, cookieStore, followTracked] = await Promise.all([
+    getWorkspace(sp.bot ?? null),
+    cookies(),
+    probeFollowTrackingFor(sp.bot ?? null),
+  ]);
   const scopeName =
     workspace?.bots.find((b) => b.id === workspace?.scopedBotId)?.name ??
     "All chatbots";
   const hasBots = (workspace?.counts.chatbots ?? 0) > 0;
+  // The follower setup prompt's "Hide", kept per account being viewed (see
+  // HideFollowSetupButton), so hiding it while viewing one client hides no other.
+  const hideFollowSetup = followSetupHiddenFor(
+    cookieStore.get(FOLLOW_SETUP_HIDDEN_COOKIE)?.value,
+    workspace?.userId,
+  );
+  // The follower card's place in the skeleton: the report's shape when the scope
+  // already records follows, the setup prompt's when it could, else none (no
+  // Instagram chatbot that can record, or the prompt is hidden). A wrong guess
+  // would make the funnel below jump on every range click.
+  const followerSkeleton = followSkeleton({
+    tracking: followTracked,
+    recordable: followScope(
+      workspace?.bots ?? [],
+      workspace?.scopedBotId ?? null,
+      workspace?.subscriptionActive ?? false,
+    ).recordable.length,
+    hidden: hideFollowSetup,
+  });
 
   // Every control that can change what the body shows. Funnel drill-down is NOT
   // here: it's client-side now, so opening a stage never re-renders the report.
@@ -232,8 +274,14 @@ export default async function StatisticsPage({
               customTo={customTo}
               comparison="Compared with the previous period of the same length"
             />
-            <Suspense key={reportKey} fallback={<StatisticsReportSkeleton />}>
-              <StatisticsReport sp={sp} from={from} to={to} />
+            <Suspense key={reportKey} fallback={<StatisticsReportSkeleton followers={followerSkeleton} />}>
+              <StatisticsReport
+                sp={sp}
+                from={from}
+                to={to}
+                rangeKey={rangeKey}
+                hideFollowSetup={hideFollowSetup}
+              />
             </Suspense>
           </>
         )}
@@ -263,6 +311,18 @@ const getOverviewCached = cache(
     return getAnalyticsOverview(supabase, { from, to, chatbotId, userId: user.id });
   },
 );
+
+/**
+ * Whether the scope already records follows, for sizing the follower card's place
+ * in the skeleton (probeFollowTracking), for the EFFECTIVE user like every other
+ * read here. `botId` is the raw ?bot= value: an id that isn't this account's finds
+ * nothing, which at worst means a setup-sized placeholder.
+ */
+async function probeFollowTrackingFor(botId: string | null): Promise<boolean | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  return probeFollowTracking(await createClient(), { userId: user.id, chatbotId: botId });
+}
 
 /**
  * The export button only exists when there's a report to export, so it has to
@@ -307,10 +367,16 @@ async function StatisticsReport({
   sp,
   from,
   to,
+  rangeKey,
+  hideFollowSetup,
 }: {
   sp: StatsParams;
   from: string;
   to: string;
+  /** Which range {from, to} came from: whether it ends now or on a fixed day. */
+  rangeKey: RangeKey;
+  /** The viewer hid the follower setup prompt (the report still shows once tracking). */
+  hideFollowSetup: boolean;
 }) {
   const supabase = await createClient();
   const user = await getCurrentUser();
@@ -367,9 +433,19 @@ async function StatisticsReport({
     .eq("user_id", user!.id);
   if (chatbotId) botsQuery = botsQuery.eq("id", chatbotId);
 
-  // Current + previous analytics run in the SAME Promise.all as the three
-  // conversation/bot queries (all independent) - one network round instead of
-  // three sequential ones. getOverviewCached dedupes the current-period RPC
+  // New Instagram followers (lib/follows.ts): this period and the previous one
+  // in one call, for the effective user like every other analytics read.
+  const followQuery = getFollowReport(supabase, {
+    from,
+    to,
+    prevFrom,
+    chatbotId,
+    userId: user!.id,
+  });
+
+  // Current + previous analytics run in the SAME Promise.all as the
+  // conversation/bot/follower queries (all independent) - one network round
+  // instead of sequential ones. getOverviewCached dedupes the current-period RPC
   // with ExportButton's identical call.
   const [
     { overview, problem },
@@ -377,13 +453,42 @@ async function StatisticsReport({
     { rows: scopedRows },
     { count: subscribedCount },
     { data: seqBots },
+    { report: follows, problem: followProblem },
   ] = await Promise.all([
     getOverviewCached(from, to, chatbotId),
     getOverviewCached(prevFrom, from, chatbotId),
     rowsQuery,
     subscribedQuery,
     botsQuery,
+    followQuery,
   ]);
+
+  // New Instagram followers. Setup is offered only on Instagram chatbots that can
+  // record a follow right now (switched on, plan active: the webhook refuses the
+  // rest). Each one that has recorded nothing gets its own setup link, in the
+  // prompt or, once another bot tracks, under the report, so "All chatbots" never
+  // silently leaves one out. A bot that has recorded a follow always shows its
+  // card, and says so when it has stopped recording.
+  const bots = workspace?.bots ?? [];
+  const planActive = workspace?.subscriptionActive ?? false;
+  const followBots = followScope(bots, chatbotId, planActive);
+  const followSetup = followSetupLinks(followBots.recordable, follows);
+  const showFollowers = followCardVisible(follows, followSetup.length, hideFollowSetup);
+  // Where the range sits against when each bot began tracking: the change against
+  // the previous period is shown only when tracking covered all of it.
+  const coverage = follows
+    ? followCoverage(follows, { from, to, prevFrom, rangeKey })
+    : null;
+  const followPaused = follows ? followPause(follows, bots, planActive) : null;
+  const botNames = Object.fromEntries(bots.map((b) => [b.id, b.name]));
+  // The report failed for a reason other than "not installed yet" (a timeout, a
+  // pool error): say so where the card would be, as the overview does, rather
+  // than silently dropping the card.
+  const followsFailed =
+    !follows &&
+    !!followProblem &&
+    followProblem !== "not_installed" &&
+    followBots.instagram.length > 0;
 
   const rows = scopedRows;
   const sequences = buildSequenceReport(seqBots ?? [], rows);
@@ -587,6 +692,46 @@ async function StatisticsReport({
             </div>
           )}
         </SsCard>
+      )}
+
+      {/* ---- New Instagram followers ------------------------------ */}
+      {/* Its own read (instagram_follow_report), so it shows even when the
+          overview report times out. Hidden when that function isn't installed. */}
+      {showFollowers && follows && coverage && followPaused && (
+        <NewFollowersCard
+          report={follows}
+          coverage={coverage}
+          delta={
+            coverage.previousComparable
+              ? deltaLabel(follows.follows, follows.prevFollows ?? undefined)
+              : undefined
+          }
+          deltaTone={
+            coverage.previousComparable
+              ? deltaTone(follows.follows, follows.prevFollows ?? undefined)
+              : undefined
+          }
+          setup={followSetup}
+          paused={followPaused}
+          botNames={botNames}
+          accountId={user!.id}
+        />
+      )}
+      {followsFailed && (
+        <Callout
+          tone="amber"
+          icon={
+            <Info
+              className="h-[18px] w-[18px] text-ss-amber"
+              aria-hidden="true"
+            />
+          }
+          title="New Instagram followers didn't load"
+        >
+          {followProblem === "timed_out"
+            ? "The follower report timed out. A narrower date range sometimes gets through; nothing recorded is lost."
+            : "The follower report returned an error instead of the numbers. Nothing recorded is lost; try again, and if it persists the server log has the exact error."}
+        </Callout>
       )}
 
       {/* ---- Funnel + side column -------------------------------- */}
@@ -1059,12 +1204,46 @@ function axisLabels(days: string[]): string[] {
  * a chart at the same height, the funnel's tapering stack at its real insets -
  * so the page doesn't resize under the cursor when the numbers land. This is the
  * in-page twin of `loading.tsx`, which only covers arriving at the route.
+ * `followers`: the follower card's place, in the shape of the card that will
+ * land (see followerSkeleton in StatisticsPage), or none.
  */
-function StatisticsReportSkeleton() {
+function StatisticsReportSkeleton({ followers }: { followers: FollowSkeleton }) {
   return (
     <>
       <SkStatCards count={5} />
       <SkChart bars={26} />
+      {/* New Instagram followers: the setup prompt (head + one paragraph), or the
+          report (count, lines and chart beside the latest followers, then the
+          coverage note). */}
+      {followers === "setup" && (
+        <SkCard className="p-[22px]">
+          <SkCardHead />
+          <Sk className="mt-3 h-[12px] w-full" />
+          <Sk className="mt-2 h-[12px] w-2/3" />
+        </SkCard>
+      )}
+      {followers === "report" && (
+        <SkCard className="p-[22px]">
+          <SkCardHead />
+          <div className="mt-5 grid gap-6 lg:grid-cols-2">
+            <div>
+              <Sk className="h-[34px] w-24" />
+              <Sk className="mt-3 h-[12px] w-3/4" />
+              <Sk className="mt-5 h-[96px] w-full rounded-[12px]" />
+            </div>
+            <div className="flex flex-col gap-3">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Sk className="h-[30px] w-[30px] rounded-full" />
+                  <Sk className="h-[12px] flex-1" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <Sk className="mt-5 h-[12px] w-full" />
+          <Sk className="mt-2 h-[12px] w-1/2" />
+        </SkCard>
+      )}
       <div className="grid items-start gap-[18px] xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <SkCard className="p-6">
           <SkCardHead />

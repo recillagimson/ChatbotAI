@@ -90,6 +90,7 @@ import { splitBurst, combineBurstText, remainingDebounceMs, clampDebounceSeconds
 import { suppressionCarry, resolveExternalId } from "@/lib/returning-contact";
 import { flattenManychatContact } from "@/lib/manychat-contact";
 import { cleanLiveChatUrl } from "@/lib/manual-followups";
+import { isFollowEvent, buildFollowRow, recordFollow } from "@/lib/follows";
 import type { Chatbot, Message } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -183,7 +184,48 @@ const BodySchema = z.object({
   // owner-set pauses (bot_off_at + status ai_paused). Handled just before the 4c BOT_OFF
   // sync; it does NOT clear the lead's own "stopmessage" mute.
   bot_on: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
+  // A request that is an account event, not a message. "new_follower" is posted by
+  // an External Request in ManyChat's "Say hi to new followers" automation (see
+  // lib/follows.ts) and handled at 3a-follow, just after the billing gate. Before
+  // this field existed an unknown `event` key was simply dropped, so it must never
+  // 400 a body that used to pass: any scalar is kept as text, anything else (an
+  // object, an array) reads as absent.
+  event: z
+    .unknown()
+    .transform((v) =>
+      typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? String(v) : null
+    ),
 });
+
+type WebhookBody = z.infer<typeof BodySchema>;
+
+/**
+ * The contact's @handle, page id and stable identity (see BodySchema), read the
+ * same way for a message and for a follow, so a follower's instagram_follows row
+ * and their later conversation carry the same external_user_id.
+ */
+function contactIdentity(body: WebhookBody) {
+  // Use whichever username field actually carries a real handle.
+  const username =
+    cleanContactField(body.username) ??
+    cleanContactField(body.ig_username) ??
+    cleanContactField(body.user_name);
+  const pageId = cleanContactField(body.page_id);
+  // Stable identity that survives a ManyChat contact deletion (see BodySchema). Prefer
+  // an explicitly-mapped platform id; else fall back to `username` when the owner has
+  // mapped a stable id into it (Messenger PSID / Instagram @handle) - the single-token
+  // guard in resolveExternalId keeps a free-text display name from being used as an id.
+  // Null = we cannot re-identify a returning contact (no carry-over, behaves as new).
+  const externalId = resolveExternalId({
+    externalUserId: cleanContactField(body.external_user_id),
+    psid: cleanContactField(body.psid),
+    igId: cleanContactField(body.ig_id),
+    messengerId: cleanContactField(body.messenger_id),
+    username,
+    pageId,
+  });
+  return { username, pageId, externalId };
+}
 
 /** Truthy check for a ManyChat boolean flag (rn_opt_in, bot_off, bot_on; accepts "true"/"1"/1/true). */
 function isTruthyFlag(v: unknown): boolean {
@@ -194,11 +236,15 @@ function isTruthyFlag(v: unknown): boolean {
 }
 
 /**
- * Format a reply in ManyChat's External Request response schema. ManyChat
- * requires a top-level `version` plus `content.messages`; when present it
- * renders those messages directly, so no separate "Send Message" step is
- * needed. We also keep a flat `reply` field for our own tooling (chat-test,
- * docs/API.md). An empty `text` yields no message (used for human takeover).
+ * The webhook's response body. `{version: "v2", content.messages}` is the shape a
+ * ManyChat Dynamic Block would render, but every flow this app sets up calls the
+ * webhook from an External Request action, and ManyChat only uses an External
+ * Request's response through response mapping: the TikTok flow maps `reply` into
+ * a custom field and sends it with its own Send Message step, and on the push
+ * channels (Instagram, Messenger, WhatsApp, Telegram) the reply reaches the
+ * contact through the ManyChat API push, never through this body. So text here
+ * never reaches an Instagram contact by itself. `reply` is also read by our own
+ * tooling (chat-test, docs/API.md). An empty `text` yields no message.
  */
 function manychatReply(text: string, extra: Record<string, unknown> = {}) {
   // Split into bubbles so the response body matches what we push (multiple
@@ -380,8 +426,9 @@ async function sendKeywordCannedReply(
 }
 
 /**
- * ManyChat External Request entry point. Returns a ManyChat-format response
- * (version + content.messages) so ManyChat sends the reply back directly.
+ * ManyChat External Request entry point. Replies reach the contact through the
+ * ManyChat API push (or, for TikTok, the flow's own mapping of `reply`); the
+ * response body (see manychatReply) is never rendered by ManyChat by itself.
  */
 export async function POST(request: NextRequest) {
   const startedAt = performance.now(); // for the bubble-pacing deadline guard
@@ -470,6 +517,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // An account event rather than a message: a new Instagram follower, posted by the
+  // External Request step in ManyChat's "Say hi to new followers" automation
+  // (lib/follows.ts). Handled at 3a-follow, just after the billing gate.
+  const followEvent = isFollowEvent(body.event);
+
   // DO NOT CACHE (subscriptions). Read live from Postgres on every inbound DM. Never put
   // it behind Redis, unstable_cache or any other cross-request cache. This is the billing
   // gate:
@@ -493,10 +545,54 @@ export async function POST(request: NextRequest) {
   // Access = active/trialing AND (if a comp grant) not past its expiry. A comp
   // that has lapsed reads as no-access here with no scheduled sweep needed.
   if (!hasActiveAccess(subscription)) {
+    // A follow carries no message, so it gets no text back; and like a DM on a
+    // lapsed plan, it is not stored.
+    if (followEvent) {
+      return manychatReply("", { ai_skipped: true, reason: "subscription_inactive" });
+    }
     return manychatReply(
       "Thanks for your message! We'll get back to you shortly.",
       { ai_skipped: true, reason: "subscription_inactive" }
     );
+  }
+
+  // 3a-follow. A new Instagram follower (see followEvent above), recorded once per
+  // follower and answered with NO message. It sits after the billing gate (a lapsed
+  // plan stores no follower, as it stores no DM) and before everything that handles
+  // a message: a follow never opens a conversation, stores a message, uses the DM
+  // flood cap or dedup, or reaches the AI. Full Contact Data's last_input_text is
+  // hoisted into `message` by flattenManychatContact, so returning here, before any
+  // message handling, is what keeps a follower's old text from being answered.
+  // Follows have their own flood-cap bucket: a leaked secret can't write unbounded
+  // rows, and a burst of real follows never spends the DM budget.
+  if (followEvent) {
+    if (platform !== "instagram") {
+      return manychatReply("", { ai_skipped: true, reason: "follow_not_instagram" });
+    }
+    // The same identity a DM from this person stores on their conversation, so the
+    // report can find their thread even after ManyChat reissues their contact id.
+    const { username: followUsername, externalId: followExternalId } = contactIdentity(body);
+    const followRow = buildFollowRow({
+      chatbotId: chatbot.id,
+      subscriberId: body.subscriber_id,
+      externalUserId: followExternalId,
+      username: followUsername,
+      firstName: body.first_name,
+      lastName: body.last_name,
+    });
+    if (!followRow) {
+      return manychatReply("", { ai_skipped: true, reason: "follow_no_contact_id" });
+    }
+    const followRl = await checkChatbotInboundLimit(`${chatbot.id}:follow`);
+    if (!followRl.ok) {
+      return manychatReply("", {
+        ai_skipped: true,
+        reason: "follow_rate_limited",
+        limit: followRl.limit,
+      });
+    }
+    const outcome = await recordFollow(supabase, followRow);
+    return manychatReply("", { ai_skipped: true, reason: outcome });
   }
 
   // Coarse per-chatbot inbound flood cap, BEFORE any conversation/message row is
@@ -553,39 +649,63 @@ export async function POST(request: NextRequest) {
   // tags ("{{first_name}}") when fields aren't wired, which we must not store.
   const firstName = cleanContactField(body.first_name);
   const lastName = cleanContactField(body.last_name);
-  // Use whichever username field actually carries a real handle.
-  const username =
-    cleanContactField(body.username) ??
-    cleanContactField(body.ig_username) ??
-    cleanContactField(body.user_name);
+  // The @handle, the page id and the stable identity that survives a ManyChat contact
+  // deletion, read exactly as a follow reads them (contactIdentity). ManyChat routing
+  // ids are stored on the conversation so the Follow-ups queue can deep-link "Open in
+  // ManyChat" straight to the thread (manychatConversationUrl): pageId is also used by
+  // resolveExternalId; liveChatUrl is ManyChat's ready-made per-contact link.
+  const { username, pageId, externalId } = contactIdentity(body);
   const displayName =
     [firstName, lastName].filter(Boolean).join(" ").trim() || username || null;
-  // Stable identity that survives a ManyChat contact deletion (see BodySchema). Prefer
-  // an explicitly-mapped platform id; else fall back to `username` when the owner has
-  // mapped a stable id into it (Messenger PSID / Instagram @handle) - the single-token
-  // guard in resolveExternalId keeps a free-text display name from being used as an id.
-  // Null = we cannot re-identify a returning contact (no carry-over, behaves as new).
-  // ManyChat routing ids, stored on the conversation so the Follow-ups queue can deep-link
-  // "Open in ManyChat" straight to the thread (manychatConversationUrl). pageId is reused
-  // by resolveExternalId below; liveChatUrl is ManyChat's ready-made per-contact link.
-  const pageId = cleanContactField(body.page_id);
   const liveChatUrl = cleanLiveChatUrl(body.live_chat_url);
 
-  const externalId = resolveExternalId({
-    externalUserId: cleanContactField(body.external_user_id),
-    psid: cleanContactField(body.psid),
-    igId: cleanContactField(body.ig_id),
-    messengerId: cleanContactField(body.messenger_id),
-    username,
-    pageId,
-  });
-
-  const { data: existing } = await supabase
+  const { data: existing, error: existingErr } = await supabase
     .from("conversations")
     .select("*")
     .eq("chatbot_id", chatbot.id)
     .eq("manychat_subscriber_id", body.subscriber_id)
     .maybeSingle();
+  // A failed read leaves `existing` null, exactly as for a contact never seen.
+  if (existingErr) console.error("[manychat-webhook] conversation lookup failed", existingErr);
+
+  // 4-empty. A contact we have never seen, with nothing to act on (no text, no media,
+  // no control flag that sets something): acknowledge and create nothing. An
+  // automation that posts with no message (a follow body whose "event" is mistyped or
+  // missing, a share with no text) must never open an empty lead thread, which would
+  // count as a conversation started and get follow-ups dripped to it. A control request
+  // that sets state (bot_off true, bot_on true, rn_opt_in true) still creates the row it
+  // needs below; a BOT_OFF removal (bot_off false) for someone never seen has nothing to
+  // clear. A known contact's empty request still takes the path it always has (4.5).
+  if (
+    !existing &&
+    !baseText &&
+    !hasMedia &&
+    !isTruthyFlag(body.bot_off) &&
+    !isTruthyFlag(body.bot_on) &&
+    !isTruthyFlag(body.rn_opt_in)
+  ) {
+    // When the read failed, a BOT_OFF removal may be for a contact we do know, and
+    // ManyChat never sends it again: clear the flag by the contact's key (4c's write),
+    // which touches no row for someone never seen. Not the upsert below, which would
+    // blank a known contact's name and ids from this nameless body.
+    if (existingErr && body.bot_off != null) {
+      await retrySupabase(
+        (signal) =>
+          supabase
+            .from("conversations")
+            .update({ bot_off_at: null })
+            .eq("chatbot_id", chatbot.id)
+            .eq("manychat_subscriber_id", body.subscriber_id)
+            .abortSignal(signal),
+        { label: "bot_off clear after a failed lookup" }
+      );
+      return manychatReply("", { ai_skipped: true, reason: "bot_off_cleared" });
+    }
+    return manychatReply("", {
+      ai_skipped: true,
+      reason: body.event ? "unknown_event" : "empty_message",
+    });
+  }
 
   // is_leads lead-tagging is PARKED (owner decision). A ManyChat flow may still send
   // is_leads=1; it is now accepted and IGNORED here - no tag, no silent short-circuit

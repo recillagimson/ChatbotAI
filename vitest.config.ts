@@ -38,11 +38,18 @@ export default defineConfig({
       "tests/change-assistant-repair*.spec.ts",
       "tests/manual-reply*.spec.ts",
       "tests/ai-silence*.spec.ts",
+      "tests/follows*.spec.ts",
     ],
   },
   resolve: {
     alias: {
       "@": path.resolve(__dirname),
     },
+  },
+  // tsconfig.json keeps "jsx": "preserve" for Next's own compiler, which Vite would
+  // copy and leave JSX untransformed. Compile it here so a spec can import a .tsx
+  // component and render it (tests/follows-render.spec.ts).
+  oxc: {
+    jsx: { runtime: "automatic" },
   },
 });

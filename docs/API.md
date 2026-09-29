@@ -40,7 +40,8 @@ The entry point for every message routed through ManyChat, across all channels (
   "last_name": "string|null",      // (optional)
   "username": "string|null",       // (optional) the channel's username/handle
   "message": "string",             // the user's latest message, max 4000 chars
-  "is_leads": 0                    // (optional, PARKED) accepted but ignored - no longer tags or short-circuits
+  "is_leads": 0,                   // (optional, PARKED) accepted but ignored - no longer tags or short-circuits
+  "event": "string"                // (optional) "new_follower" from ManyChat's "Say hi to new followers" automation; see "New-follower events"
 }
 ```
 
@@ -146,6 +147,46 @@ DM. A message carrying `is_leads` is handled exactly like a normal message (keyw
 gate → keyword actions → AI). Engagement is currently **keyword-only**
 (`keyword_fired`). To re-enable, restore the tag branch and re-consult `is_lead` in
 the keyword gate; the `conversations.is_lead` column and its "Lead" badge remain.
+
+**New-follower events.** An External Request step in ManyChat's "Say hi to new
+followers" automation (its Follow to DM trigger) posts an account event instead
+of a message:
+```json
+{ "chatbot_id": "uuid", "platform": "instagram", "event": "new_follower", "contact": { "...": "Full Contact Data" } }
+```
+Only the letters of `event` count, so `"New Follower"`, `"newFollower"` or
+`"new_followers"` work too. It is handled right after the subscription check and
+before everything that handles a message: the follower is recorded once per
+`(chatbot_id, subscriber_id)` in `instagram_follows` (with the same
+`external_user_id` a DM from them would store) and the response carries no
+message. Nothing else runs (no conversation, no message row, no AI, no ManyChat
+send):
+```json
+{ "version": "v2", "content": { "messages": [] }, "reply": "", "ai_skipped": true, "reason": "follow_recorded" }
+```
+`reason` is `follow_recorded`, `follow_already_recorded` (a repeat),
+`follow_not_recorded` (the write failed, e.g. before the migration),
+`follow_no_contact_id` (a blank or `{{placeholder}}` subscriber id, or one over 100
+characters), `follow_not_instagram` (`platform` is `messenger`, `whatsapp`,
+`telegram` or `tiktok`; an unrecognised value counts as Instagram, as it does for
+messages), `follow_rate_limited` (follows have their own per-bot flood cap,
+separate from messages) or `subscription_inactive` (the account's plan has lapsed:
+nothing is recorded, and a follow gets no text back). A chatbot that is switched off
+answers `401` like any request, so nothing is recorded for it either. Like any
+request, a body whose `subscriber_id` is missing (no top-level value and no `id` in
+the `contact` object) is a `400`. The Statistics page reads these rows back through
+the `instagram_follow_report` function.
+
+**Requests with nothing to act on.** A request from a contact the bot has never
+seen, with no text, no media and no control flag that sets something (a truthy
+`bot_off`, `bot_on` or `rn_opt_in`), creates nothing and returns
+`reason: "unknown_event"` when it carries an `event` the webhook doesn't know,
+else `"empty_message"`. So a follower body with a mistyped or missing `event`
+never opens an empty lead thread, and neither does a BOT_OFF removal
+(`bot_off: false`) for someone never seen. A known contact's empty request is
+acknowledged with `"empty_message"` as before. If the contact's thread can't be
+read (a database error), a BOT_OFF removal still clears the flag on that
+contact's thread, when there is one, and returns `"bot_off_cleared"`.
 
 On push channels (Instagram/Messenger/WhatsApp/Telegram) the webhook acks
 instantly with `{"ai_queued": true, "reply": ""}` and delivers the reply in the

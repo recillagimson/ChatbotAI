@@ -29,6 +29,7 @@ import { requireSuperadmin } from "@/lib/admin";
 import { FOLLOWUP_ENABLED } from "@/lib/followup";
 import { formatSecs, num } from "@/lib/format";
 import { getAnalyticsOverview, resolveRange } from "@/lib/analytics";
+import { FOLLOW_EVENT, FOLLOWERS_ANCHOR } from "@/lib/follows";
 import { PLATFORM_META, platformLabel } from "@/lib/platforms";
 import type { Chatbot, FollowupAsset } from "@/lib/types";
 
@@ -618,6 +619,92 @@ export async function ChatbotTabPanel({
                 </p>
               </div>
             </SsCard>
+
+            {/* New Instagram followers (lib/follows.ts). Statistics' "Set it up"
+                links here, so the anchor id must stay FOLLOWERS_ANCHOR. */}
+            <SsCard id={FOLLOWERS_ANCHOR} className="scroll-mt-24 p-[22px]">
+              <SsCardHead
+                title="Track new Instagram followers"
+                description="Record each new follower ManyChat greets and see them on the Statistics page, with who went on to start a conversation."
+                className="mb-5"
+              />
+              <div className="flex flex-col gap-4">
+                <p className="text-[12.5px] leading-relaxed text-ss-body">
+                  ManyChat greets new Instagram followers with its{" "}
+                  <strong className="font-semibold text-ss-ink">
+                    &quot;Say hi to new followers&quot;
+                  </strong>{" "}
+                  automation (the Follow to DM trigger). Add one step to it:
+                </p>
+                <ol className="flex flex-col gap-3">
+                  <SetupStep n={1}>
+                    In ManyChat, go to{" "}
+                    <strong className="font-semibold text-ss-ink">
+                      Automations
+                    </strong>
+                    , then{" "}
+                    <strong className="font-semibold text-ss-ink">Basic</strong>,
+                    and open{" "}
+                    <strong className="font-semibold text-ss-ink">
+                      Say hi to new followers
+                    </strong>{" "}
+                    (it is also under Settings, then Instagram).
+                  </SetupStep>
+                  <SetupStep n={2}>
+                    Click the three dots at the top right and choose{" "}
+                    <strong className="font-semibold text-ss-ink">
+                      Switch to Flow Builder
+                    </strong>
+                    . The quick setup page has no way to add an action.
+                  </SetupStep>
+                  <SetupStep n={3}>
+                    Add an{" "}
+                    <strong className="font-semibold text-ss-ink">Action</strong>{" "}
+                    step with an{" "}
+                    <strong className="font-semibold text-ss-ink">
+                      External Request
+                    </strong>{" "}
+                    right after the trigger, before the first message, so every
+                    new follower passes through it. Not after a button, or it
+                    only counts the people who tap it.
+                  </SetupStep>
+                  <SetupStep n={4}>
+                    Give it the same webhook URL, POST method and{" "}
+                    <Code>x-manychat-secret</Code> header as above, and this body:
+                  </SetupStep>
+                </ol>
+                <Field
+                  label="JSON body (new followers)"
+                  value={`{
+  "chatbot_id": "${chatbot.id}",
+  "platform": "instagram",
+  "event": "${FOLLOW_EVENT}",
+  "contact": <Full Contact Data>
+}`}
+                />
+                <p className="text-[12.5px] leading-relaxed text-ss-body">
+                  Replace <Code>{"<Full Contact Data>"}</Code> the same way as
+                  above. SpeedSettr saves the follower and sends nothing back, so
+                  your welcome message goes out exactly as before.
+                </p>
+                <p className="text-[12.5px] leading-relaxed text-ss-body">
+                  ManyChat&apos;s Test Request and Preview send the contact you
+                  test with, so that contact is saved as a new follower. Test with
+                  a spare account, or ignore that one entry.
+                </p>
+                <p className="text-[12.5px] leading-relaxed text-ss-muted">
+                  ManyChat runs this automation once per person, and only for
+                  people who aren&apos;t already your ManyChat contacts: anyone
+                  who has messaged you, or got a DM from one of your automations
+                  such as comment-to-DM, is skipped. It only works on accounts
+                  where Meta has switched the trigger on. Followers are recorded
+                  while this chatbot&apos;s AI replies are on and your plan is
+                  active; ManyChat never sends a follow again, so any that
+                  arrive while they&apos;re off are not counted later.
+                </p>
+              </div>
+              <ScrollToHash />
+            </SsCard>
           </>
         )}
     </>
@@ -718,6 +805,21 @@ function Code({ children }: { children: ReactNode }) {
     <code className="rounded-[5px] bg-ss-chip px-1.5 py-0.5 font-mono text-[11.5px] text-ss-ink">
       {children}
     </code>
+  );
+}
+
+/** One numbered setup step, styled like the ManyChat guide in Settings. */
+function SetupStep({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <li className="flex gap-3">
+      <span
+        className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-ss-indigo-50 font-display text-[11px] font-bold leading-none text-ss-indigo-600"
+        aria-hidden="true"
+      >
+        {n}
+      </span>
+      <span className="text-[12.5px] leading-relaxed text-ss-body">{children}</span>
+    </li>
   );
 }
 

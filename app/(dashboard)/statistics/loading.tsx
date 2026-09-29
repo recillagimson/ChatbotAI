@@ -14,6 +14,9 @@ export default function StatisticsLoading() {
       <Sk className="h-[54px] w-full rounded-panel" tone="on-page" />
       <SkStatCards count={5} />
       <SkChart bars={26} />
+      {/* No place for "New Instagram followers": the route can't know the scope
+          yet, and most accounts show no follower card (no Instagram chatbot that
+          can record one). The in-page skeleton sizes it once the scope is known. */}
       <div className="grid items-start gap-[18px] xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <SkCard className="p-6">
           <SkCardHead />
