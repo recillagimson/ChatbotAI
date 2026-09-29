@@ -105,7 +105,7 @@ async function DashboardBody({ sp }: { sp: { bot?: string } }) {
         chatbotId: botId,
         userId: user!.id,
       }),
-      // The queue: threads where the AI stepped back and a human should close.
+      // The queue: threads flagged needs attention, for a person to look at (the flag never pauses the AI).
       (() => {
         let q = supabase
           .from("conversations")
@@ -323,7 +323,7 @@ async function DashboardBody({ sp }: { sp: { bot?: string } }) {
                   </SsIconTile>
                 }
                 title="Needs attention"
-                description="The AI stepped back - a human should close these."
+                description="Flagged for a person to look at. The flag does not pause the AI."
                 action={
                   (workspace?.counts.needsAttention ?? 0) > 0 ? (
                     <span className="rounded-full bg-ss-rose px-2.5 py-1 font-display text-[11px] font-bold leading-none text-white">

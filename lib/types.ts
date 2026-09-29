@@ -72,7 +72,8 @@ export interface Chatbot {
   auto_followup_loop_mode: FollowupLoopMode; // after the last step: stop | repeat last | cycle through all
   ai_media_enabled: boolean;              // allow the live AI to emit [[SEND_ASSET]] directives
   link_buttons_enabled: boolean;          // Messenger-only: send links as tappable URL buttons instead of plain text
-  keep_replies_when_tagged: boolean;      // classifier tags (subscribed/disqualified/bot) don't silence the reactive reply
+  keep_replies_when_tagged: boolean;      // disqualified / Bot-Spam tags don't silence the reactive reply
+  keep_replies_when_subscribed?: boolean; // subscribed users still get replies (drip stays off); missing before 2026-09-29, then keep_replies_when_tagged decides (lib/conversation-silence.ts)
   reply_model: string | null;             // admin-only per-bot reactive-reply model override; null/invalid = MODELS.reply() default
   force_retrieval: boolean;               // admin-only: force KB vector retrieval regardless of size (needs an indexed KB)
   keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)

@@ -39,6 +39,7 @@ export default defineConfig({
       "tests/manual-reply*.spec.ts",
       "tests/ai-silence*.spec.ts",
       "tests/follows*.spec.ts",
+      "tests/reply-gates*.spec.ts",
     ],
   },
   resolve: {

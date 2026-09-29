@@ -78,6 +78,7 @@ import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
 import { refreshKnownFacts } from "@/lib/lead-facts";
 import { renderSentStateBlock, parseSentAssetKeys } from "@/lib/sent-state";
 import { detectHandoff, renderHandoffBlock } from "@/lib/handoff-detect";
+import { botReplySilenced, keepsReplyingToSubscribed } from "@/lib/conversation-silence";
 import {
   flowStateEnabled,
   refreshFlowState,
@@ -715,8 +716,10 @@ export async function POST(request: NextRequest) {
   let conversationId = existing?.id;
   let conversationStatus = existing?.status;
   // Set when a fresh row inherited a prior thread's silence state (returning contact
-  // whose ManyChat contact was deleted+recreated). Stays silent this turn, after the
-  // inbound is recorded, so the owner still sees the returning message.
+  // whose ManyChat contact was deleted+recreated) that silences the bot under the same
+  // rule as every later turn (botReplySilenced, so the chatbot's keep-replying switches
+  // count here too). Stays silent this turn, after the inbound is recorded, so the
+  // owner still sees the returning message.
   let carriedSuppression = false;
 
   if (!existing) {
@@ -803,7 +806,7 @@ export async function POST(request: NextRequest) {
             .eq("id", conversationId!)
             .then(() => {}, (err) => console.error("[manychat-webhook] suppression carry failed", err));
           conversationStatus = carry.status ?? conversationStatus;
-          carriedSuppression = true;
+          carriedSuppression = botReplySilenced(carry, chatbot);
         }
       }
     }
@@ -1011,10 +1014,13 @@ export async function POST(request: NextRequest) {
     return manychatReply("", { ai_skipped: true, reason: "human_takeover" });
   }
 
-  // When this bot opts to keep replying through classifier tags, the 6-subscribed,
-  // 6-disqualified, and step-7b silencers are skipped (BOT_OFF / takeover / opt-out
-  // still win). Fail-safe: a missing column reads false.
+  // Two per-chatbot switches lift the tag silencers below (BOT_OFF / takeover / opt-out
+  // still win): keep_replies_when_tagged skips 6-disqualified and step 7b's stand-down,
+  // keep_replies_when_subscribed skips 6-subscribed (see lib/conversation-silence.ts;
+  // before its migration the old switch still covers subscribed). A needs_human flag
+  // never silences anything. Fail-safe: a missing column reads false.
   const keepRepliesWhenTagged = chatbot.keep_replies_when_tagged === true;
+  const keepRepliesWhenSubscribed = keepsReplyingToSubscribed(chatbot);
 
   // 6-subscribed. A confirmed customer/subscriber gets NO automated messages - the
   // bot goes fully silent (a teammate handles them from here). Mirrors human-
@@ -1023,8 +1029,9 @@ export async function POST(request: NextRequest) {
   // (step 5) so the owner still SEES the message. Note: the CONVERTING turn is not
   // silenced - confirmed_at is null when that message reaches here; 9a sets it
   // afterward, so a final reply lands and only the NEXT message is silenced. The
-  // follow-up cron already excludes confirmed_at, so the drip is stopped too.
-  if (existing?.confirmed_at && !keepRepliesWhenTagged) {
+  // follow-up cron already excludes confirmed_at, so the drip is stopped too, even
+  // for a bot that keeps replying to subscribed users.
+  if (existing?.confirmed_at && !keepRepliesWhenSubscribed) {
     return manychatReply("", { ai_skipped: true, reason: "subscribed_stopped" });
   }
 

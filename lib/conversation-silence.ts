@@ -13,12 +13,12 @@
  * so surfacing a manual composer there would risk the owner AND the bot both
  * answering the same message.
  *
- * The optional `keepRepliesWhenTagged` (per-chatbot) skips the classifier-tag
- * silencers (subscribed/disqualified/bot); the three explicit off-switches
- * (ai_paused, bot_off_at, user_muted_at) always win regardless.
+ * Two per-chatbot switches lift the tag silencers: `keep_replies_when_tagged`
+ * (disqualified / Bot-Spam) and `keep_replies_when_subscribed` (subscribed). The
+ * three explicit off-switches (ai_paused, bot_off_at, user_muted_at) always win.
  *
  * Pure + dependency-free so it's safe in both server (pages, routes) and client
- * (inbox composer) bundles. Unit-tested in scripts/test-conversation-silence.ts.
+ * (inbox composer) bundles. Pinned by tests/reply-gates.spec.ts.
  */
 export interface ConversationSilenceInput {
   status?: string | null;
@@ -28,15 +28,32 @@ export interface ConversationSilenceInput {
   tag?: string | null;
 }
 
+/** The chatbot switches that lift a tag's silence (a chatbots row, or part of one). */
+export interface ReplySwitches {
+  keep_replies_when_tagged?: boolean | null;
+  keep_replies_when_subscribed?: boolean | null;
+}
+
+/**
+ * Whether the bot keeps answering subscribed users. `keep_replies_when_subscribed`
+ * (2026-09-29) split this out of `keep_replies_when_tagged`, which covered
+ * subscribed too; on a database without the new column it reads as missing, so the
+ * old switch still decides and nothing changes before the migration.
+ */
+export function keepsReplyingToSubscribed(bot: ReplySwitches | null | undefined): boolean {
+  return (bot?.keep_replies_when_subscribed ?? bot?.keep_replies_when_tagged) === true;
+}
+
 export function botReplySilenced(
   c: ConversationSilenceInput,
-  keepRepliesWhenTagged = false
+  bot: ReplySwitches = {}
 ): boolean {
-  // Explicit off-switches — never overridable by keep_replies_when_tagged:
+  // Explicit off-switches, never lifted by a chatbot switch:
   if (c.status === "ai_paused") return true; // human takeover
   if (c.user_muted_at) return true;          // lead opt-out (consent)
   if (c.bot_off_at) return true;             // explicit BOT_OFF tag
-  // Classifier-tag silencers — skipped when the bot opts to keep replying:
-  if (keepRepliesWhenTagged) return false;
-  return !!c.confirmed_at || c.tag === "disqualified" || c.tag === "bot";
+  // Tag silencers, each lifted by its own chatbot switch:
+  if (c.confirmed_at && !keepsReplyingToSubscribed(bot)) return true;
+  if ((c.tag === "disqualified" || c.tag === "bot") && bot.keep_replies_when_tagged !== true) return true;
+  return false;
 }

@@ -5,6 +5,7 @@ import { GraduationCap, Key, TriangleAlert, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { FollowupSequenceForm } from "@/components/dashboard/followup-sequence-form";
 import { KeepRepliesToggle } from "@/components/dashboard/keep-replies-toggle";
+import { keepsReplyingToSubscribed } from "@/lib/conversation-silence";
 import { ModelControls } from "@/components/dashboard/model-controls";
 import { WelcomeForm } from "@/components/dashboard/welcome-form";
 import { LinkFlowForm } from "@/components/dashboard/link-flow-form";
@@ -239,7 +240,8 @@ export async function ChatbotTabPanel({
 
             <KeepRepliesToggle
               chatbotId={chatbot.id}
-              initial={chatbot.keep_replies_when_tagged}
+              initialTagged={chatbot.keep_replies_when_tagged}
+              initialSubscribed={keepsReplyingToSubscribed(chatbot)}
             />
 
             {isSuperadmin && (

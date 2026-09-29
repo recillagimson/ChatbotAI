@@ -69,11 +69,22 @@ export default async function ConversationDetailPage({
 
   if (!conversation) notFound();
 
-  const { data: messages } = await supabase
-    .from("messages")
-    .select("*")
-    .eq("conversation_id", id)
-    .order("created_at", { ascending: true });
+  // The subscribed-replies switch is read on its own, beside the messages: on a
+  // database without its column (2026-09-29 migration) this read fails alone and
+  // keepsReplyingToSubscribed falls back to the old switch, where naming the
+  // column in the query above would 404 every thread.
+  const [{ data: messages }, { data: replySwitches }] = await Promise.all([
+    supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("chatbots")
+      .select("keep_replies_when_subscribed")
+      .eq("id", conversation.chatbot_id)
+      .maybeSingle(),
+  ]);
 
   // Resolve a viewable URL for each message carrying media. media_url holds a
   // storage path in the private request-uploads bucket (sign it), unless it's
@@ -229,8 +240,8 @@ export default async function ConversationDetailPage({
               aria-hidden="true"
             />
             <p className="text-[11.5px] leading-snug text-ss-indigo-700">
-              Flagged <strong>needs attention</strong> - the AI stopped here so
-              you can close it yourself.
+              Flagged <strong>needs attention</strong>: a person should take a
+              look. This flag does not pause the AI.
             </p>
           </div>
         )}
@@ -238,7 +249,11 @@ export default async function ConversationDetailPage({
 
       <ConversationReplyBox
         conversationId={conversation.id}
-        botSilent={botReplySilenced(conversation, keepRepliesWhenTagged)}
+        botSilent={botReplySilenced(conversation, {
+          keep_replies_when_tagged: keepRepliesWhenTagged,
+          keep_replies_when_subscribed:
+            replySwitches?.keep_replies_when_subscribed,
+        })}
       />
     </div>
   );
