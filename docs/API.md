@@ -192,8 +192,9 @@ contact's thread, when there is one, and returns `"bot_off_cleared"`.
 ```json
 { "chatbot_id": "uuid", "subscriber_id": "123", "bot_on": true }
 ```
-Send it flat, with no `message` and no `contact` object. The request is never
-read as a message. It clears an owner pause (Pause AI, BOT_OFF) and switches the
+The DM flow's body works too: keep `platform` and the `contact` object (Full
+Contact Data) and add `"bot_on": true`. Either way the request is never read as
+a message, so the contact's last typed text is ignored. It clears an owner pause (Pause AI, BOT_OFF) and switches the
 contact on, so a keyword-only chatbot answers them without a keyword. It also
 answers what they have already sent: the unanswered messages stored on their
 thread get one reply, on the channel the thread lives on, after the chatbot's

@@ -466,9 +466,10 @@ export async function POST(request: NextRequest) {
   // answer what the contact already sent. Its body may still carry Full Contact Data,
   // whose last typed text is hoisted into `message`: read as a fresh inbound, that would
   // store the lead's last line a second time, or have the 30s dedup swallow the request.
-  // Blank text and media turn every text-driven step below (dedup, reset keyword,
-  // stop/resume words, trivial ack, extraction shield, keyword triggers) into a no-op
-  // through its own condition.
+  // Blank text and media turn the text-driven steps below (dedup, reset keyword,
+  // trivial ack, keyword triggers) into no-ops through their own conditions. The stop
+  // word and the extraction shield are applied to the WAITING text instead (4b-on,
+  // 6b-shield).
   const botOn = isTruthyFlag(body.bot_on);
 
   // Inbound media + the typed text. Either may be empty; we require at least one.
@@ -955,6 +956,9 @@ export async function POST(request: NextRequest) {
   // when the request goes on to answer, step 10 claims the reply like any newer inbound,
   // so a run already in flight stands down and this one answers the whole burst. Runs
   // before the empty-message ack. Fail-open: a DB error is logged, still acked.
+  // The stored text a BOT_ON request goes on to answer. It was silenced before it ever
+  // reached the extraction shield, so 6b-shield screens it in place of the (blank) body.
+  let waitingText = "";
   if (conversationId && botOn) {
     // TWO writes on purpose. PostgREST rejects an UPDATE that references an un-migrated
     // column ATOMICALLY, so folding bot_forced_on_at into the resume update would ALSO
@@ -1031,6 +1035,7 @@ export async function POST(request: NextRequest) {
     if (!retryStillDeliverable(platform, Date.parse(newestPending.created_at), Date.now() + 10 * 60_000)) {
       return switchedOnOnly("window_closed");
     }
+    waitingText = pending.map((m) => m.content).join("\n");
   }
 
   // 4c. ManyChat BOT_OFF tag sync. A tag-change automation posts bot_off=true (tag
@@ -1424,10 +1429,14 @@ export async function POST(request: NextRequest) {
   // AI still answers. Every detection flags the conversation for the owner
   // (extraction_attempts/flagged_at + usage_log) best-effort. Fail-open: a
   // throwing detector or missing column must never break a normal reply.
+  // A BOT_ON request is screened on the stored text it is about to answer (4b-on), so
+  // a blatant attempt waiting on the thread gets the same deflection, flag and
+  // stand-down count as one that arrives fresh, and never reaches the model.
+  const shieldText = botOn ? waitingText : baseText;
   let securityInstruction: string | null = null;
   let extraction: ExtractionResult = { level: "none", patterns: [] };
   try {
-    if (baseText) extraction = detectExtractionAttempt(baseText);
+    if (shieldText) extraction = detectExtractionAttempt(shieldText);
   } catch {
     /* fail-open */
   }
@@ -1477,7 +1486,7 @@ export async function POST(request: NextRequest) {
     if (extraction.level === "hard" && (standingDown || !existing?.reply_claimed_for)) {
       const text = standingDown
         ? EXTRACTION_STANDDOWN_MESSAGE
-        : pickDeflection(body.subscriber_id, baseText.length);
+        : pickDeflection(body.subscriber_id, shieldText.length);
       await persistAndPush(supabase, conversationId!, body.subscriber_id, text, chatbot.user_id, chatbot.id, apiKey, platform);
       return manychatReply(sanitizeReply(text), {
         ai_skipped: true,
@@ -1749,23 +1758,11 @@ export async function POST(request: NextRequest) {
       // finished backfilling, else the provisional attachment label. Vision
       // image parts stay this-run-only (known limitation for burst images).
       effectiveMessage = combineBurstText(burst, inboundId, effectiveMessage);
-      if (botOn) {
-        // BOT_ON answers STORED messages, which never went through this request's own
-        // checks. A waiting attachment was silenced before its media was ever
-        // processed, so the placeholder is all the model would see: say so, with the
-        // note it already gets for an attachment that could not be read.
-        if (burst.some((m) => m.content === ATTACHMENT_PLACEHOLDER)) {
-          effectiveMessage += `\n\n${UNSUPPORTED_NOTE}`;
-        }
-        // And the extraction shield (6b-shield) only saw this request's blank text, so
-        // steer the turn here if the waiting text is a prompt-extraction attempt.
-        try {
-          if (detectExtractionAttempt(effectiveMessage).level !== "none") {
-            securityInstruction = EXTRACTION_REINFORCEMENT;
-          }
-        } catch {
-          /* fail-open */
-        }
+      // BOT_ON only: a waiting attachment was silenced before its media was ever
+      // processed, so the placeholder is all the model would see. Say so, with the note
+      // it already gets for an attachment that could not be read.
+      if (botOn && burst.some((m) => m.content === ATTACHMENT_PLACEHOLDER)) {
+        effectiveMessage += `\n\n${UNSUPPORTED_NOTE}`;
       }
     } else {
       // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
