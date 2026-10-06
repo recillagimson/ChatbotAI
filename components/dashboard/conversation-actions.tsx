@@ -122,13 +122,17 @@ export function ConversationActions({
   // ManyChat welcome delivery - the same flow the webhook triggers on a first-contact
   // greeting. The endpoint (requireSuperadmin) is the real gate; this button only shows
   // for admins. Re-clickable; the server records the send + one-time-stamps welcomed_at.
+  // A sent welcome also hands the thread to the bot: the server stamps the BOT_ON
+  // override, so a keyword-only bot answers this contact from then on (`engaged`).
   function sendWelcome() {
     // Fires a real DM to a real contact via ManyChat - confirm so a misclick (e.g. while
     // pausing AI on an already-welcomed live thread) can't push a surprise welcome VM.
+    // The dialog names the lasting effect too: it outlives the click, until a reset.
     if (
       !window.confirm(
         "Send the welcome message now? This fires the welcome VM/video flow to this " +
-          "contact via ManyChat right away."
+          "contact via ManyChat right away. The AI will then reply to this contact " +
+          "without needing a keyword, until the conversation is reset."
       )
     ) {
       return;
@@ -143,10 +147,17 @@ export function ConversationActions({
         const data = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
           sent?: boolean;
+          engaged?: boolean;
           reason?: string;
         };
         if (res.ok && data.ok && data.sent) {
-          setWelcomeResult("Welcome message sent.");
+          setWelcomeResult(
+            data.engaged
+              ? "Welcome message sent. This contact no longer needs a keyword for the " +
+                  "AI to reply."
+              : "Welcome message sent, but the AI could not be switched on for this " +
+                  "contact, so it will still wait for a keyword."
+          );
           router.refresh();
         } else if (res.status === 403) {
           setWelcomeResult("Not allowed.");

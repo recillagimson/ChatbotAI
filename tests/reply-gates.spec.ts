@@ -204,6 +204,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("webhook: the keyword gate and its manual override", () => {
+  const GATED = { keyword_gate_enabled: true };
+  const FORCED_ON = { bot_forced_on_at: "2026-10-06T14:40:00Z" };
+
+  it("a keyword-only bot stays silent for a contact who never matched a keyword", async () => {
+    expect(await reasonFor(GATED, {})).toBe("keyword_gate_blocked");
+  });
+
+  it("answers that contact once the owner switched the bot on for them (BOT_ON, or the Welcome button)", async () => {
+    // tests/send-welcome.spec.ts pins that the Welcome button writes this override.
+    expect(await reasonFor(GATED, FORCED_ON)).toBe("trivial_ack");
+    // Strict matching changes what counts as a keyword, never who is already engaged.
+    expect(await reasonFor({ ...GATED, keyword_strict_enabled: true }, FORCED_ON)).toBe("trivial_ack");
+  });
+
+  it("the override lifts the keyword gate and nothing else", async () => {
+    expect(await reasonFor(GATED, { ...FORCED_ON, status: "ai_paused" })).toBe("human_takeover");
+    expect(await reasonFor(GATED, { ...FORCED_ON, bot_off_at: "2026-10-01T00:00:00Z" })).toBe("bot_off_stopped");
+    expect(await reasonFor(GATED, { ...FORCED_ON, ...SUBSCRIBED })).toBe("subscribed_stopped");
+    expect(await reasonFor(GATED, { ...FORCED_ON, tag: "disqualified" })).toBe("disqualified_stopped");
+    expect(await reasonFor(GATED, { ...FORCED_ON, user_muted_at: "2026-10-01T00:00:00Z" })).toBe("user_muted");
+  });
+});
+
 describe("webhook: which tags stop the bot", () => {
   it("a thread flagged needs attention still gets its reply", async () => {
     expect(await reasonFor({}, { tag: "needs_human" })).toBe("trivial_ack");

@@ -215,7 +215,7 @@ export interface Conversation {
   flagged_at: string | null;         // when the newest extraction attempt was detected
   user_muted_at: string | null;      // lead self-paused the AI via "stopmessage" (null = not muted); independent of status
   bot_off_at: string | null;         // ManyChat BOT_OFF tag sync (null = bot on); fully silences the bot for this subscriber
-  bot_forced_on_at: string | null;   // ManyChat BOT_ON tag sync (null = no override); force-engages the contact so the keyword gate is bypassed
+  bot_forced_on_at: string | null;   // manual override (null = none), stamped by the ManyChat BOT_ON tag sync or the dashboard's Welcome button; force-engages the contact so the keyword gate is bypassed
   question_engaged_at: string | null; // stranger asked a genuine question and got engaged via the answer-questions gate softening (separate from keyword_fired)
   question_screen_count: number;      // count of paid relevance screens run for this contact (caps AI cost on the answer-questions path)
   welcomed_at: string | null;

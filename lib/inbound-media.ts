@@ -208,7 +208,7 @@ const MAX_BYTES = 25 * 1024 * 1024; // Whisper's hard limit; comfortable for ima
 const MAX_DESCRIBE_IMAGES = 4;
 // A non-browser UA - Meta/Supabase REST can 401 browser-like agents (see memory).
 const FETCH_UA = "SpeedSettr-Media/1.0";
-const UNSUPPORTED_NOTE =
+export const UNSUPPORTED_NOTE =
   "[Note: the customer sent an attachment that couldn't be read. Politely acknowledge it and ask them to describe it or resend it.]";
 
 /** Pick a filename (with a sensible extension) so Whisper/parsers detect the format. */

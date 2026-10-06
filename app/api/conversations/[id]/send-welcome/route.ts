@@ -26,6 +26,17 @@ type WelcomeRow = Pick<Conversation, "id" | "manychat_subscriber_id"> & {
  * first-contact webhook, it CLAIMS `welcomed_at` the same atomic way the webhook does
  * BEFORE sending, and reverts the claim if the send fails - so a real lead is never left
  * marked "welcomed" without actually receiving the VM.
+ *
+ * A successful send also HANDS THE THREAD TO THE BOT: it stamps `bot_forced_on_at`, the
+ * manual override the BOT_ON tag sets (4b-on in the ManyChat webhook). The keyword gate
+ * (6-gate) reads that as engaged, so a keyword-only bot answers this contact's next
+ * messages with no keyword match, strict matching or not; without it the owner's own
+ * welcome was followed by silence. It lifts ONLY the keyword gate: a paused, BOT_OFF,
+ * subscribed or disqualified thread is stopped before that gate, a lead's own opt-out is
+ * still honoured after it, and unlike BOT_ON this clears no pause. It does not write
+ * keyword_fired, so on a keyword-gated bot the contact is answered but not enrolled in
+ * the follow-up drip. Only "Reset conversation" clears the override, so a click made
+ * purely to test delivery leaves that contact engaged until then.
  */
 export async function POST(
   _request: Request,
@@ -107,6 +118,17 @@ export async function POST(
     return NextResponse.json({ ok: false, reason: "send_failed" }, { status: 502 });
   }
 
+  // Hand the thread to the bot (see the note above). Its own write, after the send: the
+  // welcomed_at claim only matches a thread never welcomed before, so an override folded
+  // into it would be skipped on every re-send. supabase-js resolves an error instead of
+  // throwing, so check it: the welcome is already out, and the owner must not be told
+  // the bot took over when it will still wait for a keyword.
+  const { error: engageErr } = await supabase
+    .from("conversations")
+    .update({ bot_forced_on_at: new Date().toISOString() })
+    .eq("id", id);
+  if (engageErr) console.error("[send-welcome] force-on stamp failed", id, engageErr);
+
   // Record the send in the transcript so it's visible in the inbox. Best-effort, but log
   // failures (never silently swallow - a missing record is worth seeing in logs).
   const { error: msgErr } = await supabase.from("messages").insert({
@@ -118,5 +140,5 @@ export async function POST(
   });
   if (msgErr) console.error("[send-welcome] transcript record failed", id, msgErr);
 
-  return NextResponse.json({ ok: true, sent: true });
+  return NextResponse.json({ ok: true, sent: true, engaged: !engageErr });
 }

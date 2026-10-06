@@ -188,6 +188,28 @@ acknowledged with `"empty_message"` as before. If the contact's thread can't be
 read (a database error), a BOT_OFF removal still clears the flag on that
 contact's thread, when there is one, and returns `"bot_off_cleared"`.
 
+**BOT_ON tag.** A ManyChat tag automation hands a contact back to the bot:
+```json
+{ "chatbot_id": "uuid", "subscriber_id": "123", "bot_on": true }
+```
+Send it flat, with no `message` and no `contact` object. The request is never
+read as a message. It clears an owner pause (Pause AI, BOT_OFF) and switches the
+contact on, so a keyword-only chatbot answers them without a keyword. It also
+answers what they have already sent: the unanswered messages stored on their
+thread get one reply, on the channel the thread lives on, after the chatbot's
+usual reply wait. The response is `{"ai_queued": true}` when that reply was
+queued. When there is nothing to answer right now the response is
+`"reason": "bot_on_set"` with `reply_skipped` saying why: `nothing_waiting`
+(their last message was already answered, or they have no thread yet),
+`window_closed` (their last message is older than the channel's 24 hour reply
+window, or within 10 minutes of it), `lead_opted_out` (they sent the stop word
+and have not asked the bot back since), `cannot_push` (TikTok, or no ManyChat API key) or `read_failed`.
+The contact is switched on in each of those cases, so the bot answers their next
+message. It does not override a subscribed or disqualified thread or a lead's
+own stop (`subscribed_stopped`, `disqualified_stopped`, `user_muted`), and any
+reason an ordinary message can get also applies (for example `rate_limited`;
+`monthly_cap_reached` still sends the standard holding line).
+
 On push channels (Instagram/Messenger/WhatsApp/Telegram) the webhook acks
 instantly with `{"ai_queued": true, "reply": ""}` and delivers the reply in the
 background after a short debounce (`REPLY_DEBOUNCE_MS`, default 5s): if the
