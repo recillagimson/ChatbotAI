@@ -138,6 +138,24 @@ export async function recordFollow(supabase: ServiceClient, row: FollowRow): Pro
   return Array.isArray(data) && data.length > 0 ? "follow_recorded" : "follow_already_recorded";
 }
 
+/**
+ * Did this contact follow the account (a recorded follow, see recordFollow)? The
+ * webhook's keyword gate asks: a follower was greeted by the account's own "Say hi to
+ * new followers" automation, so what they write back is answered without a keyword.
+ * Any miss or error (a failed read, the table missing before its migration) reads as
+ * "not a follower", which leaves the gate closed.
+ */
+export async function isFollower(supabase: ServiceClient, chatbotId: string, subscriberId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("instagram_follows")
+    .select("id")
+    .eq("chatbot_id", chatbotId)
+    .eq("manychat_subscriber_id", subscriberId)
+    .maybeSingle();
+  if (error) console.error("[follows] follower lookup failed", error);
+  return !!data;
+}
+
 /* ------------------------------------------------------------------ *
  * The Statistics report
  * ------------------------------------------------------------------ */

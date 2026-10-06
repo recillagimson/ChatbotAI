@@ -86,10 +86,16 @@ let chatbotRow: Record<string, unknown>;
 let conversation: Record<string, unknown> | null;
 /** A returning contact's earlier threads, found by their stable external id. */
 let priorThreads: Record<string, unknown>[];
+/** Whether this contact has a recorded follow (instagram_follows), or the error that read fails with. */
+let follower: boolean;
+let followLookupError: unknown;
+/** How many times the webhook asked whether the contact is a follower. */
+let followLookups: number;
 
 function table(name: string) {
   const chain: Record<string, unknown> = {};
   let listed = false;
+  if (name === "instagram_follows") followLookups++;
   for (const m of ["select", "eq", "neq", "in", "is", "gte", "lt", "order", "abortSignal", "update", "insert", "upsert"]) {
     chain[m] = () => chain;
   }
@@ -102,6 +108,9 @@ function table(name: string) {
     if (name === "subscriptions") return { data: { status: "active", comp_expires_at: null }, error: null };
     if (name === "conversations") return { data: listed ? priorThreads : conversation, error: null };
     if (name === "messages") return { data: { id: "m1" }, error: null };
+    if (name === "instagram_follows") {
+      return followLookupError ? { data: null, error: followLookupError } : { data: follower ? { id: "f1" } : null, error: null };
+    }
     return { data: null, error: null };
   };
   chain.maybeSingle = async () => result();
@@ -194,6 +203,9 @@ async function reasonFor(bot: Record<string, unknown>, thread: Record<string, un
 }
 
 beforeEach(() => {
+  follower = false;
+  followLookupError = null;
+  followLookups = 0;
   vi.stubEnv("MANYCHAT_WEBHOOK_SECRET", "");
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -225,6 +237,41 @@ describe("webhook: the keyword gate and its manual override", () => {
     expect(await reasonFor(GATED, { ...FORCED_ON, ...SUBSCRIBED })).toBe("subscribed_stopped");
     expect(await reasonFor(GATED, { ...FORCED_ON, tag: "disqualified" })).toBe("disqualified_stopped");
     expect(await reasonFor(GATED, { ...FORCED_ON, user_muted_at: "2026-10-01T00:00:00Z" })).toBe("user_muted");
+  });
+
+  // A follower was greeted by the account's own "Say hi to new followers" automation,
+  // so what they write back is not a stranger's message (2026-10-06, HTKeem Bot: new
+  // followers answered the follow DM in their own words and got silence).
+  it("answers a contact who followed the account, keyword or not", async () => {
+    follower = true;
+    expect(await reasonFor(GATED, {})).toBe("trivial_ack");
+    expect(await reasonFor({ ...GATED, keyword_strict_enabled: true }, {})).toBe("trivial_ack");
+  });
+
+  it("a follower is still stopped by everything else that stops the bot", async () => {
+    follower = true;
+    expect(await reasonFor(GATED, { status: "ai_paused" })).toBe("human_takeover");
+    expect(await reasonFor(GATED, { bot_off_at: "2026-10-01T00:00:00Z" })).toBe("bot_off_stopped");
+    expect(await reasonFor(GATED, SUBSCRIBED)).toBe("subscribed_stopped");
+    expect(await reasonFor(GATED, { tag: "disqualified" })).toBe("disqualified_stopped");
+    expect(await reasonFor(GATED, { user_muted_at: "2026-10-01T00:00:00Z" })).toBe("user_muted");
+  });
+
+  it("stays silent when it cannot tell whether the contact followed", async () => {
+    follower = true;
+    followLookupError = { code: "PGRST003", message: "Timed out acquiring connection from connection pool." };
+    expect(await reasonFor(GATED, {})).toBe("keyword_gate_blocked");
+  });
+
+  it("only asks whether a contact followed when the keyword rule would otherwise silence them", async () => {
+    follower = true;
+    await reasonFor({}, {}); // not a keyword-only bot
+    await reasonFor(GATED, FORCED_ON); // switched on by the owner
+    await reasonFor(GATED, { keyword_fired: ["group-1"] }); // matched a keyword before
+    await reasonFor(GATED, { status: "ai_paused" }); // stopped before the keyword rule is reached
+    expect(followLookups).toBe(0);
+    await reasonFor(GATED, {});
+    expect(followLookups).toBe(1);
   });
 });
 

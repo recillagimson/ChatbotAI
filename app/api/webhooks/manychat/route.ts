@@ -93,7 +93,7 @@ import { splitBurst, combineBurstText, remainingDebounceMs, clampDebounceSeconds
 import { suppressionCarry, resolveExternalId } from "@/lib/returning-contact";
 import { flattenManychatContact } from "@/lib/manychat-contact";
 import { cleanLiveChatUrl } from "@/lib/manual-followups";
-import { isFollowEvent, buildFollowRow, recordFollow } from "@/lib/follows";
+import { isFollowEvent, buildFollowRow, recordFollow, isFollower } from "@/lib/follows";
 import type { Chatbot, Message } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -1182,7 +1182,20 @@ export async function POST(request: NextRequest) {
   // Answer-opener-questions softening: a stranger who was screened as a genuine inquiry
   // on an earlier turn is engaged from then on (a SEPARATE sticky flag from keyword_fired).
   const questionEngaged = !!existing?.question_engaged_at;
-  if (keywordGateBlocks(chatbot.keyword_gate_enabled ?? false, !!keywordGroup, alreadyEngaged || forcedOn || questionEngaged)) {
+  // Followers: a contact with a recorded follow (instagram_follows, 3a-follow) was
+  // greeted by the account's own "Say hi to new followers" automation, so what they
+  // write back is not a stranger's message and is answered without a keyword. Asked
+  // only when the gate would otherwise silence them, so a bot with the gate off and an
+  // already-engaged contact never pay for the read. Nothing is written: the follow row
+  // is the state. Like forcedOn it adds no keyword_fired, so the follow-up drip still
+  // skips them on a gated bot. Fail-closed (isFollower): a failed read stays gated.
+  // ponytail: applies to every gated bot that records follows; add a per-chatbot
+  // switch (like keyword_gate_answer_questions) when an account wants its followers
+  // kept behind the keyword.
+  if (
+    keywordGateBlocks(chatbot.keyword_gate_enabled ?? false, !!keywordGroup, alreadyEngaged || forcedOn || questionEngaged) &&
+    !(await isFollower(supabase, chatbot.id, body.subscriber_id))
+  ) {
     // The gate WOULD silence this stranger. Opt-in softening: if they OPENED with a
     // genuine business question, answer it and start the conversation instead of going
     // silent. Two-stage + bounded, fail-CLOSED at every step (any miss/error → stay
