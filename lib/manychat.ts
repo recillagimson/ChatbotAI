@@ -843,11 +843,15 @@ export async function sendManychatSequencePaced(opts: {
   pace?: boolean;
   /**
    * Optional stand-down check, evaluated before each FOLLOW-ON item (2..N). Return true
-   * to stop sending the rest (lead muted / owner took over / superseded). If it throws,
-   * this loop keeps going (fail-open) - dropping a legit reply on a transient blip is the
-   * worse outcome, and the next item re-checks anyway.
+   * to stop sending the rest (lead muted / owner took over). Return "superseded" when a
+   * newer inbound now owns the reply: the leftover text/media is dropped (the newer run
+   * answers), but any link flow not yet fired STILL fires - the "(sent link:)" marker is
+   * already persisted, so dropping the flow would leave the lead with no link and a bot
+   * that believes it sent one. If it throws, this loop keeps going (fail-open) - dropping
+   * a legit reply on a transient blip is the worse outcome, and the next item re-checks
+   * anyway.
    */
-  shouldAbort?: () => Promise<boolean>;
+  shouldAbort?: () => Promise<boolean | "superseded">;
 }): Promise<{ aborted: boolean }> {
   // Normalise: trim text items and drop empties; keep every flow item; keep media items
   // that carry at least one asset (an empty media group is a no-op, so drop it).
@@ -887,7 +891,7 @@ export async function sendManychatSequencePaced(opts: {
     // re-checked pre-push). Catches a stop/takeover/supersede that landed during the gap.
     // A flow is an item too, so a link never fires after an abort. Fail-open if it throws.
     if (i > 0 && opts.shouldAbort) {
-      let abort = false;
+      let abort: boolean | "superseded" = false;
       try {
         abort = await opts.shouldAbort();
       } catch (err) {
@@ -895,8 +899,25 @@ export async function sendManychatSequencePaced(opts: {
       }
       if (abort) {
         console.log(
-          `[manychat] paced send aborted before item ${i + 1}/${items.length} (muted/superseded)`
+          `[manychat] paced send aborted before item ${i + 1}/${items.length} (${abort === "superseded" ? "superseded" : "muted/takeover"})`
         );
+        if (abort === "superseded") {
+          // Fire the link flows this run already recorded as sent; skip everything else.
+          for (const rest of items.slice(i)) {
+            if (rest.kind !== "flow") continue;
+            try {
+              await sendManychatFlow({
+                subscriberId: opts.subscriberId,
+                flowNs: rest.flowNs,
+                apiKey: opts.apiKey,
+              });
+            } catch (err) {
+              anyFailed = true;
+              console.error("[manychat] superseded run: pending link flow failed", err);
+            }
+          }
+          if (anyFailed) throw new Error("ManyChat paced send: one or more items failed");
+        }
         return { aborted: true };
       }
     }

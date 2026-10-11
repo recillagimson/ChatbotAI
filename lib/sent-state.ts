@@ -65,9 +65,13 @@ export function renderSentStateBlock(args: {
 
   if (args.linkAlreadySent) {
     parts.push(
-      "THE LINK HAS ALREADY BEEN SENT to this person. Do not send it again, do not " +
-        "re-introduce yourself or your company, and do not restart the pitch. Pick up " +
-        "where they are: answer what they ask and help with the next step."
+      "THE LINK HAS ALREADY BEEN SENT to this person. Do not send it again on your own, " +
+        "do not re-introduce yourself or your company, and do not restart the pitch. Pick " +
+        "up where they are: answer what they ask and help with the next step. The one " +
+        "exception: if their latest message explicitly asks for the link, asks how or " +
+        "where to sign up or join, or says they can't find it or never got it, send it " +
+        "again the same way you sent it the first time instead of pointing them back up " +
+        "the chat."
     );
   }
 

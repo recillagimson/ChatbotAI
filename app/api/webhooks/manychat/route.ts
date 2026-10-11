@@ -2358,7 +2358,7 @@ export async function POST(request: NextRequest) {
             // took over / a newer run superseded this one, and stop the rest if so (mirrors
             // the pre-push re-check at 8c). Read-once, retry-once on null, fail-open.
             // pace=false (pacing disabled) still delivers in order with no gaps.
-            const shouldAbort = async (): Promise<boolean> => {
+            const shouldAbort = async (): Promise<boolean | "superseded"> => {
               const read = async () =>
                 (
                   await supabase
@@ -2373,8 +2373,10 @@ export async function POST(request: NextRequest) {
               if (shouldStandDown(fresh)) return true; // lead muted or owner took over
               // Superseded: this run released its own claim before pacing, so a
               // non-null token that isn't ours means a newer inbound now owns the reply.
+              // "superseded" (not true): the leftover bubbles are dropped, but a link
+              // flow this reply already recorded as sent still fires.
               if (fresh.reply_claimed_for && fresh.reply_claimed_for !== inboundId) {
-                return true;
+                return "superseded";
               }
               return false;
             };

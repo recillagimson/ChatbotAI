@@ -67,6 +67,27 @@ describe("sendManychatSequencePaced (interleaved delivery)", () => {
     expect(calls).toEqual(["text", "flow", "text", "flow"]);
   });
 
+  it("still fires a pending link flow when a newer message supersedes the run", async () => {
+    // Live bug: the lead replied ~30s after the bot started trickling its reply. The newer
+    // inbound superseded this run mid-trickle, the flow was dropped with the leftover
+    // bubbles, yet the "(sent link:)" marker was already saved - so the lead got no link
+    // and the bot kept saying "it's right up there". The leftover TEXT is rightly dropped
+    // (the newer run answers), but a link the bot already promised must still go out.
+    const items: PacedItem[] = [
+      { kind: "text", text: "bet" },
+      { kind: "text", text: "use this link to get signed up" },
+      { kind: "flow", flowNs: "F_LINK" },
+      { kind: "text", text: "once you're in, check your messages" },
+    ];
+    const res = await sendManychatSequencePaced({
+      ...base,
+      items,
+      shouldAbort: async () => "superseded", // fires before item 2
+    });
+    expect(calls).toEqual(["text", "flow"]);
+    expect(res.aborted).toBe(true);
+  });
+
   it("stops before a flow when shouldAbort fires (no link sends after takeover)", async () => {
     const items: PacedItem[] = [
       { kind: "text", text: "one" },

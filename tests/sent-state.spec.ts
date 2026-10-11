@@ -62,6 +62,10 @@ describe("renderSentStateBlock", () => {
   it("adds the post-link instruction only when the link was sent", () => {
     const out = renderSentStateBlock({ sentAssetKeys: [], linkAlreadySent: true });
     expect(out).toContain("THE LINK HAS ALREADY BEEN SENT");
+    // A lead who explicitly asks for the link again must get it, not "it's right above"
+    // (live: a lead asked to join 10 days after the link went out and was pointed upward).
+    expect(out).toContain("explicitly asks for the link");
+    expect(out).toContain("send it again");
     expect(out).toContain("do not restart the pitch");
     expect(out).not.toContain("ASSETS ALREADY SENT");
   });
