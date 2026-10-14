@@ -6,6 +6,7 @@ import {
   Users,
   GitPullRequestArrow,
   MessageSquare,
+  ClipboardList,
   ArrowLeft,
   LogOut,
 } from "lucide-react";
@@ -29,7 +30,7 @@ interface AdminNavItem {
   isActive: (pathname: string) => boolean;
 }
 
-// The three admin destinations. Clients also owns the per-client detail route, so
+// The admin destinations. Clients also owns the per-client detail route, so
 // its matcher covers /admin/clients/* as well as the /admin root.
 const ADMIN_ITEMS: AdminNavItem[] = [
   {
@@ -51,6 +52,12 @@ const ADMIN_ITEMS: AdminNavItem[] = [
     icon: MessageSquare,
     badge: "feedback",
     isActive: (p) => p.startsWith("/admin/feedback"),
+  },
+  {
+    href: "/admin/intakes",
+    label: "Intakes",
+    icon: ClipboardList,
+    isActive: (p) => p.startsWith("/admin/intakes"),
   },
 ];
 
@@ -105,7 +112,7 @@ function RailBadge({
 
 /**
  * Desktop admin rail - the 252px navy column matching the client dashboard's
- * Sidebar, but scoped to the three admin destinations plus a way back to the app.
+ * Sidebar, but scoped to the admin destinations plus a way back to the app.
  * Hidden below `lg`, where AdminMobileHeader takes over.
  */
 export function AdminSidebar({ counts }: { counts?: AdminNavCounts }) {

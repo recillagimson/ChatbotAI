@@ -1,0 +1,96 @@
+import { describe, it, expect } from "vitest";
+import {
+  INTAKE_QUESTIONS,
+  MAX_TEXTAREA_CHARS,
+  intakeToPlainText,
+  otherKey,
+  parseIntakeSubmission,
+} from "@/lib/intake";
+
+const minimal = { name: "Keem", instagram: "@privatelife_", email: "Keem@Example.com" };
+
+describe("parseIntakeSubmission", () => {
+  it("accepts the three required fields and lowercases the email", () => {
+    const r = parseIntakeSubmission({ answers: minimal });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.email).toBe("keem@example.com");
+      expect(r.value.name).toBe("Keem");
+      expect(r.value.business).toBeNull();
+    }
+  });
+
+  it("reports each missing required field", () => {
+    const r = parseIntakeSubmission({ answers: {} });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(Object.keys(r.errors).sort()).toEqual(["email", "instagram", "name"]);
+  });
+
+  it("rejects a malformed email", () => {
+    const r = parseIntakeSubmission({ answers: { ...minimal, email: "not-an-email" } });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.email).toBeTruthy();
+  });
+
+  it("drops a submission with the honeypot filled, as spam", () => {
+    const r = parseIntakeSubmission({ answers: minimal, website: "http://spam.example" });
+    expect(r).toEqual({ ok: false, spam: true, errors: {} });
+  });
+
+  it("keeps only real options for choice questions, plus the Other text", () => {
+    const r = parseIntakeSubmission({
+      answers: {
+        ...minimal,
+        lead_types: ["Home buyers", "Not a real option", "Home buyers"],
+        [otherKey("lead_types")]: "Truck drivers",
+        emojis: "Made up",
+        push: "Balanced",
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.answers.lead_types).toEqual(["Home buyers"]);
+      expect(r.value.answers[otherKey("lead_types")]).toBe("Truck drivers");
+      expect(r.value.answers.emojis).toBeUndefined();
+      expect(r.value.answers.push).toBe("Balanced");
+    }
+  });
+
+  it("ignores unknown keys and caps long answers", () => {
+    const r = parseIntakeSubmission({
+      answers: { ...minimal, evil: "x", real_dms: "a".repeat(MAX_TEXTAREA_CHARS + 500) },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.answers.evil).toBeUndefined();
+      expect((r.value.answers.real_dms as string).length).toBe(MAX_TEXTAREA_CHARS);
+    }
+  });
+
+  it("never throws on junk input", () => {
+    for (const junk of [null, undefined, 42, "x", [], { answers: "nope" }]) {
+      expect(() => parseIntakeSubmission(junk)).not.toThrow();
+    }
+  });
+
+  it("has unique question ids", () => {
+    const ids = INTAKE_QUESTIONS.map((q) => q.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("intakeToPlainText", () => {
+  it("prints answered questions under their section, skipping empty ones", () => {
+    const text = intakeToPlainText({
+      name: "Keem",
+      vibe: ["Casual, like texting a friend", "Straight to the point"],
+      languages: "Both",
+      [otherKey("languages")]: "Haitian Creole",
+    });
+    expect(text).toContain("## THE BASICS");
+    expect(text).toContain("Keem");
+    expect(text).toContain("Casual, like texting a friend, Straight to the point");
+    expect(text).toContain("Both / Other: Haitian Creole");
+    expect(text).not.toContain("## YOUR STORY");
+  });
+});

@@ -58,6 +58,31 @@ function getRatelimit(): Ratelimit | null {
   return _ratelimit;
 }
 
+let _ratelimitIntake: Ratelimit | null = null;
+
+/**
+ * Per-IP limit for the public questionnaire (POST /api/intake): a handful of
+ * submissions an hour is plenty for a real person and stops a script from filling
+ * the table. Fail-OPEN like every other gate here: no Redis, or a Redis error, lets
+ * the submission through (the honeypot and size caps in lib/intake.ts still apply).
+ */
+export async function checkIntakeLimit(ip: string): Promise<boolean> {
+  const redis = getRedis();
+  if (!redis) return true;
+  try {
+    _ratelimitIntake ??= new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, "1 h"),
+      analytics: false,
+      prefix: "chatpilot:rlintake",
+    });
+    return (await _ratelimitIntake.limit(ip)).success;
+  } catch (err) {
+    console.error("[limits] intake rate-limit redis error", err);
+    return true;
+  }
+}
+
 /** True if Redis is configured. Useful for log lines / health checks. */
 export function limitsEnabled(): boolean {
   return getRedis() !== null;
