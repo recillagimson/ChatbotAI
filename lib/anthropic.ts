@@ -7,6 +7,7 @@ import { renderKnownFactsBlock } from "./lead-facts";
 import { HUMANIZER_STYLE } from "./humanizer";
 import { MODELS, resolveReplyModel } from "./model-tiers";
 import { linkFlowPromptBlock } from "@/lib/link-flow";
+import { foreignScriptLeak } from "@/lib/script-guard";
 
 let _anthropic: Anthropic | null = null;
 
@@ -481,8 +482,9 @@ export function buildFollowupInstruction(
   const base =
     `The contact has gone quiet for about ${h} hour${h === 1 ? "" : "s"} since the last message. ` +
     `Write ONE short, natural follow-up (1-2 sentences) to re-engage them, in your normal voice, ` +
-    `based on the conversation so far. Reference what you were discussing; do NOT restate your ` +
-    `intro, do NOT repeat your last message, and do NOT be pushy. Output only the message text.`;
+    `based on the conversation so far, in the same language the contact has been writing in. ` +
+    `Reference what you were discussing; do NOT restate your intro, do NOT repeat your last ` +
+    `message, and do NOT be pushy. Output only the message text.`;
   const extra =
     instruction && instruction.trim()
       ? ` Focus this follow-up on: ${instruction.trim()}`
@@ -518,6 +520,12 @@ export async function generateFollowupText(opts: {
       ignoreReplyModel: true,
     });
     const clean = text.trim();
+    // A word in a script the thread never used (live: "...resend the link هنا" in an
+    // English thread) is a model glitch, never intended. Skip it rather than send it.
+    if (clean && foreignScriptLeak(clean, opts.history.map((m) => m.content))) {
+      console.warn("[generateFollowupText] foreign-script leak, skipping", clean.slice(0, 120));
+      return null;
+    }
     return clean ? { text: clean, tokensUsed } : null;
   } catch (err) {
     console.error("[generateFollowupText] failed", err);

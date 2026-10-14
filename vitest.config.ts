@@ -17,6 +17,7 @@ export default defineConfig({
       "tests/kb-access*.spec.ts",
       "tests/conversation-screen*.spec.ts",
       "tests/spam-detect*.spec.ts",
+      "tests/script-guard*.spec.ts",
       "tests/handoff-detect*.spec.ts",
       "tests/openai-retry*.spec.ts",
       "tests/dashboard-row-bounds*.spec.ts",
