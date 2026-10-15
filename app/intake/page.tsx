@@ -54,14 +54,11 @@ export default function IntakePage() {
           Make your DM assistant sound like you
         </h1>
         <p className="mt-5 max-w-[36em] text-pretty text-[16.5px] leading-[1.6] text-[#A9A499]">
-          We already know the services: credit repair and funding. These questions are about you: your
-          story, how you talk and how you sell. Your assistant replies to your Instagram DMs as you, so the
-          more it sounds like you, the more leads trust it and sign up.
+          Your assistant replies to your Instagram DMs as you. Tell us about your business, your
+          personality, and how you&apos;d answer a few common messages, so it sounds like you.
         </p>
         <p className="mt-3 max-w-[36em] text-[14.5px] leading-[1.6] text-[#8A8579]">
-          Short answers are fine. Real examples beat descriptions: when a question asks how you&apos;d reply,
-          type it exactly the way you would in a DM. Takes about 20 minutes. Only your name, Instagram and email
-          are required.
+          About 10 minutes. Short answers are fine. Only your name, Instagram and email are required.
         </p>
 
         <div className="mt-10">

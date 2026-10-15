@@ -3,7 +3,6 @@ import {
   INTAKE_QUESTIONS,
   MAX_TEXTAREA_CHARS,
   intakeToPlainText,
-  otherKey,
   parseIntakeSubmission,
 } from "@/lib/intake";
 
@@ -37,22 +36,20 @@ describe("parseIntakeSubmission", () => {
     expect(r).toEqual({ ok: false, spam: true, errors: {} });
   });
 
-  it("keeps only real options for choice questions, plus the Other text", () => {
+  it("keeps only real options for choice questions", () => {
     const r = parseIntakeSubmission({
       answers: {
         ...minimal,
-        lead_types: ["Home buyers", "Not a real option", "Home buyers"],
-        [otherKey("lead_types")]: "Truck drivers",
+        vibe: ["Calm and patient", "Not a real option", "Calm and patient"],
         emojis: "Made up",
-        push: "Balanced",
+        casing: "all lowercase",
       },
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.value.answers.lead_types).toEqual(["Home buyers"]);
-      expect(r.value.answers[otherKey("lead_types")]).toBe("Truck drivers");
+      expect(r.value.answers.vibe).toEqual(["Calm and patient"]);
       expect(r.value.answers.emojis).toBeUndefined();
-      expect(r.value.answers.push).toBe("Balanced");
+      expect(r.value.answers.casing).toBe("all lowercase");
     }
   });
 
@@ -84,13 +81,12 @@ describe("intakeToPlainText", () => {
     const text = intakeToPlainText({
       name: "Keem",
       vibe: ["Casual, like texting a friend", "Straight to the point"],
-      languages: "Both",
-      [otherKey("languages")]: "Haitian Creole",
+      emojis: "A few",
     });
-    expect(text).toContain("## THE BASICS");
+    expect(text).toContain("## YOUR BUSINESS");
     expect(text).toContain("Keem");
     expect(text).toContain("Casual, like texting a friend, Straight to the point");
-    expect(text).toContain("Both / Other: Haitian Creole");
-    expect(text).not.toContain("## YOUR STORY");
+    expect(text).toContain("A few");
+    expect(text).not.toContain("## HOW YOU'D REPLY");
   });
 });
