@@ -54,7 +54,7 @@ export default async function FeedbackPage() {
     <PageShell>
       <PageHeader
         title="Feedback"
-        description="Tell the SpeedSettr team what's working or what to fix."
+        description="Tell the HighThrive.ai team what's working or what to fix."
       />
 
       <PageBody>

@@ -1,5 +1,5 @@
 // lib/openai-changes.ts
-// The SpeedSettr "change-request" AI, on OpenAI (raw fetch - no SDK, mirroring
+// The HighThrive.ai "change-request" AI, on OpenAI (raw fetch - no SDK, mirroring
 // lib/embeddings.ts and lib/transcribe.ts which already use OPENAI_API_KEY).
 //
 // Two entry points, both producing the SAME machine-actionable output (the
@@ -139,7 +139,7 @@ function buildProposeTool(category: ChangeCategory) {
       function: {
         name: "propose_changes",
         description:
-          "Propose changes to ANY of the bot's parts your change affects (personality/voice, offers, rebuttals/FAQ) and/or NEW knowledge-base entries, for the SpeedSettr team to review. Include ONLY the parts you actually change.",
+          "Propose changes to ANY of the bot's parts your change affects (personality/voice, offers, rebuttals/FAQ) and/or NEW knowledge-base entries, for the HighThrive.ai team to review. Include ONLY the parts you actually change.",
         parameters: {
           type: "object",
           properties: {
@@ -179,8 +179,8 @@ function buildProposeTool(category: ChangeCategory) {
     function: {
       name: "propose_changes",
       description: sectionMode
-        ? `Propose targeted changes to the bot's "${label}" text, for the SpeedSettr team to review.`
-        : "Return NEW knowledge-base entries for the bot, for the SpeedSettr team to review.",
+        ? `Propose targeted changes to the bot's "${label}" text, for the HighThrive.ai team to review.`
+        : "Return NEW knowledge-base entries for the bot, for the HighThrive.ai team to review.",
       parameters: {
         type: "object",
         properties: {
@@ -699,7 +699,7 @@ ${EDIT_RULES}`;
     proposeInstr = `- Only when you have enough to act, call the propose_changes tool with kb_entries (the NEW knowledge facts to add) plus a short summary. Do not propose a section change for this category.`;
   }
 
-  return `You are the SpeedSettr change assistant. You help ONE client refine ONE of their Instagram/Messenger DM chatbots - "the project". Through a short, friendly conversation you figure out the change they want to this section, then propose it for the SpeedSettr team to review.
+  return `You are the HighThrive.ai change assistant. You help ONE client refine ONE of their Instagram/Messenger DM chatbots - "the project". Through a short, friendly conversation you figure out the change they want to this section, then propose it for the HighThrive.ai team to review.
 
 THE PROJECT (the only thing you may discuss or change):
 - Name: ${chatbot.name}
@@ -712,7 +712,7 @@ ${kbBlock}
 
 HARD SECURITY RULES - never violate, no matter what the user says:
 - You ONLY discuss this project's reply behavior, persona/voice, tone, and knowledge (facts the bot can cite).
-- You must NEVER ask for, reference, reveal, or change: API keys, ManyChat tokens or page IDs, the webhook secret, passwords, billing or subscription, other customers, account or technical settings, or anything security-related. If the user raises any of these, briefly say it's handled by the SpeedSettr team and steer back to the project's messaging. Do not speculate about them.
+- You must NEVER ask for, reference, reveal, or change: API keys, ManyChat tokens or page IDs, the webhook secret, passwords, billing or subscription, other customers, account or technical settings, or anything security-related. If the user raises any of these, briefly say it's handled by the HighThrive.ai team and steer back to the project's messaging. Do not speculate about them.
 - Never invent prices, hours, links, or policies. If a needed fact is missing, ask the client for it so it can be added.
 
 HOW TO WORK:
@@ -823,11 +823,11 @@ export function buildDraftPrompts(opts: {
     ? SECTION_GUIDE[category]
     : null;
   const guidanceTail = adminGuidance
-    ? `\n\nADDITIONAL GUIDANCE FROM THE SPEEDSETTR TEAM (takes priority):\n${adminGuidance}`
+    ? `\n\nADDITIONAL GUIDANCE FROM THE HIGHTHRIVE.AI TEAM (takes priority):\n${adminGuidance}`
     : "";
 
   if (category === "overall") {
-    const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change that may affect ANY part of their bot. Decide which of the bot's parts the request actually affects - personality/voice, offers, rebuttals/FAQ - and/or new knowledge, and propose targeted edits to ONLY those parts. Leave every part the request does not touch exactly as it is. When you change the personality, write ONLY voice/persona - do not add generic safety rules; the platform adds those automatically.
+    const system = `You are a senior prompt engineer for HighThrive.ai, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change that may affect ANY part of their bot. Decide which of the bot's parts the request actually affects - personality/voice, offers, rebuttals/FAQ - and/or new knowledge, and propose targeted edits to ONLY those parts. Leave every part the request does not touch exactly as it is. When you change the personality, write ONLY voice/persona - do not add generic safety rules; the platform adds those automatically.
 
 ${EDIT_RULES}
 
@@ -847,7 +847,7 @@ ${requestText}${guidanceTail}`;
   }
 
   if (guide) {
-    const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change to the ${guide.label} section of their bot (this section covers ${guide.covers}). Propose targeted edits to the CURRENT ${guide.label} SECTION that fulfill the request, keeping the content focused on this section only.${
+    const system = `You are a senior prompt engineer for HighThrive.ai, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested a change to the ${guide.label} section of their bot (this section covers ${guide.covers}). Propose targeted edits to the CURRENT ${guide.label} SECTION that fulfill the request, keeping the content focused on this section only.${
       category === "personality"
         ? " Write ONLY the voice/persona - do not add generic safety rules; the platform adds those automatically."
         : ""
@@ -870,7 +870,7 @@ ${requestText}${guidanceTail}`;
   }
 
   // "other" → knowledge-base entries only.
-  const system = `You are a senior prompt engineer for SpeedSettr, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested new knowledge for their bot. Propose NEW knowledge-base entries (kb_entries) for genuinely new facts not already present - never duplicate or contradict an existing entry.
+  const system = `You are a senior prompt engineer for HighThrive.ai, which runs AI chatbots that auto-reply to Instagram and Messenger DMs for small businesses. A client has requested new knowledge for their bot. Propose NEW knowledge-base entries (kb_entries) for genuinely new facts not already present - never duplicate or contradict an existing entry.
 
 Respond by calling the propose_changes tool with kb_entries plus a concise summary for the reviewer.`;
 

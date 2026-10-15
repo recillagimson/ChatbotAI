@@ -141,7 +141,7 @@ export default async function BillingPage({
             <strong className="font-semibold text-ss-ink">
               {shortDate(compUntil)}
             </strong>
-            , courtesy of the SpeedSettr team. Subscribe any time to continue
+            , courtesy of the HighThrive.ai team. Subscribe any time to continue
             after it ends.
           </Callout>
         )}
@@ -373,7 +373,7 @@ export default async function BillingPage({
 
         <div className="flex items-center justify-center gap-2 text-[11.5px] leading-none text-ss-muted">
           <ShieldCheck className="h-4 w-4 shrink-0 text-ss-green" aria-hidden="true" />
-          Payments processed by Stripe - card details never touch SpeedSettr.
+          Payments processed by Stripe - card details never touch HighThrive.ai.
         </div>
       </PageBody>
     </PageShell>

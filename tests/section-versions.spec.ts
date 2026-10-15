@@ -89,11 +89,11 @@ describe("versionAuthorLabel", () => {
   it("names who made the change, from the viewer's side", () => {
     expect(versionAuthorLabel("u1", { viewerId: "u1", ownerId: "u1" })).toBe("You");
     expect(versionAuthorLabel("owner", { viewerId: "admin", ownerId: "owner" })).toBe("The client");
-    expect(versionAuthorLabel("admin", { viewerId: "owner", ownerId: "owner" })).toBe("SpeedSettr team");
+    expect(versionAuthorLabel("admin", { viewerId: "owner", ownerId: "owner" })).toBe("HighThrive.ai team");
     // No signed-in writer = a service-role write. For these sections that is the
     // team's kb-sync script (server routes write with the caller's session), so
     // the client sees it as the team's change.
-    expect(versionAuthorLabel(null, { viewerId: "owner", ownerId: "owner" })).toBe("SpeedSettr team");
+    expect(versionAuthorLabel(null, { viewerId: "owner", ownerId: "owner" })).toBe("HighThrive.ai team");
   });
 });
 

@@ -356,7 +356,7 @@ export function RequestChat({
                   <CardDescription>
                     {isPersonality
                       ? "Review the before & after, then apply it to your bot."
-                      : "What the SpeedSettr team will review."}
+                      : "What the HighThrive.ai team will review."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -460,7 +460,7 @@ export function RequestChat({
             )}
             {status === "pending" && (
               <p className="rounded-md bg-ss-green-bg px-3 py-2 text-sm text-ss-green-ink">
-                Submitted - the SpeedSettr team will review it.
+                Submitted - the HighThrive.ai team will review it.
               </p>
             )}
             {status === "applied" && (

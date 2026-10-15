@@ -51,7 +51,7 @@ export async function POST(
   const isAdmin = !!(await requireSuperadmin());
   if (!canRestoreSection(version.section, isAdmin)) {
     return NextResponse.json(
-      { error: "Offers and Rebuttals are restored by the SpeedSettr team. Send a change request instead." },
+      { error: "Offers and Rebuttals are restored by the HighThrive.ai team. Send a change request instead." },
       { status: 403 }
     );
   }

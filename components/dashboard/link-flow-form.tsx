@@ -17,7 +17,7 @@ type Row = LinkFlowEntry & { _key: string };
 
 /**
  * Configure link-via-ManyChat with multiple triggers. Each row = a keyword the bot emits
- * plus the ManyChat flow that delivers that link. SpeedSettr strips the keyword and fires
+ * plus the ManyChat flow that delivers that link. HighThrive.ai strips the keyword and fires
  * the flow (raw URLs get stripped by Instagram). Saves via the owner's RLS client, the same
  * pattern as the Welcome form. Legacy single-link bots seed row 1 from their old config.
  */
@@ -178,7 +178,7 @@ export function LinkFlowForm({ chatbot }: { chatbot: Chatbot }) {
           <Label htmlFor="link-flow-enabled">Send links via ManyChat flows</Label>
           <p className="text-sm text-muted-foreground">
             Instead of typing a URL (which Instagram strips from automated DMs), the bot
-            emits a keyword and SpeedSettr fires the matching ManyChat flow to deliver that
+            emits a keyword and HighThrive.ai fires the matching ManyChat flow to deliver that
             link. Add one row per link, and put the same keyword in your knowledge base so
             the bot knows when to send it.
           </p>

@@ -451,7 +451,7 @@ export async function ChatbotTabPanel({
                 description={
                   canEditSections
                     ? "The name, reply timing and the three prompt sections. As an admin you can edit all three here; saving applies to new replies right away."
-                    : "The name, reply timing and the three prompt sections. Personality is yours to edit; Offers and Rebuttals are managed by the SpeedSettr team."
+                    : "The name, reply timing and the three prompt sections. Personality is yours to edit; Offers and Rebuttals are managed by the HighThrive.ai team."
                 }
                 className="mb-5"
               />
@@ -547,7 +547,7 @@ export async function ChatbotTabPanel({
             <SsCard className="p-[22px]">
               <SsCardHead
                 title="ManyChat API key"
-                description="The key SpeedSettr uses to send replies from this account."
+                description="The key HighThrive.ai uses to send replies from this account."
                 className="mb-5"
               />
               <ManychatKeyField chatbotId={chatbot.id} configured={apiKeySet} />
@@ -686,7 +686,7 @@ export async function ChatbotTabPanel({
                 />
                 <p className="text-[12.5px] leading-relaxed text-ss-body">
                   Replace <Code>{"<Full Contact Data>"}</Code> the same way as
-                  above. SpeedSettr saves the follower and sends nothing back, so
+                  above. HighThrive.ai saves the follower and sends nothing back, so
                   your welcome message goes out exactly as before.
                 </p>
                 <p className="text-[12.5px] leading-relaxed text-ss-body">

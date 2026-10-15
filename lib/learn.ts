@@ -71,7 +71,7 @@ export const LESSONS: Lesson[] = [
       {
         heading: "One flow per channel",
         paragraphs: [
-          "SpeedSettr receives DMs from ManyChat and sends replies back through it. That connection is a single External Request action inside a ManyChat automation, and you need one per channel - Instagram, Facebook, WhatsApp, Telegram, TikTok - because each channel has its own subscriber fields.",
+          "HighThrive.ai receives DMs from ManyChat and sends replies back through it. That connection is a single External Request action inside a ManyChat automation, and you need one per channel - Instagram, Facebook, WhatsApp, Telegram, TikTok - because each channel has its own subscriber fields.",
           "Copy the webhook URL and the per-chatbot secret from the chatbot's Connection tab. The secret is what proves the request came from your ManyChat account, so treat it like a password and never reuse one bot's secret in another bot's flow.",
         ],
       },
@@ -145,7 +145,7 @@ export const LESSONS: Lesson[] = [
         heading: "What the window is",
         paragraphs: [
           "Instagram and Facebook only accept an untagged message within 24 hours of the contact's last message. Past that line, an automated send doesn't get queued or delayed - it's refused. That refusal is where almost every 'failed send' number in your statistics comes from.",
-          "It isn't a SpeedSettr limit and there's no setting that removes it. It's a platform rule designed to stop businesses cold-messaging people who've gone quiet.",
+          "It isn't a HighThrive.ai limit and there's no setting that removes it. It's a platform rule designed to stop businesses cold-messaging people who've gone quiet.",
         ],
       },
       {
@@ -153,7 +153,7 @@ export const LESSONS: Lesson[] = [
         paragraphs: [
           "First: don't cross it. Turn on a follow-up sequence with steps inside the window - a nudge at three hours and another at twenty beats one at forty-eight, because the second one never arrives.",
           "Second: reply as a human. A message you send yourself from the Follow-ups screen or the inbox carries the human-agent tag, which extends your reach to seven days. That's why 'Send as me' works on a thread the bot has already given up on.",
-          "Third: past seven days there is no third way. Nothing SpeedSettr sends will arrive, so those threads leave the Follow-ups queue - you'll see them counted above it, but not listed as work. If you still want that person, it's a cold approach from your own account, not a reply.",
+          "Third: past seven days there is no third way. Nothing HighThrive.ai sends will arrive, so those threads leave the Follow-ups queue - you'll see them counted above it, but not listed as work. If you still want that person, it's a cold approach from your own account, not a reply.",
         ],
       },
       {

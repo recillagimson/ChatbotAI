@@ -13,7 +13,7 @@ import type { Chatbot } from "@/lib/types";
 
 /**
  * Configure the first-message Welcome VM. When a new contact's opener is a bare
- * greeting or a configured keyword (and carries no media), SpeedSettr fires a native
+ * greeting or a configured keyword (and carries no media), HighThrive.ai fires a native
  * ManyChat voice/video flow instead of running the AI; a substantive opener (image,
  * detail, question) skips this and goes to the AI. Saves directly via the owner's RLS
  * client, the same pattern as the follow-up form.
@@ -158,7 +158,7 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
             )}
             <p className="text-xs text-muted-foreground">
               Make this a single voice-note (or video) send in ManyChat - no internal delays.
-              SpeedSettr triggers it and records that the greeting was sent.
+              HighThrive.ai triggers it and records that the greeting was sent.
             </p>
           </div>
 

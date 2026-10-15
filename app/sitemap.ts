@@ -4,7 +4,7 @@ import type { MetadataRoute } from "next";
 // indexable URLs: the landing page, the booking page and the six legal pages.
 // NEVER add an (auth)/(dashboard)/(admin)/api path here - those are private
 // tenant surfaces and must not be advertised to search engines.
-const BASE = "https://www.speedsettr.com";
+const BASE = "https://www.highthrive.ai";
 
 const PUBLIC_PATHS = [
   "/",

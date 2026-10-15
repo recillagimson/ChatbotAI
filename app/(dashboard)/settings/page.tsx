@@ -42,7 +42,7 @@ export default async function SettingsPage() {
           <SsCard className="p-[22px]">
             <SsCardHead
               title="Profile"
-              description="Shown to the SpeedSettr team on your requests."
+              description="Shown to the HighThrive.ai team on your requests."
               className="mb-5"
             />
             <SettingsForm profile={profile} email={user!.email ?? ""} />
@@ -61,7 +61,7 @@ export default async function SettingsPage() {
             <SsCard className="p-[22px]">
               <SsCardHead
                 title="ManyChat connection guide"
-                description="Six steps in your ManyChat dashboard to send DMs into SpeedSettr. The per-chatbot values live on each chatbot's Connection tab."
+                description="Six steps in your ManyChat dashboard to send DMs into HighThrive.ai. The per-chatbot values live on each chatbot's Connection tab."
                 className="mb-5"
               />
               <ol className="flex flex-col gap-3.5">

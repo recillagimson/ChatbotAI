@@ -9,7 +9,7 @@ import type { MetadataRoute } from "next";
 // pages out of the index (a Disallowed URL can still be indexed from a backlink;
 // a noindex one cannot). Do NOT add /login or /signup here - Disallowing them
 // would stop Google from ever seeing their noindex tag.
-const BASE = "https://www.speedsettr.com";
+const BASE = "https://www.highthrive.ai";
 
 export default function robots(): MetadataRoute.Robots {
   return {

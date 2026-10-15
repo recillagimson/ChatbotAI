@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(body, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${filename(["speedsettr", stage, rangeKey])}"`,
+        "Content-Disposition": `attachment; filename="${filename(["highthrive", stage, rangeKey])}"`,
         "Cache-Control": "no-store",
       },
     });
@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
   }
 
   const body = csv([
-    ["SpeedSettr statistics"],
+    ["HighThrive.ai statistics"],
     ["Range", from, to],
     [],
     ["Metric", "Value"],
@@ -169,7 +169,7 @@ export async function GET(request: NextRequest) {
   return new NextResponse(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename(["speedsettr-statistics", rangeKey])}"`,
+      "Content-Disposition": `attachment; filename="${filename(["highthrive-statistics", rangeKey])}"`,
       "Cache-Control": "no-store",
     },
   });

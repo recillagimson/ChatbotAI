@@ -196,7 +196,7 @@ export function SectionHistory({
           )}
           {!canRestore && versions.length > 0 && (
             <p className="mt-2 text-[11px] text-muted-foreground">
-              The SpeedSettr team can put an earlier version back. Send a change request if you need one.
+              The HighThrive.ai team can put an earlier version back. Send a change request if you need one.
             </p>
           )}
         </div>

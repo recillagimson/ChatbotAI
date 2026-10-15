@@ -9,14 +9,14 @@ export const runtime = "nodejs";
 // A clearly-labelled probe DM. Sending SOMETHING is unavoidable - you can't test
 // real delivery without a real send - so keep it obviously a system check.
 const TEST_MESSAGE =
-  "✅ SpeedSettr delivery test - please ignore. If you can see this, replies are being delivered.";
+  "✅ HighThrive.ai delivery test - please ignore. If you can see this, replies are being delivered.";
 
 /**
  * Admin delivery probe: push a real test DM to THIS conversation's contact via the
  * ManyChat Send Content API and report ManyChat's ACTUAL verdict - so the owner can
  * see, per contact, whether a send is accepted, refused (closed 24h window, blocked
  * user, account restriction), or errored, instead of guessing from the ManyChat
- * "Test the request" panel (which only ever shows SpeedSettr's fast-ack, never the
+ * "Test the request" panel (which only ever shows HighThrive.ai's fast-ack, never the
  * pushed reply). Because postSendContent now validates the response BODY, a ManyChat
  * refusal surfaces here as a real error message rather than a phantom success.
  *

@@ -207,7 +207,7 @@ const MAX_BYTES = 25 * 1024 * 1024; // Whisper's hard limit; comfortable for ima
 // the cap are skipped for description but still sent as vision on the current turn.
 const MAX_DESCRIBE_IMAGES = 4;
 // A non-browser UA - Meta/Supabase REST can 401 browser-like agents (see memory).
-const FETCH_UA = "SpeedSettr-Media/1.0";
+const FETCH_UA = "HighThrive-Media/1.0";
 export const UNSUPPORTED_NOTE =
   "[Note: the customer sent an attachment that couldn't be read. Politely acknowledge it and ask them to describe it or resend it.]";
 

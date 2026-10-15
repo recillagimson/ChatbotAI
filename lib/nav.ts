@@ -118,5 +118,5 @@ export function isNavActive(href: string, pathname: string): boolean {
 export function navTitle(pathname: string): string {
   const all = [...WORKSPACE_NAV, ...ACCOUNT_NAV, ADMIN_NAV];
   const hit = all.find((i) => isNavActive(i.href, pathname));
-  return hit?.label ?? "SpeedSettr";
+  return hit?.label ?? "HighThrive.ai";
 }

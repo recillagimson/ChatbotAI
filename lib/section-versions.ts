@@ -19,7 +19,7 @@ export function isSectionColumn(v: unknown): v is SectionColumn {
 /**
  * Who may put an old version back. Mirrors who may edit the section: the owner
  * edits Personality directly, so they may restore it; Offers and Rebuttals are
- * changed only by the SpeedSettr team (through reviewed requests), so restoring
+ * changed only by the HighThrive.ai team (through reviewed requests), so restoring
  * them is the team's too.
  */
 export function canRestoreSection(section: SectionColumn, isSuperadmin: boolean): boolean {
@@ -38,5 +38,5 @@ export function versionAuthorLabel(
 ): string {
   if (changedBy && changedBy === ctx.viewerId) return "You";
   if (changedBy && changedBy === ctx.ownerId) return "The client";
-  return "SpeedSettr team";
+  return "HighThrive.ai team";
 }

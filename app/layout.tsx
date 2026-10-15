@@ -3,7 +3,7 @@ import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
-// Body / UI font. Locked to Plus Jakarta Sans by the SpeedSettr dashboard
+// Body / UI font. Locked to Plus Jakarta Sans by the HighThrive.ai dashboard
 // blueprint - every label, row and paragraph in the app runs on it.
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -56,16 +56,16 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.speedsettr.com"),
-  title: "SpeedSettr | AI replies for Instagram, Facebook, WhatsApp, Telegram & TikTok DMs",
+  metadataBase: new URL("https://www.highthrive.ai"),
+  title: "HighThrive.ai | AI replies for Instagram, Facebook, WhatsApp, Telegram & TikTok DMs",
   description:
     "Connect your Instagram and let AI answer your DMs 24/7, trained on your business, in your voice. Never miss a sale.",
   openGraph: {
-    title: "SpeedSettr | AI replies for Instagram, Facebook, WhatsApp, Telegram & TikTok DMs",
+    title: "HighThrive.ai | AI replies for Instagram, Facebook, WhatsApp, Telegram & TikTok DMs",
     description:
       "Your AI teammate that answers Instagram, Facebook, WhatsApp, Telegram & TikTok DMs 24/7, in your voice.",
-    url: "https://www.speedsettr.com",
-    siteName: "SpeedSettr",
+    url: "https://www.highthrive.ai",
+    siteName: "HighThrive.ai",
     type: "website",
     locale: "en_US",
   },
@@ -74,7 +74,7 @@ export const metadata: Metadata = {
   // without it X renders a small square thumbnail instead.
   twitter: {
     card: "summary_large_image",
-    title: "SpeedSettr | AI replies for your Instagram, Facebook & TikTok DMs",
+    title: "HighThrive.ai | AI replies for your Instagram, Facebook & TikTok DMs",
     description:
       "Your AI teammate answers every DM in seconds, trained on your business, in your voice.",
   },

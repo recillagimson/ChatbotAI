@@ -510,7 +510,7 @@ async function DashboardBody({ sp }: { sp: { bot?: string } }) {
           <SsCard className="p-[22px] shadow-ss-card">
             <SsCardHead
               title="Need a human?"
-              description={`Tap to call or text the SpeedSettr team - ${SUPPORT_HOURS}.`}
+              description={`Tap to call or text the HighThrive.ai team - ${SUPPORT_HOURS}.`}
             />
             <div className="mt-3.5 flex flex-col gap-2">
               {SUPPORT_CONTACTS.map((c) => (

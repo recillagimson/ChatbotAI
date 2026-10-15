@@ -85,7 +85,7 @@ export const dynamic = "force-dynamic";
  * app's own conversion marker (`conversations.confirmed_at`, set by the webhook
  * and mirrored by the Subscribed tag) counted here in TypeScript, because the
  * RPC's stage list is fixed SQL. The design calls this stage "Booked a call" -
- * SpeedSettr has no booking integration, so it's named for what it actually
+ * HighThrive.ai has no booking integration, so it's named for what it actually
  * records rather than for what the mock-up wished it recorded.
  */
 const STAGE_LABEL: Record<StageKey, string> = {
@@ -148,7 +148,7 @@ function rangeLabel(key: RangeKey, from?: string, to?: string): string {
  * the sequence card reports how far the drip reached rather than replies per
  * step (nothing records which follow-up a lead answered), and the Conversation
  * phases card is absent entirely - phases are a concept from the LGF client
- * dashboard the design borrowed from, not something SpeedSettr tracks.
+ * dashboard the design borrowed from, not something HighThrive.ai tracks.
  *
  * The page is also built to survive a failed report: everything read straight
  * from the tables - tags, status, the manual queue, the sequences - still
@@ -1025,7 +1025,7 @@ async function StatisticsReport({
         title="Conversation phases & A/B variants"
       >
         Not instrumented. The design shows leads moving through named script
-        phases - SpeedSettr doesn&apos;t record one, so there is nothing behind
+        phases - HighThrive.ai doesn&apos;t record one, so there is nothing behind
         that card yet. It comes back when the bot writes a phase per thread.
       </EmptyState>
     </>

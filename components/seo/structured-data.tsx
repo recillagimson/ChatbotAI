@@ -11,7 +11,7 @@ import { FAQS } from "@/components/landing/faq";
  * aggregateRating/review: there is no structured review data on the site, and
  * fabricating a rating is a Google structured-data policy violation.
  */
-const BASE = "https://www.speedsettr.com";
+const BASE = "https://www.highthrive.ai";
 
 // The office address is a single display string in lib/company (kept as-is for
 // the footer); its parsed parts live here for the PostalAddress node. 10003 is

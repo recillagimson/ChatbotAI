@@ -11,11 +11,10 @@ import { HomeJsonLd } from "@/components/seo/structured-data";
  * speedsettr.com landing - the "HighThrive.ai" funnel (Claude Design import,
  * 2026-09-21). Dark near-black + gold, book-a-call model.
  *
- * Brand note: the PUBLIC landing wears the HighThrive.ai brand (owner's call),
- * while the app it fronts (login, dashboard, legal pages) stays SpeedSettr and
- * the legal entity stays Speedsettr LLC. metadataBase is still speedsettr.com,
- * so the per-page title/OG below override the SpeedSettr defaults in
- * app/layout.tsx for this route only.
+ * Brand note: the product is HighThrive.ai (www.highthrive.ai) everywhere the
+ * user sees it (2026-10-15); only the legal entity stays Speedsettr LLC, in the
+ * footer and the legal pages. The per-page title/OG below override the
+ * HighThrive.ai defaults in app/layout.tsx for this route.
  *
  * CTAs: every "Book a call" button goes to /book-a-call, the standalone booking
  * page (app/book-a-call/page.tsx). The #book section near the bottom still
