@@ -5,9 +5,9 @@
  * document, so an address or phone change is a one-line edit here.
  */
 export const COMPANY = {
-  name: "Speedsettr LLC",
+  name: "HighThrive LLC",
   address: "231 East 5th St New York 10003",
-  email: "admin@speedsettr.com",
+  email: "gimson@highthrive.io",
   phones: [
     { display: "+1 585-531-6251", tel: "+15855316251" },
     { display: "+1 585-648-5732", tel: "+15856485732" },

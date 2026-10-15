@@ -11,11 +11,11 @@ import {
 } from "@/components/legal/legal-doc";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | SpeedSettr",
+  title: "Privacy Policy | HighThrive.ai",
   description:
-    "How Speedsettr LLC collects, uses, stores, shares, and protects your personal information.",
+    "How HighThrive LLC collects, uses, stores, shares, and protects your personal information.",
   alternates: { canonical: "/privacy" },
-  openGraph: { title: "Privacy Policy | SpeedSettr", url: "/privacy" },
+  openGraph: { title: "Privacy Policy | HighThrive.ai", url: "/privacy" },
 };
 
 
@@ -23,9 +23,9 @@ export default function PrivacyPolicyPage() {
   return (
     <LegalDoc title="Privacy Policy" updated="July 31, 2026">
       <P>
-        Speedsettr (&ldquo;Company,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or
+        HighThrive (&ldquo;Company,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or
         &ldquo;our&rdquo;), a limited liability company registered in the State of
-        New York, operates the website speedsettr.com (the &ldquo;Site&rdquo;).
+        New York, operates the website highthrive.ai (the &ldquo;Site&rdquo;).
         This Privacy Policy describes how we collect, use, store, share, and
         protect personal information when you visit our Site, use our services, or
         make a purchase. By using our Site or services, you consent to the
@@ -255,7 +255,7 @@ export default function PrivacyPolicyPage() {
       <Section n={13} title="CAN-SPAM Act Compliance">
         <P>
           We comply with the CAN-SPAM Act of 2003. All marketing emails sent by
-          Speedsettr will clearly identify Speedsettr LLC as the sender, include
+          HighThrive will clearly identify HighThrive LLC as the sender, include
           our physical mailing address (231 East 5th St New York 10003), provide a
           clear and conspicuous opt-out mechanism, honor opt-out requests within 10
           business days, and will not use deceptive subject lines or false header

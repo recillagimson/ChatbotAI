@@ -163,10 +163,10 @@ export function ComingSoon({ document }: { document: string }) {
       <p className="mt-3 text-sm text-white/45">
         For questions in the meantime, contact{" "}
         <a
-          href="mailto:admin@speedsettr.com"
+          href="mailto:gimson@highthrive.io"
           className="text-[#a5b4fc] underline-offset-4 hover:underline"
         >
-          admin@speedsettr.com
+          gimson@highthrive.io
         </a>
         .
       </p>

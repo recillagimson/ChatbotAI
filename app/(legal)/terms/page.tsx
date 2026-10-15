@@ -10,11 +10,11 @@ import {
 } from "@/components/legal/legal-doc";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | SpeedSettr",
+  title: "Terms of Service | HighThrive.ai",
   description:
-    "The legally binding terms governing your use of Speedsettr LLC's website, products, and services.",
+    "The legally binding terms governing your use of HighThrive LLC's website, products, and services.",
   alternates: { canonical: "/terms" },
-  openGraph: { title: "Terms of Service | SpeedSettr", url: "/terms" },
+  openGraph: { title: "Terms of Service | HighThrive.ai", url: "/terms" },
 };
 
 
@@ -28,10 +28,10 @@ export default function TermsPage() {
       <P>
         These Terms of Service (&ldquo;Terms&rdquo;) constitute a legally binding
         agreement between you (&ldquo;User,&rdquo; &ldquo;Client,&rdquo;
-        &ldquo;Talent,&rdquo; or &ldquo;you&rdquo;) and Speedsettr LLC
+        &ldquo;Talent,&rdquo; or &ldquo;you&rdquo;) and HighThrive LLC
         (&ldquo;Company,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or
         &ldquo;our&rdquo;), a limited liability company registered in the State of
-        New York. By accessing or using our website (speedsettr.com), purchasing
+        New York. By accessing or using our website (highthrive.ai), purchasing
         any product or service, or engaging with us in any way, you acknowledge
         that you have read, understood, and agree to be bound by these Terms. If
         you do not agree, do not use our services.
@@ -39,14 +39,14 @@ export default function TermsPage() {
 
       <Section n={1} title="Description of Services">
         <P>
-          Speedsettr provides remote talent sourcing, screening, vetting,
+          HighThrive provides remote talent sourcing, screening, vetting,
           placement, and related recruitment services for business owners and
           organizations (&ldquo;Clients&rdquo;), as well as training programs
           (including the Remote Talent Foundations Course) and placement services
           for aspiring remote professionals (&ldquo;Talent&rdquo;). We act as a
           staffing intermediary and recruitment consultant. We do not establish an
-          employer-employee relationship between Speedsettr and placed Talent, or
-          between Speedsettr and Clients. The working relationship is formed
+          employer-employee relationship between HighThrive and placed Talent, or
+          between HighThrive and Clients. The working relationship is formed
           directly between the Client and the Talent upon placement.
         </P>
       </Section>
@@ -76,7 +76,7 @@ export default function TermsPage() {
           company details. Clients agree to treat placed Talent professionally and
           in full compliance with all applicable laws, including employment,
           labor, tax, and anti-discrimination laws in their jurisdiction.
-          Speedsettr is not liable for disputes between Clients and placed Talent
+          HighThrive is not liable for disputes between Clients and placed Talent
           outside the scope of our placement services, including but not limited
           to wage disputes, wrongful termination claims, or workplace conditions.
         </P>
@@ -89,19 +89,19 @@ export default function TermsPage() {
           history. Talent agrees to perform work with professionalism, integrity,
           and in accordance with any agreements made with the Client.
           Misrepresentation of skills, qualifications, or identity may result in
-          immediate removal from the Speedsettr platform and termination of any
+          immediate removal from the HighThrive platform and termination of any
           active placement.
         </P>
       </Section>
 
       <Section n={6} title="90-Day Replacement Guarantee">
         <P>
-          Speedsettr provides a 90-Day Replacement Guarantee on qualifying
+          HighThrive provides a 90-Day Replacement Guarantee on qualifying
           placements. If a placed remote professional is not the right fit within
-          90 calendar days of their start date, Speedsettr will source and place a
+          90 calendar days of their start date, HighThrive will source and place a
           replacement at no additional recruitment fee. This guarantee is subject
           to the specific terms in the individual service agreement between
-          Speedsettr and the Client. The guarantee does not apply if the Talent
+          HighThrive and the Client. The guarantee does not apply if the Talent
           was terminated for reasons unrelated to job performance or role fit, the
           Client materially changed the role requirements after placement, or the
           Client failed to provide a reasonable onboarding or working environment.
@@ -115,7 +115,7 @@ export default function TermsPage() {
           page prior to any transaction.
         </P>
         <P>
-          <Lead>Billing Descriptor:</Lead> Charges from Speedsettr will appear on
+          <Lead>Billing Descriptor:</Lead> Charges from HighThrive will appear on
           your statement as &ldquo;SPEEDSETTR LLC&rdquo; or
           &ldquo;SPEEDSETTR.&rdquo;
         </P>
@@ -138,7 +138,7 @@ export default function TermsPage() {
           initiating a chargeback with your bank or payment provider. We commit to
           responding to all billing inquiries within 2 business days. Filing a
           chargeback without first attempting to resolve the issue directly with
-          Speedsettr may result in suspension of services, pursuit of the disputed
+          HighThrive may result in suspension of services, pursuit of the disputed
           amount through collections, and a chargeback processing fee. Fraudulent
           chargebacks (disputes filed despite services being delivered as
           described) may be reported to relevant authorities and payment networks.
@@ -147,10 +147,10 @@ export default function TermsPage() {
 
       <Section n={9} title="Intellectual Property">
         <P>
-          All content on the Speedsettr website and in our products, including but
+          All content on the HighThrive website and in our products, including but
           not limited to text, graphics, logos, images, videos, course materials,
           templates, software, and proprietary methodologies, is the exclusive
-          property of Speedsettr LLC and is protected by U.S. and international
+          property of HighThrive LLC and is protected by U.S. and international
           intellectual property laws. You may not reproduce, distribute, modify,
           create derivative works from, publicly display, or commercially exploit
           any content without our prior written consent. Course materials are
@@ -161,7 +161,7 @@ export default function TermsPage() {
 
       <Section n={10} title="Limitation of Liability">
         <P>
-          TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, SPEEDSETTR LLC, ITS
+          TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, HIGHTHRIVE LLC, ITS
           OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, AND AFFILIATES SHALL NOT BE
           LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY,
           OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF REVENUE,
@@ -170,7 +170,7 @@ export default function TermsPage() {
           BASED ON WARRANTY, CONTRACT, TORT (INCLUDING NEGLIGENCE), STRICT
           LIABILITY, OR ANY OTHER LEGAL THEORY. OUR TOTAL AGGREGATE LIABILITY FOR
           ALL CLAIMS ARISING OUT OF OR RELATED TO THESE TERMS OR OUR SERVICES
-          SHALL NOT EXCEED THE TOTAL FEES ACTUALLY PAID BY YOU TO SPEEDSETTR IN
+          SHALL NOT EXCEED THE TOTAL FEES ACTUALLY PAID BY YOU TO HIGHTHRIVE IN
           THE TWELVE (12) MONTHS IMMEDIATELY PRECEDING THE EVENT GIVING RISE TO
           THE CLAIM.
         </P>
@@ -178,7 +178,7 @@ export default function TermsPage() {
 
       <Section n={11} title="Indemnification">
         <P>
-          You agree to indemnify, defend, and hold harmless Speedsettr LLC, its
+          You agree to indemnify, defend, and hold harmless HighThrive LLC, its
           officers, directors, employees, agents, and affiliates from and against
           any and all claims, demands, losses, damages, liabilities, costs, and
           expenses (including reasonable attorneys&rsquo; fees) arising from or
@@ -192,8 +192,8 @@ export default function TermsPage() {
       <Section n={12} title="Non-Solicitation and Non-Circumvention">
         <P>
           Clients agree not to directly recruit, hire, solicit, or engage any
-          candidate introduced, presented, or identified by Speedsettr outside of
-          the Speedsettr placement process for a period of twenty-four (24) months
+          candidate introduced, presented, or identified by HighThrive outside of
+          the HighThrive placement process for a period of twenty-four (24) months
           from the date of introduction. This includes candidates who were
           presented but not ultimately placed. Violation of this clause will
           result in a placement fee equal to 100% of the standard recruitment fee
@@ -273,7 +273,7 @@ export default function TermsPage() {
 
       <Section n={17} title="Force Majeure">
         <P>
-          Speedsettr shall not be liable for any delay or failure to perform its
+          HighThrive shall not be liable for any delay or failure to perform its
           obligations due to events beyond its reasonable control, including but
           not limited to natural disasters, pandemics, government actions,
           internet or infrastructure failures, or acts of terrorism.
@@ -292,7 +292,7 @@ export default function TermsPage() {
         <P>
           These Terms, together with any applicable service agreements and our
           Privacy Policy, constitute the entire agreement between you and
-          Speedsettr regarding the use of our services, and supersede all prior or
+          HighThrive regarding the use of our services, and supersede all prior or
           contemporaneous agreements, representations, and understandings.
         </P>
       </Section>

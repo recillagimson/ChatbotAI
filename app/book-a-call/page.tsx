@@ -25,7 +25,7 @@ import { HighThriveMark } from "@/components/brand/highthrive-mark";
 const GHL_BOOKING_SRC =
   "https://api.leadconnectorhq.com/widget/booking/8ny6hFE7IdLDazoS4MCw";
 const GHL_IFRAME_ID = "8ny6hFE7IdLDazoS4MCw_1790022979475";
-const BRAND_EMAIL = "admin@highthrive.ai";
+const BRAND_EMAIL = "gimson@highthrive.io";
 
 export const metadata: Metadata = {
   title: "Book a call | HighThrive.ai",
@@ -214,7 +214,7 @@ export default function BookACallPage() {
         <div
           className={`${container} flex flex-wrap items-center justify-between gap-3 py-8 text-[12.5px] text-[#8A8579]`}
         >
-          <span>&copy; {year} Speedsettr LLC. All rights reserved.</span>
+          <span>&copy; {year} {COMPANY.name}. All rights reserved.</span>
           <div className="flex gap-4">
             <Link href="/privacy" className="transition-colors hover:text-[#F4F1EA]">
               Privacy policy

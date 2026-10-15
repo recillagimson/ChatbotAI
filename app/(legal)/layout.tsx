@@ -22,7 +22,7 @@ export default function LegalLayout({
 
       <header className="relative z-20 border-b border-black/5 bg-white shadow-sm">
         <div className="container flex h-16 items-center justify-between">
-          <Link href="/" aria-label="SpeedSettr home">
+          <Link href="/" aria-label="HighThrive.ai home">
             <Logo />
           </Link>
           <nav className="flex items-center gap-6">

@@ -7,12 +7,12 @@ import {
 } from "@/components/legal/legal-doc";
 
 export const metadata: Metadata = {
-  title: "Accessibility Statement | SpeedSettr",
+  title: "Accessibility Statement | HighThrive.ai",
   description:
-    "Speedsettr LLC's commitment to digital accessibility and WCAG 2.1 Level AA standards.",
+    "HighThrive LLC's commitment to digital accessibility and WCAG 2.1 Level AA standards.",
   alternates: { canonical: "/accessibility" },
   openGraph: {
-    title: "Accessibility Statement | SpeedSettr",
+    title: "Accessibility Statement | HighThrive.ai",
     url: "/accessibility",
   },
 };
@@ -25,7 +25,7 @@ export default function AccessibilityPage() {
       effective="April 22, 2026"
     >
       <P>
-        Speedsettr LLC is committed to ensuring digital accessibility for people
+        HighThrive LLC is committed to ensuring digital accessibility for people
         of all abilities. We are continually improving the user experience for
         everyone and applying the relevant accessibility standards.
       </P>
@@ -42,7 +42,7 @@ export default function AccessibilityPage() {
 
       <Section title="Measures We Take">
         <P>
-          Speedsettr takes the following measures to ensure accessibility: we
+          HighThrive takes the following measures to ensure accessibility: we
           include accessibility as part of our internal development processes, we
           use semantic HTML and ARIA attributes where appropriate, we provide text
           alternatives for non-text content, we ensure sufficient color contrast
@@ -78,7 +78,7 @@ export default function AccessibilityPage() {
       <Section title="Third-Party Content">
         <P>
           Our website may contain links to or integrations with third-party
-          websites and services. Speedsettr is not responsible for the
+          websites and services. HighThrive is not responsible for the
           accessibility of third-party content. We encourage our partners and
           vendors to maintain accessible digital experiences.
         </P>

@@ -46,7 +46,7 @@ export const metadata: Metadata = {
 };
 
 const BOOKING_URL = process.env.NEXT_PUBLIC_BOOKING_URL?.trim();
-const BRAND_EMAIL = "admin@highthrive.ai";
+const BRAND_EMAIL = "gimson@highthrive.io";
 const bookHref = BOOKING_URL || `mailto:${BRAND_EMAIL}?subject=Book%20a%20call`;
 const bookExternal = Boolean(BOOKING_URL);
 // A GoHighLevel widget link can be embedded inline (its form_embed.js script
@@ -830,7 +830,7 @@ export default function LandingPage() {
           </div>
         </div>
         <div className={`${container} flex flex-wrap justify-between gap-3 pb-10 text-[12.5px] text-[#8A8579]`}>
-          <span>&copy; {year} Speedsettr LLC. All rights reserved.</span>
+          <span>&copy; {year} {COMPANY.name}. All rights reserved.</span>
           <span>Encrypted in transit &middot; payments by Stripe</span>
         </div>
       </footer>

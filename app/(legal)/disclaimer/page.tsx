@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import { LegalDoc, Section, P, Lead } from "@/components/legal/legal-doc";
 
 export const metadata: Metadata = {
-  title: "Disclaimer | SpeedSettr",
+  title: "Disclaimer | HighThrive.ai",
   description:
-    "Important disclaimers regarding Speedsettr LLC's website, services, results, and third-party tools.",
+    "Important disclaimers regarding HighThrive LLC's website, services, results, and third-party tools.",
   alternates: { canonical: "/disclaimer" },
-  openGraph: { title: "Disclaimer | SpeedSettr", url: "/disclaimer" },
+  openGraph: { title: "Disclaimer | HighThrive.ai", url: "/disclaimer" },
 };
 
 export default function DisclaimerPage() {
@@ -18,9 +18,9 @@ export default function DisclaimerPage() {
     >
       <Section title="General Disclaimer">
         <P>
-          The information provided on speedsettr.com and through Speedsettr
+          The information provided on highthrive.ai and through HighThrive
           LLC&rsquo;s services is for general informational purposes only. While
-          we strive to keep information accurate and up to date, Speedsettr LLC
+          we strive to keep information accurate and up to date, HighThrive LLC
           makes no representations or warranties of any kind, express or implied,
           about the completeness, accuracy, reliability, suitability, or
           availability of the information, products, services, or related graphics
@@ -52,7 +52,7 @@ export default function DisclaimerPage() {
       <Section title="Not Professional Advice">
         <P>
           Nothing on this website or in our services constitutes legal, tax,
-          financial, accounting, or employment advice. Speedsettr provides
+          financial, accounting, or employment advice. HighThrive provides
           staffing, recruitment, and training services only. Clients and Talent
           are strongly encouraged to consult with qualified legal counsel, tax
           advisors, and financial professionals regarding contracts, compliance,
@@ -63,10 +63,10 @@ export default function DisclaimerPage() {
 
       <Section title="Independent Contractor Relationship">
         <P>
-          Remote talent placed through Speedsettr are independent contractors or
-          direct hires of the Client, not employees of Speedsettr LLC, unless
-          explicitly specified in a separate written agreement. Speedsettr is not
-          the employer of record for any placed Talent. Speedsettr is not
+          Remote talent placed through HighThrive are independent contractors or
+          direct hires of the Client, not employees of HighThrive LLC, unless
+          explicitly specified in a separate written agreement. HighThrive is not
+          the employer of record for any placed Talent. HighThrive is not
           responsible for tax withholding, employment benefits, workers&rsquo;
           compensation, health insurance, unemployment insurance, or compliance
           obligations between Clients and their hired Talent. Clients are solely
@@ -77,7 +77,7 @@ export default function DisclaimerPage() {
 
       <Section title="Third-Party Services and Tools">
         <P>
-          Speedsettr may recommend, integrate with, or facilitate access to
+          HighThrive may recommend, integrate with, or facilitate access to
           third-party tools, platforms, and services (including but not limited to
           CRM systems, screen monitoring software, payment processors, and
           communication tools). We are not responsible for the performance,
@@ -100,7 +100,7 @@ export default function DisclaimerPage() {
         <P>
           Any references to income, revenue, savings, or financial results on this
           website, in our marketing materials, or in testimonials are illustrative
-          only and based on the specific experiences of Speedsettr and individual
+          only and based on the specific experiences of HighThrive and individual
           clients. There is no guarantee that you will earn any money or achieve
           any specific financial result using our services or information. Your
           results will depend on many factors including your own skills,

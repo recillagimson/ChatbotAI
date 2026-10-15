@@ -9,12 +9,12 @@ import {
 } from "@/components/legal/legal-doc";
 
 export const metadata: Metadata = {
-  title: "Advertising Disclosure | SpeedSettr",
+  title: "Advertising Disclosure | HighThrive.ai",
   description:
-    "How Speedsettr LLC discloses paid advertising, testimonials, results claims, and affiliate relationships under FTC guidelines.",
+    "How HighThrive LLC discloses paid advertising, testimonials, results claims, and affiliate relationships under FTC guidelines.",
   alternates: { canonical: "/advertising-disclosure" },
   openGraph: {
-    title: "Advertising Disclosure | SpeedSettr",
+    title: "Advertising Disclosure | HighThrive.ai",
     url: "/advertising-disclosure",
   },
 };
@@ -35,7 +35,7 @@ export default function AdvertisingDisclosurePage() {
 
       <Section n={1} title="Paid Advertising">
         <P>
-          Speedsettr LLC (&ldquo;Company,&rdquo; &ldquo;we,&rdquo;
+          HighThrive LLC (&ldquo;Company,&rdquo; &ldquo;we,&rdquo;
           &ldquo;us&rdquo;) may use paid advertising on platforms including but
           not limited to Meta (Facebook, Instagram), Google (Search, Display,
           YouTube), TikTok, LinkedIn, and other digital advertising networks to
@@ -54,10 +54,10 @@ export default function AdvertisingDisclosurePage() {
           beliefs, or experiences of the individuals providing them. However,
           testimonials are not guarantees of future performance or results.
           Individual results will vary. Testimonial givers may have received
-          services from Speedsettr but are not compensated for providing
+          services from HighThrive but are not compensated for providing
           testimonials. Some testimonials may have been edited for clarity or
           length, but not for substance or meaning. Where required by FTC
-          guidelines, material connections between endorsers and Speedsettr are
+          guidelines, material connections between endorsers and HighThrive are
           disclosed.
         </P>
       </Section>
@@ -77,7 +77,7 @@ export default function AdvertisingDisclosurePage() {
 
       <Section n={4} title="Affiliate Relationships">
         <P>
-          Speedsettr may recommend or link to third-party products, services, or
+          HighThrive may recommend or link to third-party products, services, or
           tools. In some cases, we may receive compensation (affiliate
           commissions, referral fees, or other consideration) if you purchase
           through our links. This does not affect the price you pay. We only

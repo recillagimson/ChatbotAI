@@ -9,12 +9,12 @@ import {
 } from "@/components/legal/legal-doc";
 
 export const metadata: Metadata = {
-  title: "Refund & Cancellation Policy | SpeedSettr",
+  title: "Refund & Cancellation Policy | HighThrive.ai",
   description:
-    "Speedsettr LLC's refund, replacement, and cancellation terms for all services and products.",
+    "HighThrive LLC's refund, replacement, and cancellation terms for all services and products.",
   alternates: { canonical: "/refund-policy" },
   openGraph: {
-    title: "Refund & Cancellation Policy | SpeedSettr",
+    title: "Refund & Cancellation Policy | HighThrive.ai",
     url: "/refund-policy",
   },
 };
@@ -27,20 +27,20 @@ export default function RefundPolicyPage() {
       effective="April 22, 2026"
     >
       <P>
-        Speedsettr LLC (&ldquo;Company,&rdquo; &ldquo;we,&rdquo;
+        HighThrive LLC (&ldquo;Company,&rdquo; &ldquo;we,&rdquo;
         &ldquo;us,&rdquo; or &ldquo;our&rdquo;) is committed to transparency in
         all transactions. This policy outlines our refund, replacement, and
         cancellation terms for all services and products. By purchasing any
-        service or product from Speedsettr, you acknowledge that you have read and
+        service or product from HighThrive, you acknowledge that you have read and
         agree to this policy.
       </P>
 
       <Section n={1} title="Placement Services (For Business Owners)">
         <P>
-          <Lead>90-Day Replacement Guarantee:</Lead> Speedsettr provides a 90-Day
+          <Lead>90-Day Replacement Guarantee:</Lead> HighThrive provides a 90-Day
           Replacement Guarantee on all qualifying talent placements. If a placed
           remote professional is not the right fit within 90 calendar days of
-          their start date, Speedsettr will source and place a suitable
+          their start date, HighThrive will source and place a suitable
           replacement at no additional recruitment fee, subject to the terms in
           your service agreement.
         </P>
