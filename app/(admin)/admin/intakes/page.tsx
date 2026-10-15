@@ -53,7 +53,7 @@ export default async function AdminIntakesPage({
         description={
           <>
             Answers from the client questionnaire. Send new clients this link:{" "}
-            <span className="font-semibold text-ss-ink">www.speedsettr.com/intake</span>
+            <span className="font-semibold text-ss-ink">www.highthrive.ai/intake</span>
           </>
         }
       />
