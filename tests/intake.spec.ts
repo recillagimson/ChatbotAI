@@ -108,3 +108,11 @@ describe("intakeDefaults", () => {
     expect(r.ok).toBe(true);
   });
 });
+
+describe("admin-only fields", () => {
+  it("never accepts a value for a disabled field like the signup link", () => {
+    const r = parseIntakeSubmission({ answers: { name: "A", instagram: "@a", email: "a@b.co", signup_link: "https://evil.example" } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.answers.signup_link).toBeUndefined();
+  });
+});

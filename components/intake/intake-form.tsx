@@ -10,7 +10,7 @@ type Values = Record<string, string | string[]>;
 const DRAFT_KEY = "intake-draft-v2";
 
 const field =
-  "w-full rounded-xl border border-[#F4F1EA]/[0.14] bg-[#141418] px-3.5 py-2.5 text-[15px] text-[#F4F1EA] placeholder:text-[#6F6B62] outline-none transition-colors focus:border-[#E8B644]/70 focus:ring-2 focus:ring-[#E8B644]/25";
+  "disabled:cursor-not-allowed disabled:opacity-60 w-full rounded-xl border border-[#F4F1EA]/[0.14] bg-[#141418] px-3.5 py-2.5 text-[15px] text-[#F4F1EA] placeholder:text-[#6F6B62] outline-none transition-colors focus:border-[#E8B644]/70 focus:ring-2 focus:ring-[#E8B644]/25";
 
 export function IntakeForm() {
   const [values, setValues] = useState<Values>(() => intakeDefaults());
@@ -243,7 +243,9 @@ function Question({
         <input
           id={id}
           type={q.type === "email" ? "email" : "text"}
-          value={text(q.id)}
+          disabled={q.disabled}
+          placeholder={q.placeholder}
+          value={q.disabled ? "" : text(q.id)}
           onChange={(e) => set(q.id, e.target.value)}
           maxLength={500}
           required={q.required}

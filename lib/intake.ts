@@ -22,6 +22,9 @@ export interface IntakeQuestion {
   rows?: number;
   /** Pre-filled suggestion the client can keep or edit (Part 3 replies). */
   defaultValue?: string;
+  /** Shown but not editable; the admin team fills it in. Never accepted from a submission. */
+  disabled?: boolean;
+  placeholder?: string;
 }
 
 export interface IntakeSection {
@@ -41,7 +44,7 @@ export const INTAKE_SECTIONS: readonly IntakeSection[] = [
       { id: "instagram", label: "Instagram handle(s) the assistant will answer", hint: "Example: @yourhandle", type: "text", required: true },
       { id: "email", label: "Your email", type: "email", required: true },
       { id: "city", label: "City / where you're based", type: "text" },
-      { id: "signup_link", label: "Your signup or checkout link", hint: "Paste the full link, including any ?ref= part.", type: "text" },
+      { id: "signup_link", label: "Your Skool signup link", type: "text", disabled: true, placeholder: "No need for this one. Admin team will paste your link here." },
     ],
   },
   {
@@ -68,7 +71,7 @@ export const INTAKE_SECTIONS: readonly IntakeSection[] = [
       { id: "greeting", label: "Someone new DMs you: \"hey\"", type: "textarea", rows: 2,
         defaultValue: "what's up, appreciate you reaching out! what's going on with your credit?" },
       { id: "r_price", label: "\"How much is it?\"", type: "textarea", rows: 2,
-        defaultValue: "it's a monthly membership, done for you, cancel anytime. want me to send you the link with the details?" },
+        defaultValue: "it's $79/mo for the Skool membership, done for you, cancel anytime. want me to send you the link to get started?" },
       { id: "r_legit", label: "\"Is this legit?\"", type: "textarea", rows: 2,
         defaultValue: "100% legit. here's some of my clients' results. want me to send you the link?" },
       { id: "r_scammed", label: "\"I got scammed by another credit company before.\"", type: "textarea", rows: 2,
@@ -78,7 +81,7 @@ export const INTAKE_SECTIONS: readonly IntakeSection[] = [
       { id: "r_bot", label: "\"Are you a real person or a bot?\"", type: "textarea", rows: 2,
         defaultValue: "lol I'm always in and out of calls but I got you. what's going on with your credit?" },
       { id: "hype", label: "\"Ok I'm ready, how do I sign up?\"", type: "textarea", rows: 2,
-        defaultValue: "let's go! here's the link to get signed up. once you're in I'll reach out to get your file started." },
+        defaultValue: "let's go! here's the link to join the Skool. once you're in, check your Skool messages and I'll reach out to get your file started." },
       { id: "real_dms", label: "Optional: paste a real DM conversation where you closed someone", type: "textarea", rows: 6 },
     ],
   },
@@ -129,6 +132,7 @@ export function parseIntakeSubmission(raw: unknown): IntakeParseResult {
   const errors: Record<string, string> = {};
 
   for (const q of INTAKE_QUESTIONS) {
+    if (q.disabled) continue;
     const v = input[q.id];
     if (q.type === "multi") {
       const picked = Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
