@@ -20,6 +20,8 @@ export interface IntakeQuestion {
   required?: boolean;
   /** textarea height in rows. */
   rows?: number;
+  /** Pre-filled suggestion the client can keep or edit (Part 3 replies). */
+  defaultValue?: string;
 }
 
 export interface IntakeSection {
@@ -61,15 +63,22 @@ export const INTAKE_SECTIONS: readonly IntakeSection[] = [
   {
     id: "replies",
     title: "How you'd reply to a lead",
-    intro: "Type each answer exactly the way you would in a DM, slang and all. Short is fine.",
+    intro: "We filled in suggested replies. Keep them, or rewrite any that don't sound like you, exactly the way you'd type it in a DM.",
     questions: [
-      { id: "greeting", label: "Someone new DMs you: \"hey\"", type: "textarea", rows: 2 },
-      { id: "r_price", label: "\"How much is it?\"", type: "textarea", rows: 2 },
-      { id: "r_legit", label: "\"Is this legit?\"", type: "textarea", rows: 2 },
-      { id: "r_scammed", label: "\"I got scammed by another credit company before.\"", type: "textarea", rows: 2 },
-      { id: "r_think", label: "\"Let me think about it.\"", type: "textarea", rows: 2 },
-      { id: "r_bot", label: "\"Are you a real person or a bot?\"", type: "textarea", rows: 2 },
-      { id: "hype", label: "\"Ok I'm ready, how do I sign up?\"", type: "textarea", rows: 2 },
+      { id: "greeting", label: "Someone new DMs you: \"hey\"", type: "textarea", rows: 2,
+        defaultValue: "what's up, appreciate you reaching out! what's going on with your credit?" },
+      { id: "r_price", label: "\"How much is it?\"", type: "textarea", rows: 2,
+        defaultValue: "it's a monthly membership, done for you, cancel anytime. want me to send you the link with the details?" },
+      { id: "r_legit", label: "\"Is this legit?\"", type: "textarea", rows: 2,
+        defaultValue: "100% legit. here's some of my clients' results. want me to send you the link?" },
+      { id: "r_scammed", label: "\"I got scammed by another credit company before.\"", type: "textarea", rows: 2,
+        defaultValue: "damn, sorry you went through that. that's exactly why I do this, my team handles everything for you and you see every update yourself." },
+      { id: "r_think", label: "\"Let me think about it.\"", type: "textarea", rows: 2,
+        defaultValue: "all good, take your time. what's the main thing you're thinking over? maybe I can help." },
+      { id: "r_bot", label: "\"Are you a real person or a bot?\"", type: "textarea", rows: 2,
+        defaultValue: "lol I'm always in and out of calls but I got you. what's going on with your credit?" },
+      { id: "hype", label: "\"Ok I'm ready, how do I sign up?\"", type: "textarea", rows: 2,
+        defaultValue: "let's go! here's the link to get signed up. once you're in I'll reach out to get your file started." },
       { id: "real_dms", label: "Optional: paste a real DM conversation where you closed someone", type: "textarea", rows: 6 },
     ],
   },
@@ -153,6 +162,13 @@ export function parseIntakeSubmission(raw: unknown): IntakeParseResult {
       answers,
     },
   };
+}
+
+/** The pre-filled answers a fresh form starts with (Part 3's suggested replies). */
+export function intakeDefaults(): IntakeAnswers {
+  const out: IntakeAnswers = {};
+  for (const q of INTAKE_QUESTIONS) if (q.defaultValue) out[q.id] = q.defaultValue;
+  return out;
 }
 
 /** One submission as plain text, section by section, for copying into a prompt draft. */

@@ -1,19 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { INTAKE_SECTIONS, otherKey, type IntakeQuestion } from "@/lib/intake";
+import { INTAKE_SECTIONS, intakeDefaults, otherKey, type IntakeQuestion } from "@/lib/intake";
 
 type Values = Record<string, string | string[]>;
 
 // The form is long, so a half-finished answer survives a closed tab or a reload. It
 // lives only in this browser and is cleared once the answers are sent.
-const DRAFT_KEY = "intake-draft-v1";
+const DRAFT_KEY = "intake-draft-v2";
 
 const field =
   "w-full rounded-xl border border-[#F4F1EA]/[0.14] bg-[#141418] px-3.5 py-2.5 text-[15px] text-[#F4F1EA] placeholder:text-[#6F6B62] outline-none transition-colors focus:border-[#E8B644]/70 focus:ring-2 focus:ring-[#E8B644]/25";
 
 export function IntakeForm() {
-  const [values, setValues] = useState<Values>({});
+  const [values, setValues] = useState<Values>(() => intakeDefaults());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [formError, setFormError] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export function IntakeForm() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
-      if (raw) setValues(JSON.parse(raw) as Values);
+      if (raw) setValues({ ...intakeDefaults(), ...(JSON.parse(raw) as Values) });
     } catch {
       /* no saved draft */
     }

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   INTAKE_QUESTIONS,
   MAX_TEXTAREA_CHARS,
+  intakeDefaults,
   intakeToPlainText,
   parseIntakeSubmission,
 } from "@/lib/intake";
@@ -88,5 +89,22 @@ describe("intakeToPlainText", () => {
     expect(text).toContain("Casual, like texting a friend, Straight to the point");
     expect(text).toContain("A few");
     expect(text).not.toContain("## HOW YOU'D REPLY");
+  });
+});
+
+describe("intakeDefaults", () => {
+  it("pre-fills every reply question except the optional real DM paste", () => {
+    const d = intakeDefaults();
+    for (const id of ["greeting", "r_price", "r_legit", "r_scammed", "r_think", "r_bot", "hype"]) {
+      expect(typeof d[id]).toBe("string");
+      expect((d[id] as string).length).toBeGreaterThan(10);
+    }
+    expect(d.real_dms).toBeUndefined();
+    expect(d.name).toBeUndefined();
+  });
+
+  it("defaults pass validation unchanged", () => {
+    const r = parseIntakeSubmission({ answers: { ...intakeDefaults(), name: "A", instagram: "@a", email: "a@b.co" } });
+    expect(r.ok).toBe(true);
   });
 });
