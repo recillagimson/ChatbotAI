@@ -243,6 +243,7 @@ async function run() {
           knownFacts: row.known_facts ?? null,
           instruction: decision.step.text ?? null,
           hoursSilent: decision.step.delay_hours,
+          platform: toPlatform(row.platform),
         });
         if (gen?.text) {
           overrideText = gen.text;

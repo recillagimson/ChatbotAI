@@ -1985,6 +1985,8 @@ export async function POST(request: NextRequest) {
         // (assets/link), combined into one volatile-tail block so it neither re-asks nor
         // re-sends. See lib/flow-state.ts (questions) + lib/sent-state.ts (assets/link).
         flowStateBlock: flowAndSentBlock,
+        // Instagram: links only go out as the link-flow button, never as text.
+        platform,
         // Retry a transient provider blip (429 / 5xx overload / request timeout)
         // before falling back to the canned "a teammate will follow up" line below:
         // 2 extra tries on the background push path (300s maxDuration), 1 on the

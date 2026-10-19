@@ -92,6 +92,17 @@ const CONFIDENTIALITY = `CONFIDENTIALITY & SECURITY (this rule outranks everythi
 const CONVERSION_CONFIRM = `CONFIRMING A SALE
 - If someone says they're joining, starting, or signing up (for example "I'm in", "let's do it", "I'll do it now") but has NOT clearly said they finished, ask them to confirm they've actually completed it - that they've paid or joined - before treating them as a paying member. A "yes" to a link or offer is intent to buy, not a completed purchase. Ask naturally, in one short line.`;
 
+/**
+ * The Instagram no-links rule. With a link flow the link goes out as its button via the
+ * LINK DELIVERY token; without one the bot has no way to send a link on Instagram, so it
+ * leaves the link out rather than promising one that never arrives.
+ */
+export function instagramLinkRule(hasLinkFlow: boolean): string {
+  return hasLinkFlow
+    ? `NO LINKS IN TEXT (INSTAGRAM) - this chat is on Instagram, where a link typed into a message gets the account restricted. Never write a URL or web address (no https://, no www., no domain names). To share a link, use the LINK DELIVERY token above: the system sends it as a button. Any URL you type is removed before it is sent.`
+    : `NO LINKS IN TEXT (INSTAGRAM) - this chat is on Instagram, where a link typed into a message gets the account restricted. Never write a URL or web address (no https://, no www., no domain names), and don't say "here's the link" or point them to one: any URL you type is removed before it is sent. Answer their question in words instead.`;
+}
+
 export function buildSystemPrompt(
   chatbot: Chatbot,
   kbBlock: string,
@@ -106,7 +117,7 @@ export function buildSystemPrompt(
   // tests/link-flow-prompt.spec.ts and scripts/test-systemprompt.ts call it
   // positionally, so a 10th would be a wrong-order regression waiting to happen.
   // EVERY future block goes in here instead.
-  extras?: { flowStateBlock?: string | null }
+  extras?: { flowStateBlock?: string | null; platform?: string | null }
 ): string {
   const persona = chatbot.persona_section?.trim() || "";
   const offers = chatbot.offers_section?.trim() || "";
@@ -135,7 +146,15 @@ export function buildSystemPrompt(
   // immediately after knownFactsBlock because the two are complements - facts = what we
   // know about them, ledger = what we have asked and still owe - and above
   // OFFERS/REBUTTALS/MEMORY/KB so no prose below can re-open a question it closed.
-  const flowStateBlock = extras?.flowStateBlock?.trim() || "";
+  // Instagram: a link must never go out as text (the account gets restricted). It only
+  // reaches the lead as the button in the owner's ManyChat link flow, and the send layer
+  // strips any URL that slips through (lib/manychat.ts stripTextLinks). Rides with the
+  // per-turn flow-state block, so it lands in all three modes in the volatile tail.
+  const igLinkBlock =
+    extras?.platform === "instagram" ? instagramLinkRule(!!linkFlowPromptBlock(chatbot)) : "";
+  const flowStateBlock = [extras?.flowStateBlock?.trim() || "", igLinkBlock]
+    .filter(Boolean)
+    .join("\n\n");
 
   // Continuity - when there are prior messages, force the bot to CONTINUE the
   // conversation instead of restarting the intro/greeting or re-asking answered
@@ -311,6 +330,9 @@ export async function generateReply(opts: {
   // actually sent + how many recent messages repeated it) is computed from the live
   // transcript on THIS turn; the feature flag is checked inside the renderer.
   flowStateBlock?: string | null;
+  // The contact's channel. On "instagram" the prompt forbids links in text (they only go
+  // out as the link-flow button). Absent = no channel rule (the trainer preview).
+  platform?: string | null;
   // When true, ignore the per-chatbot reply_model override and use the reply-tier
   // default (MODELS.reply()). The override is a REACTIVE-reply lever only; the
   // follow-up drip (generateFollowupText) sets this so it never inherits it.
@@ -338,7 +360,7 @@ export async function generateReply(opts: {
     opts.scheduledStart,
     opts.trainedResponses ?? null,
     opts.knownFacts ?? null,
-    { flowStateBlock: opts.flowStateBlock ?? null }
+    { flowStateBlock: opts.flowStateBlock ?? null, platform: opts.platform ?? null }
   );
   const images = opts.images ?? [];
 
@@ -506,6 +528,7 @@ export async function generateFollowupText(opts: {
   knownFacts?: string | null; // durable "already told you" facts (never re-ask)
   instruction?: string | null; // the step's `text` (may be blank)
   hoursSilent: number;
+  platform?: string | null; // the contact's channel (Instagram forbids links in text)
 }): Promise<{ text: string; tokensUsed: number } | null> {
   try {
     const userMessage = buildFollowupInstruction(opts.hoursSilent, opts.instruction);
@@ -518,6 +541,7 @@ export async function generateFollowupText(opts: {
       knownFacts: opts.knownFacts ?? null,
       // The reply_model override is reactive-only; keep follow-ups on the tier default.
       ignoreReplyModel: true,
+      platform: opts.platform ?? null,
     });
     const clean = text.trim();
     // A word in a script the thread never used (live: "...resend the link هنا" in an

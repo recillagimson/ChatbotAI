@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import {
   sendManychatMessage,
+  hasTextLink,
+  textLinksAllowed,
   resolveManychatApiKey,
   manychatFailureReason,
 } from "@/lib/manychat";
@@ -66,6 +68,18 @@ export async function POST(
     return NextResponse.json(
       {
         error: `${platformLabel(platform)} replies can't be sent from here yet - ManyChat has no ${platformLabel(platform)} sending API. Reply to this contact directly in the ${platformLabel(platform)} app.`,
+      },
+      { status: 422 }
+    );
+  }
+
+  // Instagram restricts accounts that DM links as text, so the send layer strips them
+  // there. Refuse up front rather than deliver the message with the link silently gone.
+  if (!textLinksAllowed(platform) && hasTextLink(text)) {
+    return NextResponse.json(
+      {
+        error:
+          "Links can't be sent as text on Instagram (it can get the account restricted). Remove the link, and send it with your ManyChat link button instead.",
       },
       { status: 422 }
     );

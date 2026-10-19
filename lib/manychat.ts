@@ -116,8 +116,8 @@ export function verifyManychatSecret(
 // Opt IN per-chatbot with the `link_buttons_enabled` column (threaded here as the
 // `enabled` arg) - that bot's Messenger links then render as tappable URL buttons.
 // The legacy LINK_BUTTONS_ENABLED env var still works as a GLOBAL override (turns
-// buttons on for every bot at once). Either switch only affects Messenger: Instagram
-// has no URL buttons (and strips links), so buttonsSupported is false off-Messenger.
+// buttons on for every bot at once). Either switch only affects Messenger: on Instagram
+// links never go out in text at all (see textLinksAllowed below).
 const LINK_BUTTONS_ENABLED = process.env.LINK_BUTTONS_ENABLED === "true";
 const BUTTON_PLATFORMS = new Set<Platform>(["messenger"]); // channels that render URL buttons
 
@@ -220,8 +220,64 @@ export function buildOutboundMessages(
   platform?: Platform,
   enabled?: boolean
 ): ManyChatTextMessage[] {
+  if (!textLinksAllowed(platform)) {
+    // Instagram: never a link in text (see stripTextLinks). Bubbles left empty are dropped.
+    return texts
+      .map(stripTextLinks)
+      .filter(Boolean)
+      .map((t) => ({ type: "text", text: t }));
+  }
   if (buttonsSupported(platform, enabled)) return texts.map(messageWithLinkButtons);
   return texts.flatMap(isolateLinkBubbles).map((t) => ({ type: "text", text: t }));
+}
+
+// ---------------------------------------------------------------------------
+// No links in Instagram text
+// ---------------------------------------------------------------------------
+// Instagram restricts accounts that DM links as plain text, so on Instagram a link
+// only ever reaches a lead as the BUTTON in the owner's ManyChat link flow (the
+// [[SEND_LINK]] tokens in lib/link-flow.ts). Every text send to Instagram (AI reply,
+// keyword reply, follow-up, media caption) goes through buildOutboundMessages, which
+// strips any URL here; the prompt tells the model the same rule (lib/anthropic.ts) so
+// it doesn't announce a link that never comes, and the manual reply route refuses a
+// typed link instead of silently dropping it.
+const NO_TEXT_LINK_PLATFORMS = new Set<Platform>(["instagram"]);
+
+/** False on channels where a URL must never go out as plain text (Instagram). */
+export function textLinksAllowed(platform?: Platform): boolean {
+  return !NO_TEXT_LINK_PLATFORMS.has(platform ?? DEFAULT_PLATFORM);
+}
+
+// http(s) URLs and scheme-less www. addresses. Bare "example.com" is deliberately not
+// matched: it collides with ordinary words ("Next.js", "e.g.") and is not a tappable link.
+const TEXT_LINK_RE = /\b(?:https?:\/\/|www\.)[^\s<>()]+/gi;
+
+/** True when the text holds a URL that stripTextLinks would remove. */
+export function hasTextLink(text: string): boolean {
+  TEXT_LINK_RE.lastIndex = 0;
+  const found = TEXT_LINK_RE.test((text ?? "").replace(MD_LINK_RE, "$2"));
+  TEXT_LINK_RE.lastIndex = 0;
+  return found;
+}
+
+/**
+ * Remove every link from one bubble. Markdown [label](url) keeps its label; a bare URL
+ * goes along with the brackets wrapping it and a dangling colon or arrow before it
+ * ("Here's the link: https://x" -> "Here's the link"). Returns "" when nothing but the
+ * link was there. Pure + unit-tested.
+ */
+export function stripTextLinks(text: string): string {
+  const out = (text ?? "")
+    .replace(MD_LINK_RE, (_m, label: string) => label)
+    .replace(/[([{<]?\s*\b(?:https?:\/\/|www\.)[^\s<>()]+\s*[)\]}>]?/gi, " ")
+    // A colon/arrow/pointing emoji left with nothing after it on its line.
+    .replace(/[ \t]*(?::|->|→|👇|👉)+[ \t]*(?=\n|$)/gu, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  // Residue that is only punctuation is not a message.
+  return /^[\s()[\]{}<>.,!?;:'"|-]*$/.test(out) ? "" : out;
 }
 
 /** Resolve a platform's ManyChat content.type, throwing for no-send-API channels. */
@@ -489,10 +545,13 @@ export async function sendManychatMessage(opts: {
     .map((t) => sanitizeReply((t ?? "").trim()))
     .filter(Boolean);
   if (texts.length === 0) return null;
+  // On Instagram a bubble that was only a link is empty now: nothing to send.
+  const messages = buildOutboundMessages(texts, opts.platform, opts.linkButtons);
+  if (messages.length === 0) return null;
 
   return postSendContent({
     subscriberId: opts.subscriberId,
-    messages: buildOutboundMessages(texts, opts.platform, opts.linkButtons),
+    messages,
     contentType,
     apiKey: opts.apiKey,
     messageTag: opts.messageTag,
@@ -615,15 +674,16 @@ export async function sendManychatMedia(opts: {
   }
 
   // Caption + any link assets fold into one text bubble (links kept raw so they
-  // stay clickable on channels that render them; IG may strip them - accepted).
+  // stay clickable on channels that render them; on Instagram buildOutboundMessages
+  // strips them, since a text link there risks the account).
   const captionParts = [sanitizeReply((opts.text ?? "").trim()), ...linkUrls].filter(Boolean);
   const caption = captionParts.join("\n").trim();
 
-  if (mediaBlocks.length === 0 && !caption) return null;
-
   const messages: ManyChatOutMessage[] = [];
+  // On Instagram the links are stripped here, so a link-only caption adds nothing.
   if (caption) messages.push(...buildOutboundMessages([caption], platform, opts.linkButtons));
   messages.push(...mediaBlocks);
+  if (messages.length === 0) return null;
 
   return postSendContent({
     subscriberId: opts.subscriberId,
