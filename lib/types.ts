@@ -87,6 +87,7 @@ export interface Chatbot {
   welcome_flow_name: string | null;
   welcome_keywords: string[];
   welcome_use_keyword_triggers: boolean;  // ON = Welcome VM also fires on a keyword_triggers match
+  welcome_always?: boolean;               // ON = every first message gets the Welcome VM; a real question also gets an AI answer
   link_flow_enabled: boolean;        // ON = deliver the signup link via a ManyChat flow instead of a raw URL
   link_flow_ns: string | null;       // Instagram/default flow namespace fired when the reply emits link_flow_token
   link_flow_name: string | null;     // display label for the Instagram flow (from ManyChat getFlows); UI-only

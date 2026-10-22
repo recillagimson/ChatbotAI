@@ -49,7 +49,7 @@ import { sanitizeReply } from "@/lib/sanitize";
 import { classifyConversation } from "@/lib/conversation-classify";
 import { insertMessageReturningId, markDeliveryFailed } from "@/lib/delivery";
 import { retrySupabase } from "@/lib/retry";
-import { shouldSendWelcome, coerceKeywords } from "@/lib/welcome";
+import { welcomeAction, coerceKeywords } from "@/lib/welcome";
 import { matchesResetKeyword } from "@/lib/reset-keyword";
 import { resetConversation } from "@/lib/reset-conversation";
 import { screenDisqualify, decideDisqualify, type ScreenOutcome } from "@/lib/conversation-screen";
@@ -1080,7 +1080,7 @@ export async function POST(request: NextRequest) {
               role: "user",
               content: provisionalContent,
             })
-            .select("id")
+            .select("id, created_at")
             .abortSignal(signal)
             .single(),
         { label: "inbound message insert" }
@@ -1304,7 +1304,7 @@ export async function POST(request: NextRequest) {
   // runs in after() so the webhook still fast-acks. Fail-open: any error → AI path.
   if (chatbot.welcome_enabled && chatbot.welcome_flow_ns) {
     try {
-      const sendWelcome = shouldSendWelcome({
+      const action = welcomeAction({
         welcomedAt: existing?.welcomed_at ?? null,
         // A BOT_ON request is not an opener: a cloned body's entry_point must not fire
         // the Welcome VM in place of the answer.
@@ -1319,8 +1319,12 @@ export async function POST(request: NextRequest) {
           welcome_flow_ns: chatbot.welcome_flow_ns,
           welcome_keywords: coerceKeywords(chatbot.welcome_keywords),
           welcome_use_keyword_triggers: !!chatbot.welcome_use_keyword_triggers,
+          welcome_always: !!chatbot.welcome_always,
         },
       });
+      const sendWelcome = action !== "none";
+      // "welcome_and_answer": the VM goes out AND the AI answers the message below.
+      const alsoAnswer = action === "welcome_and_answer";
       if (sendWelcome && apiKey) {
         // Race-safe claim so a first-message burst fires the VM at most once.
         const { data: claimed, error: claimError } = await supabase
@@ -1335,13 +1339,23 @@ export async function POST(request: NextRequest) {
         // normal AI path - fail-open.
         if (claimError) throw new Error(`welcome claim failed: ${claimError.message}`);
         if (claimed?.length) {
-          await supabase.from("messages").insert({
-            conversation_id: conversationId!,
-            role: "assistant",
-            content: "(sent welcome voice)",
-            ai_generated: false,
-            tokens_used: 0,
-          });
+          // When the AI also answers, the marker is dated just BEFORE the lead's message:
+          // splitBurst treats every user row after the newest assistant row as unanswered,
+          // so a marker dated after it would mark the question answered and the AI would
+          // send nothing. Without the inbound's time, write no marker rather than risk that.
+          const inboundAt = (inboundMsg as { created_at?: string } | null)?.created_at;
+          const markerAt =
+            alsoAnswer && inboundAt ? new Date(new Date(inboundAt).getTime() - 1).toISOString() : null;
+          if (!alsoAnswer || markerAt) {
+            await supabase.from("messages").insert({
+              conversation_id: conversationId!,
+              role: "assistant",
+              content: "(sent welcome voice)",
+              ai_generated: false,
+              tokens_used: 0,
+              ...(markerAt ? { created_at: markerAt } : {}),
+            });
+          }
           // Engagement bridge for keyword-gated bots. The welcome path returns before
           // 6c (the only place keyword_fired is written), so a welcomed contact whose
           // opener matched a keyword group would otherwise be stranded: their next
@@ -1370,10 +1384,13 @@ export async function POST(request: NextRequest) {
               (err) => console.error("[manychat-webhook] welcome flow send failed", err)
             )
           );
-          return manychatReply("", { ai_skipped: true, reason: "welcome_sent" });
+          // The VM goes now; the answer follows after the bot's normal reply wait.
+          if (!alsoAnswer) return manychatReply("", { ai_skipped: true, reason: "welcome_sent" });
+        } else {
+          // Lost the claim → another run already welcomed. No second VM, and no AI
+          // unless this message needs an answer of its own.
+          if (!alsoAnswer) return manychatReply("", { ai_skipped: true, reason: "welcome_duplicate" });
         }
-        // Lost the claim → another run already welcomed. No AI, no second VM.
-        return manychatReply("", { ai_skipped: true, reason: "welcome_duplicate" });
       }
       if (!sendWelcome && !existing?.welcomed_at) {
         // First contact, but substantive / non-opener → mark the decision resolved so

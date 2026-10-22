@@ -225,6 +225,14 @@ A SaaS platform (**SpeedSettr** - www.speedsettr.com) that auto-replies to Insta
     - because the migration runs at deploy while the feature is off for every bot, so
     conversations created between deploy and the day a tenant enables would otherwise still read
     NULL and fire a first-contact greeting at an ongoing lead the next time they said "hey".
+    **"Welcome every new contact" (`chatbots.welcome_always`, default off, 2026-10-22):** with it on,
+    `welcomeAction()` in [lib/welcome.ts](lib/welcome.ts) welcomes EVERY first message: a bare opener
+    still gets the VM alone (`welcome_only`), anything else (a question, detail, media) gets the VM AND
+    falls through to the AI (`welcome_and_answer`). In that case the `(sent welcome voice)` marker row
+    is dated 1ms BEFORE the lead's message, because `splitBurst` treats only user rows after the newest
+    assistant row as unanswered (a marker after it would make the AI answer nothing). The form runs the
+    same `welcomed_at` backfill when this switch turns on. Migration
+    `2026-10-22-welcome-always.sql` (either order vs deploy). Tests: `tests/welcome-always.spec.ts`.
 
 26. **Reset-conversation keyword (`RESET_KEYWORD`) - a universal admin testing secret.** A
     magic word set **only** in the `RESET_KEYWORD` env var (blank/unset = **feature OFF**; it is

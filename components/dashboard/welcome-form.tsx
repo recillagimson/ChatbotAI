@@ -28,6 +28,7 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
   const [useKeywordTriggers, setUseKeywordTriggers] = useState(
     chatbot.welcome_use_keyword_triggers
   );
+  const [welcomeAlways, setWelcomeAlways] = useState(!!chatbot.welcome_always);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -69,11 +70,13 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
     // welcomed_at is still NULL only because they have so far only ever hit an upstream
     // gate (mute / disqualified / subscribed / human-takeover - all return before the
     // welcome decision) could then get a first-contact VM from an ordinary keyword-bearing
-    // message. Run the same backfill on that transition too.
+    // message. Run the same backfill on that transition too. "Welcome every new contact"
+    // widens it to ANY message, so it gets the same backfill when it turns on.
     const welcomeTurningOn = enabled && !chatbot.welcome_enabled;
     const syncTurningOn =
       enabled && useKeywordTriggers && !chatbot.welcome_use_keyword_triggers;
-    if (welcomeTurningOn || syncTurningOn) {
+    const alwaysTurningOn = enabled && welcomeAlways && !chatbot.welcome_always;
+    if (welcomeTurningOn || syncTurningOn || alwaysTurningOn) {
       const { error: backfillError } = await supabase
         .from("conversations")
         .update({ welcomed_at: new Date().toISOString() })
@@ -93,6 +96,11 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
         welcome_flow_name: flowNs ? flowName : null,
         welcome_keywords: list,
         welcome_use_keyword_triggers: useKeywordTriggers,
+        // Written only once the column exists (or the owner turns it on), so this form
+        // still saves on a database that has not run the migration yet.
+        ...(chatbot.welcome_always !== undefined || welcomeAlways
+          ? { welcome_always: welcomeAlways }
+          : {}),
       })
       .eq("id", chatbot.id);
     setSaving(false);
@@ -175,6 +183,25 @@ export function WelcomeForm({ chatbot }: { chatbot: Chatbot }) {
               like &ldquo;hey&rdquo;) triggers the welcome; everything else goes to the AI.
               Comment-campaign opt-ins always get the welcome.
             </p>
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Label htmlFor="welcome-always">Welcome every new contact</Label>
+              <p className="text-sm text-muted-foreground">
+                When on, every new contact gets the welcome on their first message, whatever
+                they write. If that first message is a real question or detail (not just a
+                greeting or keyword), the AI also answers it right after the welcome.
+              </p>
+            </div>
+            <Switch
+              id="welcome-always"
+              checked={welcomeAlways}
+              onCheckedChange={(v) => {
+                setWelcomeAlways(v);
+                markDirty();
+              }}
+            />
           </div>
 
           <div className="flex items-start justify-between gap-4">

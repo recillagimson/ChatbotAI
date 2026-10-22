@@ -49,8 +49,20 @@ export interface WelcomeInput {
     welcome_flow_ns: string | null;
     welcome_keywords: string[];
     welcome_use_keyword_triggers: boolean;
+    // ON = every first message gets the welcome. An opener (rules 3, 5, 6) still gets
+    // the welcome alone; anything else gets the welcome AND an AI answer.
+    welcome_always?: boolean;
   };
 }
+
+/**
+ * What the webhook does with a first message:
+ *   "none"              -> no welcome, the AI answers as usual
+ *   "welcome_only"      -> the welcome replaces the AI reply (a bare opener)
+ *   "welcome_and_answer"-> the welcome goes out AND the AI answers the message
+ *                          (welcome_always on, and the message says something)
+ */
+export type WelcomeAction = "none" | "welcome_only" | "welcome_and_answer";
 
 /**
  * Decide whether to fire the Welcome VM flow for this inbound. Pure - the webhook
@@ -62,16 +74,26 @@ export interface WelcomeInput {
  *   5. message is exactly a greeting / welcome_keyword       -> true
  *   6. (opt-in) message matched a Keywords-tab trigger, when
  *      welcome_use_keyword_triggers is on                    -> true
+ *   7. welcome_always on (anything else, media included)     -> true, and the AI
+ *      answers the message too (welcomeAction "welcome_and_answer")
  */
-export function shouldSendWelcome(input: WelcomeInput): boolean {
+export function welcomeAction(input: WelcomeInput): WelcomeAction {
   const { chatbot } = input;
-  if (!chatbot.welcome_enabled || !chatbot.welcome_flow_ns) return false;
-  if (input.welcomedAt) return false;
-  if (input.entryPoint === "comment") return true;
-  if (input.hasMedia) return false;
-  if (isWelcomeOpener(input.text, chatbot.welcome_keywords)) return true;
-  // Sync with the Keywords tab: treat a keyword-trigger match as a welcome opener too,
-  // so the owner maintains one keyword list instead of a separate welcome list.
-  if (chatbot.welcome_use_keyword_triggers && input.keywordMatched) return true;
-  return false;
+  if (!chatbot.welcome_enabled || !chatbot.welcome_flow_ns) return "none";
+  if (input.welcomedAt) return "none";
+  if (input.entryPoint === "comment") return "welcome_only";
+  if (!input.hasMedia) {
+    if (isWelcomeOpener(input.text, chatbot.welcome_keywords)) return "welcome_only";
+    // Sync with the Keywords tab: treat a keyword-trigger match as a welcome opener too,
+    // so the owner maintains one keyword list instead of a separate welcome list.
+    if (chatbot.welcome_use_keyword_triggers && input.keywordMatched) return "welcome_only";
+  }
+  // A substantive opener (a question, detail, or media): welcome it too when the bot
+  // welcomes everyone, but the AI still has to answer what they said.
+  if (chatbot.welcome_always) return "welcome_and_answer";
+  return "none";
+}
+
+export function shouldSendWelcome(input: WelcomeInput): boolean {
+  return welcomeAction(input) !== "none";
 }
