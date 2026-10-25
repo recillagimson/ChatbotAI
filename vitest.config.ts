@@ -45,6 +45,7 @@ export default defineConfig({
       "tests/reply-gates*.spec.ts",
       "tests/send-welcome*.spec.ts",
       "tests/welcome-always*.spec.ts",
+      "tests/bot-off-tag*.spec.ts",
       "tests/bot-on*.spec.ts",
     ],
   },

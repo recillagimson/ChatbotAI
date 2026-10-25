@@ -174,7 +174,11 @@ async function returningReasonFor(bot: Record<string, unknown>, prior: Record<st
   return post("8", { external_user_id: "ig-555" });
 }
 
-async function reasonFor(bot: Record<string, unknown>, thread: Record<string, unknown>): Promise<unknown> {
+async function reasonFor(
+  bot: Record<string, unknown>,
+  thread: Record<string, unknown>,
+  extra: Record<string, unknown> = {}
+): Promise<unknown> {
   priorThreads = [];
   chatbotRow = {
     id: BOT_ID,
@@ -199,7 +203,7 @@ async function reasonFor(bot: Record<string, unknown>, thread: Record<string, un
     welcomed_at: "2026-09-01T00:00:00Z",
     ...thread,
   };
-  return post("7");
+  return post("7", extra);
 }
 
 beforeEach(() => {
@@ -435,5 +439,27 @@ describe("the chatbot's switches", () => {
     expect(sql.match(/update public\.chatbots/g) ?? []).toHaveLength(1);
     // The webhook reads chatbots on every DM: fail fast instead of queueing behind a long transaction.
     expect(sql).toMatch(/begin;\s+set local lock_timeout = '3s';[\s\S]*commit;/);
+  });
+});
+
+// 2026-10-25, Alex Bot: friends the owner had tagged BOT_OFF in ManyChat still got the
+// welcome VM and a pitch, because the tag only reaches us through the owner's "tag added"
+// automation. The webhook now reads the contact's own ManyChat tags before sending.
+describe("webhook: the BOT_OFF tag read live from ManyChat", () => {
+  const TAGGED = { contact: { id: "7", tags: [{ id: 1, name: "BOT_OFF" }] } };
+
+  it("stays silent for a contact tagged BOT_OFF even when the tag never synced", async () => {
+    expect(await reasonFor({}, {}, TAGGED)).toBe("bot_off_tag_live");
+    expect(await reasonFor({}, {}, { contact: { id: "7", tags: [{ name: "bot_off" }] } })).toBe("bot_off_tag_live");
+  });
+
+  it("answers as usual when the contact has other tags or none", async () => {
+    expect(await reasonFor({}, {}, { contact: { id: "7", tags: [{ name: "lead" }] } })).toBe("trivial_ack");
+    expect(await reasonFor({}, {})).toBe("trivial_ack");
+  });
+
+  it("the earlier gates still answer first", async () => {
+    expect(await reasonFor({}, { status: "ai_paused" }, TAGGED)).toBe("human_takeover");
+    expect(await reasonFor({}, { bot_off_at: "2026-10-01T00:00:00Z" }, TAGGED)).toBe("bot_off_stopped");
   });
 });

@@ -10,6 +10,7 @@ import {
 } from "@/lib/followup";
 import { toPlatform } from "@/lib/platforms";
 import { resolveManychatApiKey } from "@/lib/manychat";
+import { isTaggedBotOff } from "@/lib/bot-off-tag";
 import { fetchFollowupAssets, resolveAssetByKey, stepAssetKeys } from "@/lib/followup-assets";
 import { hasActiveAccess } from "@/lib/access";
 import { generateFollowupText } from "@/lib/anthropic";
@@ -184,6 +185,19 @@ async function run() {
     } catch {
       errors++;
       bump(reasons, "manychat_key_unavailable");
+      continue;
+    }
+    // A contact tagged BOT_OFF in ManyChat whose tag never synced to bot_off_at: record
+    // it and send nothing (lib/bot-off-tag.ts; fail-open, a ManyChat blip sends as usual).
+    if (await isTaggedBotOff({ subscriberId: row.manychat_subscriber_id, apiKey })) {
+      await supabase
+        .from("conversations")
+        .update({ bot_off_at: now.toISOString() })
+        .eq("id", row.id)
+        .is("bot_off_at", null)
+        .then(() => {}, () => {});
+      skipped++;
+      bump(reasons, "bot_off_tag_live");
       continue;
     }
     // Resolve the step's asset(s) from the chatbot's library. A step can attach

@@ -50,6 +50,7 @@ import { classifyConversation } from "@/lib/conversation-classify";
 import { insertMessageReturningId, markDeliveryFailed } from "@/lib/delivery";
 import { retrySupabase } from "@/lib/retry";
 import { welcomeAction, coerceKeywords } from "@/lib/welcome";
+import { isTaggedBotOff } from "@/lib/bot-off-tag";
 import { matchesResetKeyword } from "@/lib/reset-keyword";
 import { resetConversation } from "@/lib/reset-conversation";
 import { screenDisqualify, decideDisqualify, type ScreenOutcome } from "@/lib/conversation-screen";
@@ -1132,6 +1133,23 @@ export async function POST(request: NextRequest) {
   // request that cleared the flag a moment ago also cleared it on this snapshot, 4b-on.)
   if (existing?.bot_off_at) {
     return manychatReply("", { ai_skipped: true, reason: "bot_off_stopped" });
+  }
+
+  // 6-bot-off-live. The tag sync above can miss (a tag added in bulk, a contact tagged
+  // before they ever messaged, an automation switched off), so read the contact's tags
+  // from ManyChat itself before anything goes out. Tagged BOT_OFF: record it (the 6-bot-off
+  // gate and the follow-up cron then see it) and stay silent. Skipped for a BOT_ON request,
+  // which wins. Fail-open: an unreadable answer is "not tagged" (lib/bot-off-tag.ts).
+  if (!botOn && (await isTaggedBotOff({ body: json, subscriberId: body.subscriber_id, apiKey }))) {
+    if (conversationId) {
+      const { error: liveOffErr } = await supabase
+        .from("conversations")
+        .update({ bot_off_at: new Date().toISOString() })
+        .eq("id", conversationId)
+        .is("bot_off_at", null);
+      if (liveOffErr) console.error("[manychat-webhook] live bot_off write error", liveOffErr);
+    }
+    return manychatReply("", { ai_skipped: true, reason: "bot_off_tag_live" });
   }
 
   // 6-disqualified. A disqualified / detected-bot thread gets NO automated
