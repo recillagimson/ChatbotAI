@@ -1806,11 +1806,24 @@ export async function POST(request: NextRequest) {
       // finished backfilling, else the provisional attachment label. Vision
       // image parts stay this-run-only (known limitation for burst images).
       effectiveMessage = combineBurstText(burst, inboundId, effectiveMessage);
-      // BOT_ON only: a waiting attachment was silenced before its media was ever
-      // processed, so the placeholder is all the model would see. Say so, with the note
-      // it already gets for an attachment that could not be read.
-      if (botOn && burst.some((m) => m.content === ATTACHMENT_PLACEHOLDER)) {
-        effectiveMessage += `\n\n${UNSUPPORTED_NOTE}`;
+      if (botOn) {
+        // The shield screened the waiting text when this request arrived (6b-shield).
+        // A message stored SINCE then without a run of its own (a rate-limited one sits
+        // above the shield) is in this burst too, so screen what the model is actually
+        // about to read, after the wait, and steer the turn if it trips.
+        try {
+          if (detectExtractionAttempt(effectiveMessage).level !== "none") {
+            securityInstruction = EXTRACTION_REINFORCEMENT;
+          }
+        } catch {
+          /* fail-open */
+        }
+        // A waiting attachment was silenced before its media was ever processed, so
+        // the placeholder is all the model would see. Say so, with the note it already
+        // gets for an attachment that could not be read.
+        if (burst.some((m) => m.content === ATTACHMENT_PLACEHOLDER)) {
+          effectiveMessage += `\n\n${UNSUPPORTED_NOTE}`;
+        }
       }
     } else {
       // Desc order: [0] is the just-inserted user msg. Drop it, reverse to chrono.
