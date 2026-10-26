@@ -4,6 +4,7 @@ import {
   evaluateFollowup,
   sendFollowup,
   selectFlow,
+  aiStepWroteNothing,
   IG_WINDOW_DAYS,
   FOLLOWUP_ENABLED,
   RN_ENABLED,
@@ -231,7 +232,8 @@ async function run() {
     }
     // AI Follow up: when this step is AI-driven, write the message from the
     // conversation. Best-effort - on empty/failure overrideText stays undefined and
-    // sendFollowup falls back to the step's static text (or safely skips).
+    // the aiStepWroteNothing guard below skips the step (its text is an instruction
+    // for the AI, never a message).
     // Only generate when the step is AI-driven AND no flow will fire for this
     // subscriber's platform - a flow trigger ignores the caption, so generating
     // would waste an LLM call and mislabel the recorded message.
@@ -277,22 +279,16 @@ async function run() {
       }
     }
 
-    // AI step that produced nothing deliverable (generation failed) AND has no
-    // static fallback (no caption, assets, or flow): skip WITHOUT claiming. Otherwise
-    // sendFollowup's atomic claim advances last_followup_at/step_index/followup_count
-    // BEFORE its own nothing-deliverable guard, silently burning a full step delay
-    // before the next retry (and inflating the count) - and the cron would mislabel
-    // it as "claim_lost". Skipping here leaves the row due so the NEXT cron run
-    // re-attempts generation at the normal cadence. (A permanently-broken
+    // AI step the AI wrote no words for (generation failed or came back empty) and no
+    // flow fires: skip WITHOUT claiming, whatever the step's text says. That text is
+    // the owner's instruction to the AI, never a message: live 2026-10-26, with every
+    // AI call failing, the old fallback sent it raw to leads ("Bring up the current
+    // offer: ..."). Pictures alone don't go out either. Skipping here leaves the row
+    // due, so the NEXT cron run re-attempts generation, and the reason is logged as
+    // "ai_no_content" rather than "claim_lost". (A permanently-broken
     // all-assets-deleted static step still advance-skips inside sendFollowup - that
-    // path is intentional; this guard only catches the transient AI-failure tail.)
-    if (
-      decision.step.ai_generate &&
-      !(overrideText ?? "").trim() &&
-      !(decision.step.text ?? "").trim() &&
-      assets.length === 0 &&
-      !selectFlow(decision.step, toPlatform(row.platform))
-    ) {
+    // path is intentional; this guard only covers AI steps.)
+    if (aiStepWroteNothing(decision.step, overrideText, toPlatform(row.platform))) {
       skipped++;
       bump(reasons, "ai_no_content");
       continue;

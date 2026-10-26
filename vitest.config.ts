@@ -47,6 +47,7 @@ export default defineConfig({
       "tests/welcome-always*.spec.ts",
       "tests/bot-off-tag*.spec.ts",
       "tests/bot-on*.spec.ts",
+      "tests/followup-ai*.spec.ts",
     ],
   },
   resolve: {

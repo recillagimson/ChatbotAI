@@ -350,6 +350,31 @@ export function selectFlow(
 }
 
 /**
+ * The words a drip step may send. On an AI step (`ai_generate`) the step's `text` is
+ * guidance for the model, never a message, so only the AI's own words go out. Live
+ * 2026-10-26: every AI call failed, and Alex Bot's drip sent its raw instructions
+ * ("Bring up the current offer: ...") to 8 leads. A plain step sends its own text.
+ */
+export function followupMessageText(step: FollowupStep, overrideText?: string | null): string {
+  if (step.ai_generate) return overrideText ?? "";
+  return overrideText ?? step.text ?? "";
+}
+
+/**
+ * True when an AI step has nothing of its own to send: the AI wrote no words and no
+ * flow fires on this platform. The step then sends nothing and keeps its turn, so the
+ * next cron run asks the AI again. Pictures alone don't count: a proof picture with
+ * no message is not a follow-up.
+ */
+export function aiStepWroteNothing(
+  step: FollowupStep,
+  overrideText: string | null | undefined,
+  platform: Platform
+): boolean {
+  return !!step.ai_generate && !(overrideText ?? "").trim() && !selectFlow(step, platform);
+}
+
+/**
  * Send one drip step (media asset + text caption) and advance state.
  *
  * Concurrency-safe via CLAIM-BEFORE-SEND: the follow-up state is advanced with a
@@ -366,7 +391,9 @@ export function selectFlow(
  * in a single ManyChat call. Does NOT touch `last_message_at` (that tracks the
  * contact's real last inbound and gates the window).
  *
- * Returns the recorded message content, or null when the claim was lost.
+ * Returns the recorded message content, or null when nothing was sent: the claim was
+ * lost, the step had nothing deliverable, or it is an AI step the AI wrote no words
+ * for (that last case claims nothing, so the step stays due and is retried).
  */
 export async function sendFollowup(
   supabase: ReturnType<typeof createServiceClient>,
@@ -389,6 +416,12 @@ export async function sendFollowup(
   const prevIndex = conversation.followup_step_index ?? 0;
   const prevFollowupAt = conversation.last_followup_at ?? null;
   const claimedAt = now.toISOString();
+  const platform = toPlatform(conversation.platform);
+
+  // 0. An AI step the AI wrote nothing for has nothing of its own to send (its `text`
+  // is an instruction, never a message). Send nothing and claim nothing, so the step
+  // stays due and the next run asks the AI again.
+  if (aiStepWroteNothing(step, opts?.overrideText, platform)) return null;
 
   // 1. Claim: advance state only if it still matches what we evaluated.
   let claimQuery = supabase
@@ -415,10 +448,9 @@ export async function sendFollowup(
 
   // 2. Send. Clean the stored name so a never-resolved "{{first_name}}" doesn't
   // get sent; renderTemplate falls back to "there" when name is null.
-  const text = renderTemplate(opts?.overrideText ?? step.text ?? "", {
+  const text = renderTemplate(followupMessageText(step, opts?.overrideText), {
     name: cleanContactField(conversation.contact_name),
   });
-  const platform = toPlatform(conversation.platform);
   const flow = selectFlow(step, platform);
   const outbound = assets
     .map(assetToOutbound)
