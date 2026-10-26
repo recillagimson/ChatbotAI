@@ -211,6 +211,22 @@ own stop (`subscribed_stopped`, `disqualified_stopped`, `user_muted`), and any
 reason an ordinary message can get also applies (for example `rate_limited`;
 `monthly_cap_reached` still sends the standard holding line).
 
+**BOT_OFF tag.** Two ManyChat tag automations keep one contact silent: tag
+added posts `"bot_off": true`, tag removed posts `"bot_off": false`.
+```json
+{ "chatbot_id": "uuid", "subscriber_id": "123", "bot_off": true }
+```
+The DM flow's body works too: keep `platform` and the `contact` object (Full
+Contact Data) and add the `bot_off` line. A request whose `bot_off` is not
+JSON `null` is a tag change, never a message: the contact's last typed text is
+ignored and no message is stored. The response is `"reason": "bot_off_set"` or
+`"bot_off_cleared"`. `true`, `1`, `"true"`, `"1"`, `"yes"` and `"on"` set the
+flag; any other value clears it (`null` reads as no `bot_off` at all). A tag
+change does not mark the thread unread, move it up the inbox, or restart the
+follow-up timing: after removal the sequence carries on from the lead's last
+real message. Removing the tag does not answer what the contact sent
+meanwhile; BOT_ON does.
+
 On push channels (Instagram/Messenger/WhatsApp/Telegram) the webhook acks
 instantly with `{"ai_queued": true, "reply": ""}` and delivers the reply in the
 background after a short debounce (`REPLY_DEBOUNCE_MS`, default 5s): if the

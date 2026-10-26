@@ -472,13 +472,19 @@ export async function POST(request: NextRequest) {
   // word and the extraction shield are applied to the WAITING text instead (4b-on,
   // 6b-shield).
   const botOn = isTruthyFlag(body.bot_on);
+  // A BOT_OFF tag sync (bot_off present, true or false: see 4c) is not a message
+  // either, and 4c acks it before step 5 stores one. Blanked for the same reason, so
+  // its body may be Full Contact Data too: with the lead's last text left in, a tag
+  // applied within 30s of that text was swallowed by the dedup before 4c ran. Like
+  // BOT_ON it also skips the step-4 touch below.
+  const tagSync = botOn || body.bot_off != null;
 
   // Inbound media + the typed text. Either may be empty; we require at least one.
   // A media-CDN URL can arrive inside the message text (IG sends photos that
   // way), so it's pulled into mediaItems and stripped from the text the AI sees.
-  const mediaItems = botOn ? [] : normalizeMediaItems(body as unknown as Record<string, unknown>);
+  const mediaItems = tagSync ? [] : normalizeMediaItems(body as unknown as Record<string, unknown>);
   const hasMedia = mediaItems.length > 0;
-  const baseText = botOn ? "" : stripMediaUrls(body.message).trim();
+  const baseText = tagSync ? "" : stripMediaUrls(body.message).trim();
 
   // 3. Look up chatbot + verify subscription is active.
   // Auth is the per-chatbot webhook_secret (verified in 3a). We no longer hard-
@@ -829,9 +835,11 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-  } else if (!botOn) {
-    // (Skipped for a BOT_ON tag sync, which is not a message from the lead: it must
-    // not bump unread or move last_message_at, the follow-up window's clock.)
+  } else if (!tagSync) {
+    // (Skipped for a BOT_ON or BOT_OFF tag sync, which is not a message from the lead:
+    // it must not bump unread, move last_message_at (the follow-up window's clock and
+    // the inbox order) or clear last_followup_at (which would re-time the drip from
+    // the tag change).)
     //
     // A reply RE-ARMS the drip timing but KEEPS the sequence position, so the lead
     // advances to the NEXT step the next time they go quiet - never a repeat of
@@ -1040,7 +1048,8 @@ export async function POST(request: NextRequest) {
   }
 
   // 4c. ManyChat BOT_OFF tag sync. A tag-change automation posts bot_off=true (tag
-  // added) or bot_off=false (tag removed), with no message. Set/clear the per-subscriber
+  // added) or bot_off=false (tag removed); any text in its body (Full Contact Data's
+  // last typed text) was dropped at parse (tagSync). Set/clear the per-subscriber
   // silence flag and ack - the flag never reaches the AI. Runs before the empty-message
   // ack so a no-message control request is handled here. When bot_off is absent (a normal
   // message) this is skipped; a bot-off subscriber's later DMs are silenced by the

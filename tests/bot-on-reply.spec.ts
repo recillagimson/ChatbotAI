@@ -539,6 +539,71 @@ describe("BOT_ON beside the other flags", () => {
   });
 });
 
+describe("BOT_OFF sent with a Full Contact Data body is a tag change, never a message", () => {
+  // The DM flow's body plus the flag: the contact's last typed text rides along.
+  const fcd = (bot_off: unknown, contact: Record<string, unknown> = {}) => ({
+    platform: "instagram",
+    bot_off,
+    contact: { id: "7", last_input_text: "Both actually", ...contact },
+  });
+  // The lead typed that text seconds ago, so read as a message it is a duplicate.
+  beforeEach(() => {
+    duplicate.mockResolvedValue({ isDuplicate: true });
+  });
+
+  it("tag added: the flag is set even seconds after the lead's last message", async () => {
+    const body = await post(fcd(true));
+    expect(body.reason).toBe("bot_off_set");
+    expect(conversation!.bot_off_at).toEqual(expect.any(String));
+    expect(duplicate).not.toHaveBeenCalled();
+    expect(messageInserts()).toEqual([]);
+    await runQueued();
+    nothingSent();
+  });
+
+  it("tag removed: the flag is cleared, and what they sent meanwhile is not answered", async () => {
+    conversation!.bot_off_at = "2026-10-01T00:00:00Z";
+    const body = await post(fcd("false"));
+    expect(body.reason).toBe("bot_off_cleared");
+    expect(conversation!.bot_off_at).toBeNull();
+    await runQueued();
+    nothingSent();
+  });
+
+  // Not activity from the lead: the inbox order, the unread badge and the follow-up
+  // clock (last_message_at for the window, last_followup_at for the step delay) stay
+  // where the lead's real last message left them.
+  it.each([
+    ["added", fcd(true)],
+    ["removed", fcd(false)],
+    ["added with the flat body", { subscriber_id: "7", bot_off: true }],
+  ])("tag %s: the thread is not marked unread, moved up, or re-timed", async (_, req) => {
+    conversation!.bot_off_at = req.bot_off ? null : "2026-10-01T00:00:00Z";
+    await post(req);
+    expect(wrote("last_message_at")).toBe(false);
+    expect(wrote("unread_count")).toBe(false);
+    expect(wrote("last_followup_at")).toBe(false);
+    // The flag is the only thing the request changes on the thread.
+    const threadWrites = writes.filter((w) => w.table === "conversations").map((w) => Object.keys(w.row));
+    expect(threadWrites).toEqual([["bot_off_at"]]);
+  });
+
+  it("a last text that is the reset word does not wipe the thread", async () => {
+    vi.stubEnv("RESET_KEYWORD", "wipe-me-now");
+    const body = await post(fcd(true, { last_input_text: "wipe-me-now" }));
+    expect(body.reason).toBe("bot_off_set");
+    expect(wrote("keyword_fired")).toBe(false); // a reset clears it; nothing else here writes it
+    nothingSent();
+  });
+
+  it("tag removed for a contact never seen creates nothing, whatever text or media rides along", async () => {
+    conversation = null;
+    const body = await post({ ...fcd(false), attachment_url: "https://cdn.example.com/photo.jpg" });
+    expect(body.reason).toBe("empty_message");
+    expect(conversation).toBeNull();
+  });
+});
+
 describe("an ordinary message is handled exactly as it always was", () => {
   // An engaged lead on a bot with a persona (so a short message is not given the
   // canned acknowledgement), with an attachment placeholder still in their burst.
@@ -564,6 +629,12 @@ describe("an ordinary message is handled exactly as it always was", () => {
     expect(asked().userMessage).toContain("what does it cost?");
     expect(asked().userMessage).not.toContain("couldn't be read");
     expect(asked().turnInstruction).toBeNull();
+  });
+
+  it("is still a message when its body carries an empty bot_off (JSON null)", async () => {
+    expect((await post({ ...DM, bot_off: null })).ai_queued).toBe(true);
+    expect(duplicate).toHaveBeenCalledTimes(1);
+    expect(messageInserts()).toEqual([expect.objectContaining({ role: "user", content: "what does it cost?" })]);
   });
 
   it("is still screened on its own text for an attempt to pull out the bot's instructions", async () => {
