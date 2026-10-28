@@ -27,6 +27,7 @@ import {
   resolveAssetByKey,
   assetToOutbound,
   buildAssetCatalogBlock,
+  responseChannelMedia,
 } from "@/lib/followup-assets";
 import { firstMatchingGroup, keywordGateBlocks } from "@/lib/keyword-triggers";
 import { isSubstantiveInquiry, screenInquiryRelevance, MAX_QUESTION_SCREENS } from "@/lib/question-gate";
@@ -279,9 +280,43 @@ function manychatReply(text: string, extra: Record<string, unknown> = {}) {
  * A library picture a response channel's (TikTok) flow sends after the text: the owner
  * maps `media_key` (or `media_url`) and sends the matching picture from an Image block.
  */
-type ResponsePicture = { key: string; url: string };
+type ResponsePicture = { key: string; url: string; flowNs?: string };
+// An item with its own TikTok flow is sent by startResponseFlow instead, so the owner's
+// picture Conditions don't send it twice.
 const pictureFields = (p: ResponsePicture | null | undefined) =>
-  p ? { media_key: p.key, media_url: p.url } : {};
+  p && !p.flowNs ? { media_key: p.key, media_url: p.url } : {};
+
+// shortcut: a fixed pause so the reply text (which ManyChat sends after it reads our
+// response) lands before the item's flow; ManyChat gives no "sent" signal to wait on.
+const RESPONSE_FLOW_DELAY_MS = 3_000;
+
+/**
+ * Start a response channel item's own ManyChat flow, after the response is back. A refusal
+ * leaves a usage_log row (media_flow_failed), since the lead then gets no item at all.
+ */
+function startResponseFlow(
+  p: ResponsePicture | null | undefined,
+  to: {
+    supabase: ReturnType<typeof createServiceClient>;
+    subscriberId: string;
+    apiKey: string | null;
+    userId: string;
+    chatbotId: string;
+  }
+): void {
+  const flowNs = p?.flowNs;
+  const apiKey = to.apiKey;
+  if (!flowNs || !apiKey) return;
+  after(async () => {
+    await new Promise((r) => setTimeout(r, RESPONSE_FLOW_DELAY_MS));
+    try {
+      await sendManychatFlow({ subscriberId: to.subscriberId, flowNs, apiKey });
+    } catch (err) {
+      console.error("[manychat-webhook] media flow send failed", { key: p.key }, err);
+      await logPushFailure(to.supabase, to.userId, to.chatbotId, "media_flow_failed");
+    }
+  });
+}
 
 /**
  * Durable record that a reply was saved but never delivered (ManyChat push
@@ -385,7 +420,8 @@ async function persistAndPush(
  * flag only governs AI-emitted [[SEND_ASSET]] directives). Push only on channels
  * with a send API; on response channels (TikTok) the caller returns the text in
  * the body, plus the picture this returns (TikTok's Send Message has an Image block
- * but nothing for video or audio). Each side is independent - a ManyChat failure
+ * but nothing for video or audio), or the item's own TikTok flow for the caller to
+ * start. Each side is independent - a ManyChat failure
  * never loses the DB row.
  */
 async function sendKeywordCannedReply(
@@ -409,7 +445,7 @@ async function sendKeywordCannedReply(
   let picture: ResponsePicture | null = null;
   if ((push || respond) && assetKey) {
     const found = resolveAssetByKey(await fetchFollowupAssets(supabase, chatbotId), assetKey);
-    if (respond && found?.url && found.kind === "image") picture = { key: found.key, url: found.url };
+    if (respond) picture = responseChannelMedia(found, !!apiKey);
     asset = push || picture ? assetToOutbound(found) : null;
     if (asset && found?.url) {
       assetRow = {
@@ -1621,6 +1657,9 @@ export async function POST(request: NextRequest) {
             chatbot.user_id, chatbot.id, apiKey, platform, chatbot.link_buttons_enabled === true
           );
           await markFired();
+          startResponseFlow(picture, {
+            supabase, subscriberId: body.subscriber_id, apiKey, userId: chatbot.user_id, chatbotId: chatbot.id,
+          });
           // Sanitize the response-body copy (raw stays in the DB row): on response
           // channels (TikTok) the body IS the delivery, so owner em dashes must be
           // stripped just like AI replies; on push channels the send layer sanitizes.
@@ -1972,10 +2011,13 @@ export async function POST(request: NextRequest) {
     // Fetched once here so the same list feeds the system-prompt catalog AND the
     // directive resolution below. On a channel ManyChat can't push to (TikTok) the
     // owner's flow sends the picture the response names, and TikTok's Send Message has
-    // an Image block but nothing for video or audio: pictures only, one per reply.
+    // an Image block but nothing for video or audio: pictures only, one per reply, plus
+    // any item the owner gave its own TikTok flow (started through the API instead).
     const canPush = canPushPlatform(platform);
     const assetLib = chatbot.ai_media_enabled
-      ? (await fetchFollowupAssets(supabase, chatbot.id)).filter((a) => canPush || a.kind === "image")
+      ? (await fetchFollowupAssets(supabase, chatbot.id)).filter(
+          (a) => canPush || responseChannelMedia(a, !!apiKey) !== null
+        )
       : [];
     const mediaCatalog = assetLib.length ? buildAssetCatalogBlock(assetLib) : "";
 
@@ -2155,7 +2197,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
       resolvedAssets[key] = { kind: asset.kind, url: asset.url };
-      if (asset.kind === "image") picture ??= { key: asset.key, url: asset.url };
+      picture ??= responseChannelMedia(asset, !!apiKey);
       // media_type stays a real MIME (or null) - the inbox renderer matches on
       // startsWith("image/"|"audio/"|"video/").
       assetRows.push({
@@ -2541,6 +2583,9 @@ export async function POST(request: NextRequest) {
       refreshFlowState({ supabase, conversationId: conversationId!, chatbotId: chatbot.id }),
       syncTagWork ?? Promise.resolve(),
     ]);
+  });
+  startResponseFlow(syncResult?.picture, {
+    supabase, subscriberId: body.subscriber_id, apiKey, userId: chatbot.user_id, chatbotId: chatbot.id,
   });
   return manychatReply(replyText, { ai_delivery: "response", platform, ...pictureFields(syncResult?.picture) });
 }

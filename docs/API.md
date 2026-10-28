@@ -237,7 +237,19 @@ On TikTok (no send API) the reply comes back in `reply`. When the reply carries 
 picture (the AI attached one from the bot's Media library, or a keyword reply has
 one), the response also has `media_key` (the picture's key) and `media_url`; the
 owner's flow maps `media_key` and sends the matching picture from an Image block.
-Pictures only (no video or audio), at most one per reply.
+Pictures only (no video or audio), at most one per reply. A Media item with its own
+TikTok flow (`tiktok_flow_ns`, set with Edit on the Media tab; any kind) is sent
+differently: the response names no `media_key`, and the webhook starts that flow
+through ManyChat's `sendFlow` about 3 seconds after responding, so the reply text
+lands first.
+
+### `PATCH /api/followup-assets`
+Edit a Media item. JSON body: `{ id, label?, description?, tiktok_flow_ns?,
+tiktok_flow_name? }`. Only fields present change; a blank value clears it, and the
+flow name travels with its ns. The key, file and kind never change. Owners edit
+their own items; a superadmin edits any. 400 on a bad value, 404 when the item
+isn't the caller's, 500 with "needs a database update" before
+`supabase/migrations/2026-10-28-asset-tiktok-flow.sql` is applied.
 
 ### Error responses
 | Status | Body                                  | Cause                                      |

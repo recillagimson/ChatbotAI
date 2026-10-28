@@ -16,7 +16,8 @@ import type { Chatbot } from "@/lib/types";
  *    answers the opener instead), no link tokens in the prompt, and a token the model
  *    writes anyway never reaches the lead;
  *  - a picture goes back in the response (media_key/media_url) for the flow to send:
- *    pictures only, one per reply;
+ *    pictures only, one per reply. A library item with its own TikTok flow (any kind)
+ *    is sent by starting that flow a moment after the response instead;
  *  - Instagram, which ManyChat can push to, is unchanged.
  */
 
@@ -160,6 +161,17 @@ async function post(body: Record<string, unknown>) {
 async function runQueued() {
   for (const task of afterTasks.splice(0)) await task();
 }
+/** runQueued with the clock skipped past the pause before a TikTok media flow. */
+async function runQueuedWithTimers() {
+  vi.useFakeTimers({ toFake: ["setTimeout"] });
+  try {
+    const done = runQueued();
+    await vi.runAllTimersAsync();
+    await done;
+  } finally {
+    vi.useRealTimers();
+  }
+}
 /** What the model was asked on its (only) call. */
 const asked = () => generate.mock.calls[0][0] as Record<string, unknown>;
 const tiktok = (message: string) => ({ platform: "tiktok", message });
@@ -291,6 +303,82 @@ describe("TikTok gets only what TikTok can show", () => {
     await post(tiktok("can you show me results?"));
     expect(asked().mediaCatalog).toContain("reviews");
     expect(asked().mediaCatalog).not.toContain("demo");
+  });
+
+  it("an item with its own TikTok flow is offered too, whatever it is", async () => {
+    chatbotRow.ai_media_enabled = true;
+    fetchAssets.mockResolvedValue([REVIEWS, { ...DEMO_VIDEO, tiktok_flow_ns: "content_demo" }]);
+    await post(tiktok("can you show me results?"));
+    expect(asked().mediaCatalog).toContain("demo");
+  });
+
+  it("an item with a TikTok flow starts that flow after the reply, instead of naming the picture", async () => {
+    chatbotRow.ai_media_enabled = true;
+    fetchAssets.mockResolvedValue([{ ...REVIEWS, tiktok_flow_ns: "content_reviews", tiktok_flow_name: "Reviews" }]);
+    generate.mockResolvedValue({
+      text: "Here's what clients say\n[[SEND_ASSET: reviews]]",
+      tokensUsed: 9,
+      finishReason: "stop",
+      refused: false,
+    });
+    const body = await post(tiktok("can you show me results?"));
+    expect(body.reply).toBe("Here's what clients say");
+    // The owner's picture Conditions must not send it a second time.
+    expect(body).not.toHaveProperty("media_key");
+    expect(body).not.toHaveProperty("media_url");
+    // Started after the response is back, so the reply text lands first.
+    expect(sends.flow).not.toHaveBeenCalled();
+    await runQueuedWithTimers();
+    expect(sends.flow).toHaveBeenCalledWith({ subscriberId: "7", flowNs: "content_reviews", apiKey: "mc-test-key" });
+    // The thread still records what went out.
+    const sent = writes.filter((w) => w.table === "messages" && w.row.media_url);
+    expect(sent.map((w) => w.row.content)).toEqual(["(sent image: reviews)"]);
+  });
+
+  it("a flow ManyChat refuses is recorded as a failed send, so it shows up in the no-reply checks", async () => {
+    chatbotRow.ai_media_enabled = true;
+    fetchAssets.mockResolvedValue([{ ...REVIEWS, tiktok_flow_ns: "content_gone" }]);
+    generate.mockResolvedValue({ text: "Here you go\n[[SEND_ASSET: reviews]]", tokensUsed: 9, finishReason: "stop", refused: false });
+    sends.flow.mockRejectedValue(new Error("ManyChat sendFlow failed: 400 flow not found"));
+    await post(tiktok("can you show me results?"));
+    await runQueuedWithTimers();
+    const failed = writes.filter((w) => w.table === "usage_log" && w.row.event_type === "media_flow_failed");
+    expect(failed).toHaveLength(1);
+    expect(failed[0].row).toMatchObject({ user_id: "owner-1", chatbot_id: BOT_ID });
+  });
+
+  it("a keyword reply's item with a TikTok flow starts the flow, a video included", async () => {
+    fetchAssets.mockResolvedValue([{ ...DEMO_VIDEO, tiktok_flow_ns: "content_demo" }]);
+    chatbotRow.keyword_triggers = [
+      {
+        id: "g1",
+        keywords: ["demo"],
+        exclude: [],
+        first_reply_mode: "message",
+        first_reply_text: "Here's a quick demo!",
+        first_reply_asset_key: "demo",
+        on_repeat: "ai",
+        enabled: true,
+      },
+    ];
+    const body = await post(tiktok("demo"));
+    expect(body).toMatchObject({ reason: "keyword_trigger", reply: "Here's a quick demo!" });
+    expect(body).not.toHaveProperty("media_key");
+    await runQueuedWithTimers();
+    expect(sends.flow).toHaveBeenCalledWith({ subscriberId: "7", flowNs: "content_demo", apiKey: "mc-test-key" });
+    expect(sends.media).not.toHaveBeenCalled();
+  });
+
+  it("(on Instagram an item's TikTok flow is ignored: the file is sent as before)", async () => {
+    Object.assign(chatbotRow, { ai_media_enabled: true, reply_debounce_seconds: 0 });
+    conversation!.platform = "instagram";
+    fetchAssets.mockResolvedValue([{ ...REVIEWS, tiktok_flow_ns: "content_reviews" }]);
+    generate.mockResolvedValue({ text: "Here you go\n[[SEND_ASSET: reviews]]", tokensUsed: 9, finishReason: "stop", refused: false });
+    await post(instagram("can you show me results?"));
+    await runQueued();
+    const items = (sends.paced.mock.calls[0][0] as { items: { kind: string }[] }).items;
+    expect(items.map((i) => i.kind)).toContain("media");
+    expect(sends.flow).not.toHaveBeenCalled();
   });
 
   it("a picture the model attaches comes back as media_key and media_url, one per reply", async () => {

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AssetThumb } from "@/components/dashboard/asset-thumb";
+import { useManychatFlows } from "@/components/dashboard/use-manychat-flows";
 import { nextAssetKeys } from "@/lib/followup-assets";
 import type { FollowupAsset, FollowupAssetKind } from "@/lib/types";
 
@@ -92,6 +93,7 @@ export function FollowupAssetManager({
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null); // asset id whose Edit form is open
 
   // Object-URL previews parallel to `files`, rebuilt+revoked whenever the
   // selection changes (and on unmount). Mirrors the pattern in request-composer.
@@ -246,7 +248,8 @@ export function FollowupAssetManager({
       {assets.length > 0 && (
         <ul className="divide-y rounded-md border">
           {assets.map((a) => (
-            <li key={a.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3">
+            <li key={a.id} className="p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <AssetThumb kind={a.kind} url={a.url} className="h-12 w-12" />
                 <div className="min-w-0">
@@ -256,6 +259,11 @@ export function FollowupAssetManager({
                     {usedKeys.includes(a.key) && (
                       <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
                         in sequence
+                      </span>
+                    )}
+                    {a.tiktok_flow_ns && (
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                        TikTok: {a.tiktok_flow_name || "flow"}
                       </span>
                     )}
                   </div>
@@ -278,9 +286,42 @@ export function FollowupAssetManager({
                   )}
                 </div>
               </div>
-              <Button type="button" variant="ghost" size="sm" onClick={() => remove(a)}>
-                Delete
-              </Button>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-expanded={editing === a.id}
+                  aria-label={`Edit ${a.key}`}
+                  onClick={() => setEditing(editing === a.id ? null : a.id)}
+                >
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Delete ${a.key}`}
+                  onClick={() => remove(a)}
+                >
+                  Delete
+                </Button>
+              </div>
+              </div>
+              {editing === a.id && (
+                <AssetEditForm
+                  chatbotId={chatbotId}
+                  asset={a}
+                  onClose={(saved) => {
+                    setEditing(null);
+                    if (saved) {
+                      setError(null);
+                      setNotice(`Saved "${a.key}" ✓`);
+                      startTransition(() => router.refresh());
+                    }
+                  }}
+                />
+              )}
             </li>
           ))}
         </ul>
@@ -408,5 +449,113 @@ export function FollowupAssetManager({
         </Button>
       </form>
     </div>
+  );
+}
+
+/**
+ * Edit one item's label, "When to send" text and TikTok flow. Mounted only while open, so
+ * the ManyChat flow list loads only when someone edits. Sends just the changed fields, so
+ * a label edit still saves before the TikTok flow migration is applied.
+ */
+function AssetEditForm({
+  chatbotId,
+  asset,
+  onClose,
+}: {
+  chatbotId: string;
+  asset: FollowupAsset;
+  onClose: (saved: boolean) => void;
+}) {
+  const { flows, flowsError } = useManychatFlows(chatbotId);
+  const [label, setLabel] = useState(asset.label ?? "");
+  const [description, setDescription] = useState(asset.description ?? "");
+  const [flowNs, setFlowNs] = useState(asset.tiktok_flow_ns ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const id = `asset-edit-${asset.id}`;
+  // A saved flow that's no longer in ManyChat still shows, so saving doesn't silently drop it.
+  const savedFlowMissing = !!flowNs && !(flows ?? []).some((f) => f.ns === flowNs);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    const body: Record<string, unknown> = { id: asset.id };
+    if (label.trim() !== (asset.label ?? "")) body.label = label;
+    if (description.trim() !== (asset.description ?? "")) body.description = description;
+    if (flowNs !== (asset.tiktok_flow_ns ?? "")) {
+      body.tiktok_flow_ns = flowNs;
+      body.tiktok_flow_name = flows?.find((f) => f.ns === flowNs)?.name ?? null;
+    }
+    if (Object.keys(body).length === 1) {
+      onClose(false);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/followup-assets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(json.error ?? "Could not save changes.");
+        return;
+      }
+      onClose(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={save} className="mt-3 space-y-3 rounded-md border bg-muted/30 p-3">
+      <div className="space-y-1">
+        <Label htmlFor={`${id}-label`}>Label (optional)</Label>
+        <Input id={`${id}-label`} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={200} />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`${id}-desc`}>When to send (helps the AI)</Label>
+        <Textarea
+          id={`${id}-desc`}
+          rows={2}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          maxLength={2000}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`${id}-flow`}>TikTok flow (optional)</Label>
+        <select
+          id={`${id}-flow`}
+          value={flowNs}
+          onChange={(e) => setFlowNs(e.target.value)}
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        >
+          <option value="">None: send the file</option>
+          {savedFlowMissing && <option value={flowNs}>{asset.tiktok_flow_name || flowNs}</option>}
+          {(flows ?? []).map((f) => (
+            <option key={f.ns} value={f.ns}>
+              {f.name}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          {flows === null
+            ? "Loading your ManyChat flows..."
+            : flowsError ??
+              "TikTok only. The bot starts this flow instead of sending the file, so put the picture or video in the flow. Other channels still send the file."}
+        </p>
+      </div>
+      {error && <p className="rounded bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={busy}>
+          {busy ? "Saving..." : "Save"}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => onClose(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }

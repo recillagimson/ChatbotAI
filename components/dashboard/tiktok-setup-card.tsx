@@ -74,13 +74,16 @@ export function TikTokSetupCard({ chatbotId }: { chatbotId: string }) {
             add a Condition <Code>ai_media</Code> is that picture&apos;s key, with a Send
             Message holding the picture. Connect it after the step 5 Send Message and to
             the step 5 Condition&apos;s other branch, so a picture sent without text
-            still goes out.
+            still goes out. Simpler: build a ManyChat flow that sends the picture (or a
+            video). On the Media tab, click Edit on an item and pick a TikTok flow; the
+            bot starts that flow right after its reply, no Condition needed.
           </SetupStep>
         </ol>
         <p className="text-[12.5px] leading-relaxed text-ss-muted">
           On TikTok each reply arrives as one message and links are written as plain
           text. Follow-ups, videos and voice notes, link buttons, the welcome voice
-          message and replying from the inbox aren&apos;t available there. If the AI
+          message and replying from the inbox aren&apos;t available there (a video can
+          still go out through a Media item&apos;s TikTok flow). If the AI
           takes too long, the contact gets a short holding line instead of nothing.
         </p>
       </div>

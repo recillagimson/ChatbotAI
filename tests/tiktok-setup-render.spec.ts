@@ -70,6 +70,12 @@ describe("the Connect TikTok card", () => {
     expect(t).toMatch(/Condition ai_media is that picture's key/);
   });
 
+  it("offers the simpler way: pick a ManyChat flow for an item on the Media tab", () => {
+    const t = text(html());
+    expect(t).toMatch(/On the Media tab, click Edit on an item and pick a TikTok flow/);
+    expect(t).toMatch(/no Condition needed/);
+  });
+
   it("is the anchor the Connection card links to, and uses no em or en dashes", () => {
     expect(html()).toContain('id="connect-tiktok"');
     expect(hasUnicodeDash(text(html()))).toBe(false);

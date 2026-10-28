@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { resolveChatbotAccess, ownerScope } from "@/lib/chatbot-access";
 import { publicAssetUrl, removePublicAsset } from "@/lib/storage";
+import { assetEditPatch } from "@/lib/followup-assets";
+import { missingColumnFrom } from "@/lib/reset-conversation";
 import type { FollowupAsset, FollowupAssetKind } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -25,8 +27,10 @@ const AUDIO_MIMES = new Set([
 // Asset key: short lowercase handle used by steps + [[SEND_ASSET: key]] directives.
 const KEY_RE = /^[a-z0-9_-]{1,40}$/;
 
-const ASSET_COLUMNS =
-  "id, chatbot_id, user_id, key, label, description, kind, storage_path, url, mime, created_at";
+// "*" so the list keeps loading before a newer column's migration (tiktok_flow_*) lands.
+// Every column goes to the owner's browser: never store a secret on this table.
+const ASSET_COLUMNS = "*";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function normalizeKey(raw: unknown): string {
   return String(raw ?? "").trim().toLowerCase();
@@ -183,6 +187,52 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, asset: data as FollowupAsset });
+}
+
+/**
+ * PATCH /api/followup-assets - edit an asset's label, "When to send" text and TikTok
+ * flow (JSON: { id, label?, description?, tiktok_flow_ns?, tiktok_flow_name? }). The key,
+ * file and kind never change (see assetEditPatch). An owner edits only their own items
+ * (RLS plus the owner filter); a superadmin from /admin edits any client's.
+ */
+export async function PATCH(request: NextRequest) {
+  const access = await resolveChatbotAccess();
+  if (!access.ok) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+  const id = typeof body.id === "string" ? body.id : "";
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "Missing or invalid id." }, { status: 400 });
+
+  const edit = assetEditPatch(body);
+  if (!edit.ok) return NextResponse.json({ error: edit.error }, { status: 400 });
+
+  const { data, error } = await ownerScope(
+    access.db.from("followup_assets").update(edit.patch).eq("id", id),
+    access
+  )
+    .select(ASSET_COLUMNS)
+    .maybeSingle();
+  if (error) {
+    // A column the table lacks: 2026-10-28-asset-tiktok-flow.sql isn't applied yet.
+    if (missingColumnFrom(error, Object.keys(edit.patch))) {
+      return NextResponse.json(
+        { error: "Saving a TikTok flow needs a database update first. Ask your admin." },
+        { status: 500 }
+      );
+    }
+    console.error("[followup-assets] update failed", error);
+    return NextResponse.json({ error: "Could not save changes." }, { status: 500 });
+  }
+  if (!data) return NextResponse.json({ error: "Asset not found." }, { status: 404 });
+  return NextResponse.json({ ok: true, asset: data as unknown as FollowupAsset });
 }
 
 /**

@@ -148,9 +148,8 @@ export async function ChatbotTabPanel({
   if (tab === "followups" || tab === "media" || tab === "keywords") {
     const { data: followupAssets } = await supabase
       .from("followup_assets")
-      .select(
-        "id, chatbot_id, user_id, key, label, description, kind, storage_path, url, mime, created_at"
-      )
+      // "*" so this keeps loading before a newer column's migration (tiktok_flow_*) lands.
+      .select("*")
       .eq("chatbot_id", id)
       .order("created_at", { ascending: true });
     assets = (followupAssets ?? []) as FollowupAsset[];

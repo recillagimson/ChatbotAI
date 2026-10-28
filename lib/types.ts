@@ -165,6 +165,9 @@ export interface FollowupAsset {
   url: string | null;          // public media URL, or external link (kind='link')
   mime: string | null;
   created_at: string;
+  /** ManyChat flow started on TikTok instead of sending the file (2026-10-28-asset-tiktok-flow.sql). */
+  tiktok_flow_ns?: string | null;
+  tiktok_flow_name?: string | null;
 }
 
 export interface KnowledgeBaseEntry {
