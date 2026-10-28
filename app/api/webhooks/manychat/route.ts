@@ -2473,7 +2473,8 @@ export async function POST(request: NextRequest) {
               // Superseded: this run released its own claim before pacing, so a
               // non-null token that isn't ours means a newer inbound now owns the reply.
               // "superseded" (not true): the leftover bubbles are dropped, but a link
-              // flow this reply already recorded as sent still fires.
+              // this reply already recorded as sent (a flow, or a bubble with a URL)
+              // still goes out.
               if (fresh.reply_claimed_for && fresh.reply_claimed_for !== inboundId) {
                 return "superseded";
               }

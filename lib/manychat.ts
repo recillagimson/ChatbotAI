@@ -825,7 +825,8 @@ export function pacingFits(
  *
  * Every attempted bubble is always sent - a single send failure is logged and the
  * rest still send; throws once at the end if any failed so the caller can record
- * push_failed. Abort is NOT a failure (no throw).
+ * push_failed. Abort is NOT a failure (no throw), unless a pending link sent on a
+ * superseded run fails.
  */
 /** One step in an ordered paced delivery: a text bubble, a link-flow trigger, or a media
  *  send (one or more assets delivered together in a single ManyChat message). */
@@ -882,7 +883,8 @@ export function buildPacedItems(
  * waits out the "thinking" pause, later items wait a length-scaled gap, and a flow (no
  * text) waits the follow-on floor - all budget-guarded via pacingFits, so a long reply
  * never overshoots maxDuration. `shouldAbort` is checked before EVERY follow-on item
- * (text or flow), so a mute/takeover/supersede stops the rest, a flow included. `pace:
+ * (text or flow), so a mute/takeover stops the rest, a flow included; a supersede stops
+ * all but the pending links. `pace:
  * false` sends everything in order with no gaps/thinking (pacing disabled). A single
  * item's failure is logged and the rest still send; if any failed, the call throws at
  * the end so the caller's push-failure handler runs. sendManychatFlow retries internally
@@ -905,9 +907,10 @@ export async function sendManychatSequencePaced(opts: {
    * Optional stand-down check, evaluated before each FOLLOW-ON item (2..N). Return true
    * to stop sending the rest (lead muted / owner took over). Return "superseded" when a
    * newer inbound now owns the reply: the leftover text/media is dropped (the newer run
-   * answers), but any link flow not yet fired STILL fires - the "(sent link:)" marker is
-   * already persisted, so dropping the flow would leave the lead with no link and a bot
-   * that believes it sent one. If it throws, this loop keeps going (fail-open) - dropping
+   * answers), but any link not yet sent STILL goes out - a link flow (its "(sent link:)"
+   * marker is already persisted) or a text bubble holding a URL (the saved reply already
+   * holds it, and for a URL bot it set link_sent_at), so dropping it would leave the lead
+   * with no link and a bot that believes it sent one. If it throws, this loop keeps going (fail-open) - dropping
    * a legit reply on a transient blip is the worse outcome, and the next item re-checks
    * anyway.
    */
@@ -949,7 +952,8 @@ export async function sendManychatSequencePaced(opts: {
 
     // Mid-trickle stand-down: re-check before each follow-on item (item 0 was just
     // re-checked pre-push). Catches a stop/takeover/supersede that landed during the gap.
-    // A flow is an item too, so a link never fires after an abort. Fail-open if it throws.
+    // A flow is an item too, so no link goes out after a mute/takeover (a supersede still
+    // sends the pending links, below). Fail-open if it throws.
     if (i > 0 && opts.shouldAbort) {
       let abort: boolean | "superseded" = false;
       try {
@@ -962,18 +966,31 @@ export async function sendManychatSequencePaced(opts: {
           `[manychat] paced send aborted before item ${i + 1}/${items.length} (${abort === "superseded" ? "superseded" : "muted/takeover"})`
         );
         if (abort === "superseded") {
-          // Fire the link flows this run already recorded as sent; skip everything else.
+          // Send the links this run already saved as sent (a flow, or a bubble with a typed
+          // URL: the saved reply holds it); skip everything else. Instagram strips text
+          // links, so a link bubble there would arrive without its link.
+          const textLinks = textLinksAllowed(opts.platform);
           for (const rest of items.slice(i)) {
-            if (rest.kind !== "flow") continue;
             try {
-              await sendManychatFlow({
-                subscriberId: opts.subscriberId,
-                flowNs: rest.flowNs,
-                apiKey: opts.apiKey,
-              });
+              if (rest.kind === "flow") {
+                await sendManychatFlow({
+                  subscriberId: opts.subscriberId,
+                  flowNs: rest.flowNs,
+                  apiKey: opts.apiKey,
+                });
+              } else if (rest.kind === "text" && textLinks && hasTextLink(rest.text)) {
+                await sendManychatMessage({
+                  subscriberId: opts.subscriberId,
+                  text: rest.text,
+                  messageTag: opts.messageTag,
+                  apiKey: opts.apiKey,
+                  platform: opts.platform,
+                  linkButtons: opts.linkButtons,
+                });
+              }
             } catch (err) {
               anyFailed = true;
-              console.error("[manychat] superseded run: pending link flow failed", err);
+              console.error(`[manychat] superseded run: pending link (${rest.kind}) failed`, err);
             }
           }
           if (anyFailed) throw new Error("ManyChat paced send: one or more items failed");

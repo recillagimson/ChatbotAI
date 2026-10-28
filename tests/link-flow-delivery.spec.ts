@@ -10,9 +10,11 @@ import { sendManychatSequencePaced, type PacedItem } from "@/lib/manychat";
  */
 describe("sendManychatSequencePaced (interleaved delivery)", () => {
   let calls: string[];
+  let texts: string[];
 
   beforeEach(() => {
     calls = [];
+    texts = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: { body?: string }) => {
@@ -29,6 +31,7 @@ describe("sendManychatSequencePaced (interleaved delivery)", () => {
             isMedia =
               Array.isArray(messages) &&
               messages.some((m: { type?: string }) => m?.type && m.type !== "text");
+            if (!isMedia) texts.push(...messages.map((m: { text?: string }) => m?.text ?? ""));
           } catch {
             /* treat as text */
           }
@@ -86,6 +89,91 @@ describe("sendManychatSequencePaced (interleaved delivery)", () => {
     });
     expect(calls).toEqual(["text", "flow"]);
     expect(res.aborted).toBe(true);
+  });
+
+  it("still sends a pending link bubble (a typed URL) when a newer message supersedes the run", async () => {
+    // Live 2026-10-28: a Messenger bot that pastes its join link as a plain URL had its
+    // reply cut by the lead's next message, and the URL bubble went with the leftover text.
+    // The saved reply holds the URL, which marks the link as sent, so the bot then told the
+    // lead it was "right up there". Only the link goes out; the rest of the leftover is
+    // still dropped (the newer run answers).
+    const items: PacedItem[] = [
+      { kind: "text", text: "love that" },
+      { kind: "text", text: "you can join here" },
+      { kind: "text", text: "https://www.skool.com/example/about?ref=abc" },
+      { kind: "text", text: "let me know once you're in" },
+      { kind: "text", text: "or grab it at www.example.com/join" },
+    ];
+    const res = await sendManychatSequencePaced({
+      ...base,
+      platform: "messenger",
+      items,
+      shouldAbort: async () => "superseded", // fires before item 2
+    });
+    expect(texts).toEqual([
+      "love that",
+      "https://www.skool.com/example/about?ref=abc",
+      "or grab it at www.example.com/join",
+    ]);
+    expect(res.aborted).toBe(true);
+  });
+
+  it("on Instagram a leftover link bubble is not sent (text links never go out there)", async () => {
+    // Instagram strips every URL from text, so a link bubble would arrive as a lead-in with
+    // no link. There the link only travels as a flow, which still fires.
+    const items: PacedItem[] = [
+      { kind: "text", text: "love that" },
+      { kind: "text", text: "join here: https://www.skool.com/example/about" },
+      { kind: "flow", flowNs: "F_LINK" },
+    ];
+    await sendManychatSequencePaced({
+      ...base,
+      items,
+      shouldAbort: async () => "superseded",
+    });
+    expect(calls).toEqual(["text", "flow"]);
+  });
+
+  it("a failed pending link still lets the next one go out, then reports the failure", async () => {
+    // ManyChat refuses the URL bubble (permanent 400, no retry); the flow after it must
+    // still fire, and the call throws so the webhook logs push_failed.
+    const ok = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { body?: string }) =>
+        String(init?.body ?? "").includes("skool.com")
+          ? ({ ok: false, status: 400, text: async () => "refused" } as unknown as Response)
+          : ok(url, init as RequestInit)
+      )
+    );
+    const items: PacedItem[] = [
+      { kind: "text", text: "love that" },
+      { kind: "text", text: "https://www.skool.com/example/about" },
+      { kind: "flow", flowNs: "F_LINK" },
+    ];
+    await expect(
+      sendManychatSequencePaced({
+        ...base,
+        platform: "messenger",
+        items,
+        shouldAbort: async () => "superseded",
+      })
+    ).rejects.toThrow(/one or more items failed/);
+    expect(calls).toEqual(["text", "flow"]);
+  });
+
+  it("a mute or owner takeover still stops a leftover link bubble", async () => {
+    const items: PacedItem[] = [
+      { kind: "text", text: "love that" },
+      { kind: "text", text: "https://www.skool.com/example/about" },
+    ];
+    await sendManychatSequencePaced({
+      ...base,
+      platform: "messenger",
+      items,
+      shouldAbort: async () => true,
+    });
+    expect(texts).toEqual(["love that"]);
   });
 
   it("stops before a flow when shouldAbort fires (no link sends after takeover)", async () => {
