@@ -58,7 +58,16 @@ describe("the Connect TikTok card", () => {
     const t = text(html());
     expect(t).toContain("TikTok Business account");
     expect(t).toContain("EU, the UK or Switzerland");
-    expect(t).toMatch(/Follow-ups, images, link buttons, the welcome voice message and replying from the inbox/);
+    expect(t).toMatch(/Follow-ups, videos and voice notes, link buttons, the welcome voice message and replying from the inbox/);
+  });
+
+  it("explains the optional picture step: clear and map the field, one Condition per picture", () => {
+    const t = text(html());
+    expect(t).toContain("one picture per reply");
+    expect(t).toContain("Let the AI send media on its own");
+    expect(t).toMatch(/clear a text field named ai_media/);
+    expect(t).toMatch(/map media_key to ai_media/);
+    expect(t).toMatch(/Condition ai_media is that picture's key/);
   });
 
   it("is the anchor the Connection card links to, and uses no em or en dashes", () => {

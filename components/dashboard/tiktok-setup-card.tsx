@@ -65,12 +65,23 @@ export function TikTokSetupCard({ chatbotId }: { chatbotId: string }) {
             that sends <Code>ai_reply</Code>. When the bot stays quiet on purpose, the
             reply comes back empty and nothing is sent.
           </SetupStep>
+          <SetupStep n={6}>
+            Pictures (optional). The bot can send one picture per reply from the Media
+            tab once <strong className="font-semibold text-ss-ink">Let the AI send media on its own</strong>{" "}
+            is on (Follow-ups tab); a keyword reply&apos;s picture comes through too. In
+            step 2 also clear a text field named <Code>ai_media</Code>, and in step 4 also
+            map <Code>media_key</Code> to <Code>ai_media</Code>. Then, for each picture,
+            add a Condition <Code>ai_media</Code> is that picture&apos;s key, with a Send
+            Message holding the picture. Connect it after the step 5 Send Message and to
+            the step 5 Condition&apos;s other branch, so a picture sent without text
+            still goes out.
+          </SetupStep>
         </ol>
         <p className="text-[12.5px] leading-relaxed text-ss-muted">
           On TikTok each reply arrives as one message and links are written as plain
-          text. Follow-ups, images, link buttons, the welcome voice message and
-          replying from the inbox aren&apos;t available there. If the AI takes too
-          long, the contact gets a short holding line instead of nothing.
+          text. Follow-ups, videos and voice notes, link buttons, the welcome voice
+          message and replying from the inbox aren&apos;t available there. If the AI
+          takes too long, the contact gets a short holding line instead of nothing.
         </p>
       </div>
     </SsCard>

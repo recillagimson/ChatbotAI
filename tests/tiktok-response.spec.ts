@@ -13,8 +13,10 @@ import type { Chatbot } from "@/lib/types";
  *  - the AI call has a deadline inside that wait (a slow model gives the fallback line,
  *    never nothing), and the bot's reply wait never applies;
  *  - nothing that needs ManyChat's API is attempted on TikTok: no Welcome VM flow (the AI
- *    answers the opener instead), no sendable media, no link tokens in the prompt, and a
- *    token the model writes anyway never reaches the lead;
+ *    answers the opener instead), no link tokens in the prompt, and a token the model
+ *    writes anyway never reaches the lead;
+ *  - a picture goes back in the response (media_key/media_url) for the flow to send:
+ *    pictures only, one per reply;
  *  - Instagram, which ManyChat can push to, is unchanged.
  */
 
@@ -215,6 +217,12 @@ function row(id: string, role: string, content: string, minutes: number) {
   return { id, role, content, created_at: minutesAgo(minutes), media_url: null };
 }
 
+const asset = (key: string, kind: string, url: string) =>
+  ({ id: key, key, kind, url, mime: kind === "image" ? "image/png" : "video/mp4", label: null, description: null });
+const REVIEWS = asset("reviews", "image", "https://cdn.example.com/reviews.png");
+const RESULTS = asset("results", "image", "https://cdn.example.com/results.png");
+const DEMO_VIDEO = asset("demo", "video", "https://cdn.example.com/demo.mp4");
+
 describe("a TikTok DM is answered inside ManyChat's wait", () => {
   it("returns the reply in the response, with a deadline on the AI call", async () => {
     const before = Date.now();
@@ -277,11 +285,69 @@ describe("TikTok gets only what TikTok can show", () => {
     expect(sends.flow).toHaveBeenCalledTimes(1);
   });
 
-  it("the model is offered no sendable media", async () => {
+  it("the model is offered pictures only (TikTok's Send Message has no video or audio block)", async () => {
     chatbotRow.ai_media_enabled = true;
+    fetchAssets.mockResolvedValue([REVIEWS, DEMO_VIDEO]);
     await post(tiktok("can you show me results?"));
-    expect(fetchAssets).not.toHaveBeenCalled();
-    expect(asked().mediaCatalog).toBeFalsy();
+    expect(asked().mediaCatalog).toContain("reviews");
+    expect(asked().mediaCatalog).not.toContain("demo");
+  });
+
+  it("a picture the model attaches comes back as media_key and media_url, one per reply", async () => {
+    chatbotRow.ai_media_enabled = true;
+    fetchAssets.mockResolvedValue([REVIEWS, RESULTS]);
+    generate.mockResolvedValue({
+      text: "Here's what clients say\n[[SEND_ASSET: Reviews]]\n[[SEND_ASSET: results]]",
+      tokensUsed: 9,
+      finishReason: "stop",
+      refused: false,
+    });
+    const body = await post(tiktok("can you show me results?"));
+    expect(body.reply).toBe("Here's what clients say");
+    // The library's own key, whatever case the model wrote it in.
+    expect(body).toMatchObject({ media_key: "reviews", media_url: REVIEWS.url });
+    expect(sends.media).not.toHaveBeenCalled();
+    // Only the picture the flow sends is saved to the thread.
+    const pictures = writes.filter((w) => w.table === "messages" && w.row.media_url);
+    expect(pictures.map((w) => w.row.media_url)).toEqual([REVIEWS.url]);
+  });
+
+  it("a reply without a picture names none", async () => {
+    chatbotRow.ai_media_enabled = true;
+    fetchAssets.mockResolvedValue([REVIEWS]);
+    const body = await post(tiktok("what does it cost?"));
+    expect(body.reply).toBe(REPLY);
+    expect(body).not.toHaveProperty("media_key");
+    expect(body).not.toHaveProperty("media_url");
+  });
+
+  it("a keyword reply's picture comes back too, but not its video", async () => {
+    const group = (asset: string) => ({
+      id: "g1",
+      keywords: ["reviews"],
+      exclude: [],
+      first_reply_mode: "message",
+      first_reply_text: "Here are a few of our reviews!",
+      first_reply_asset_key: asset,
+      on_repeat: "ai",
+      enabled: true,
+    });
+    fetchAssets.mockResolvedValue([REVIEWS, DEMO_VIDEO]);
+    chatbotRow.keyword_triggers = [group("reviews")];
+    const body = await post(tiktok("reviews"));
+    expect(body).toMatchObject({
+      reason: "keyword_trigger",
+      reply: "Here are a few of our reviews!",
+      media_key: "reviews",
+      media_url: REVIEWS.url,
+    });
+    expect(sends.media).not.toHaveBeenCalled();
+
+    chatbotRow.keyword_triggers = [group("demo")];
+    conversation!.keyword_fired = [];
+    const video = await post(tiktok("reviews"));
+    expect(video.reason).toBe("keyword_trigger");
+    expect(video).not.toHaveProperty("media_key");
   });
 
   it("(on Instagram the media library is still read)", async () => {
@@ -324,5 +390,22 @@ describe("the prompt on TikTok has no link tokens", () => {
   it("Instagram, and callers that name no channel, keep it", () => {
     expect(prompt("instagram")).toContain("LINK DELIVERY");
     expect(prompt(null)).toContain("LINK DELIVERY");
+  });
+});
+
+describe("the prompt's media list on TikTok", () => {
+  const bot = { id: "b1", name: "Test", tone: "friendly" } as unknown as Chatbot;
+  const prompt = (platform: string | null) =>
+    buildSystemPrompt(bot, "", null, false, "- reviews (image)", null, null, null, null, { platform });
+
+  it("TikTok: one picture per reply, never a whole numbered set", () => {
+    expect(prompt("tiktok")).toContain("ONE PER REPLY");
+    expect(prompt("tiktok")).not.toContain("NUMBERED SETS");
+  });
+
+  it("Instagram, and callers that name no channel, keep numbered sets", () => {
+    expect(prompt("instagram")).toContain("NUMBERED SETS");
+    expect(prompt(null)).toContain("NUMBERED SETS");
+    expect(prompt("instagram")).not.toContain("ONE PER REPLY");
   });
 });

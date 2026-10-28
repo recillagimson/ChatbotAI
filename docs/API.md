@@ -233,6 +233,12 @@ background after a short debounce (`REPLY_DEBOUNCE_MS`, default 5s): if the
 contact sends more messages during the wait, the timer resets and the whole
 burst is answered with ONE consolidated reply.
 
+On TikTok (no send API) the reply comes back in `reply`. When the reply carries a
+picture (the AI attached one from the bot's Media library, or a keyword reply has
+one), the response also has `media_key` (the picture's key) and `media_url`; the
+owner's flow maps `media_key` and sends the matching picture from an Image block.
+Pictures only (no video or audio), at most one per reply.
+
 ### Error responses
 | Status | Body                                  | Cause                                      |
 |--------|---------------------------------------|--------------------------------------------|

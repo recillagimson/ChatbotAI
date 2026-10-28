@@ -276,6 +276,14 @@ function manychatReply(text: string, extra: Record<string, unknown> = {}) {
 }
 
 /**
+ * A library picture a response channel's (TikTok) flow sends after the text: the owner
+ * maps `media_key` (or `media_url`) and sends the matching picture from an Image block.
+ */
+type ResponsePicture = { key: string; url: string };
+const pictureFields = (p: ResponsePicture | null | undefined) =>
+  p ? { media_key: p.key, media_url: p.url } : {};
+
+/**
  * Durable record that a reply was saved but never delivered (ManyChat push
  * failed after retries). usage_log's event_type is free text, so no migration;
  * scripts/diag-noreply.ps1 surfaces these. Best-effort: a logging failure must
@@ -376,8 +384,9 @@ async function persistAndPush(
  * is OWNER-configured, so it sends regardless of chatbot.ai_media_enabled (that
  * flag only governs AI-emitted [[SEND_ASSET]] directives). Push only on channels
  * with a send API; on response channels (TikTok) the caller returns the text in
- * the body and media is skipped (no send API there). Each side is independent -
- * a ManyChat failure never loses the DB row.
+ * the body, plus the picture this returns (TikTok's Send Message has an Image block
+ * but nothing for video or audio). Each side is independent - a ManyChat failure
+ * never loses the DB row.
  */
 async function sendKeywordCannedReply(
   supabase: ReturnType<typeof createServiceClient>,
@@ -390,15 +399,18 @@ async function sendKeywordCannedReply(
   apiKey: string | null,
   platform: Platform,
   linkButtons: boolean
-): Promise<void> {
+): Promise<ResponsePicture | null> {
   const push = !!apiKey && canPushPlatform(platform);
+  const respond = !canPushPlatform(platform);
 
-  // Resolve the optional asset only when we can actually push it.
+  // Resolve the optional asset only when it can reach the lead.
   let asset: OutboundAsset | null = null;
   let assetRow: { content: string; media_url: string; media_type: string | null } | null = null;
-  if (push && assetKey) {
+  let picture: ResponsePicture | null = null;
+  if ((push || respond) && assetKey) {
     const found = resolveAssetByKey(await fetchFollowupAssets(supabase, chatbotId), assetKey);
-    asset = assetToOutbound(found);
+    if (respond && found?.url && found.kind === "image") picture = { key: found.key, url: found.url };
+    asset = push || picture ? assetToOutbound(found) : null;
     if (asset && found?.url) {
       assetRow = {
         content: `(sent ${found.kind}: ${found.key})`,
@@ -438,6 +450,7 @@ async function sendKeywordCannedReply(
       if (!asset) await markDeliveryFailed(supabase, textMessageId);
     }
   }
+  return picture;
 }
 
 /**
@@ -1602,7 +1615,7 @@ export async function POST(request: NextRequest) {
         // the AI rather than silently sending nothing yet marking itself fired.
         const text = keywordGroup.first_reply_text?.trim() ?? "";
         if (canCanned && text) {
-          await sendKeywordCannedReply(
+          const picture = await sendKeywordCannedReply(
             supabase, conversationId!, body.subscriber_id, text,
             keywordGroup.first_reply_asset_key ?? null,
             chatbot.user_id, chatbot.id, apiKey, platform, chatbot.link_buttons_enabled === true
@@ -1611,7 +1624,11 @@ export async function POST(request: NextRequest) {
           // Sanitize the response-body copy (raw stays in the DB row): on response
           // channels (TikTok) the body IS the delivery, so owner em dashes must be
           // stripped just like AI replies; on push channels the send layer sanitizes.
-          return manychatReply(sanitizeReply(text), { ai_skipped: true, reason: "keyword_trigger" });
+          return manychatReply(sanitizeReply(text), {
+            ai_skipped: true,
+            reason: "keyword_trigger",
+            ...pictureFields(picture),
+          });
         }
         // mid-burst or no text → fall through to the AI (canned deferred, not marked).
       } else {
@@ -1686,6 +1703,8 @@ export async function POST(request: NextRequest) {
      *  The delivery block looks each `media` step's key up here; unresolved keys are absent
      *  and simply skipped. */
     resolvedAssets: Record<string, OutboundAsset>;
+    /** The first resolved picture, which the response path returns for the flow to send. */
+    picture: ResponsePicture | null;
     tagWork?: Promise<void>;
   } | null> => {
     // 6e. Process any inbound media (network): transcribe audio/video, read
@@ -1951,10 +1970,12 @@ export async function POST(request: NextRequest) {
 
     // 7a. Follow-up media library - only when the bot may send AI-triggered media.
     // Fetched once here so the same list feeds the system-prompt catalog AND the
-    // directive resolution below. Not on a channel ManyChat can't push to (TikTok):
-    // media can't reach the lead there, so the model is never offered any.
-    const assetLib = chatbot.ai_media_enabled && canPushPlatform(platform)
-      ? await fetchFollowupAssets(supabase, chatbot.id)
+    // directive resolution below. On a channel ManyChat can't push to (TikTok) the
+    // owner's flow sends the picture the response names, and TikTok's Send Message has
+    // an Image block but nothing for video or audio: pictures only, one per reply.
+    const canPush = canPushPlatform(platform);
+    const assetLib = chatbot.ai_media_enabled
+      ? (await fetchFollowupAssets(supabase, chatbot.id)).filter((a) => canPush || a.kind === "image")
       : [];
     const mediaCatalog = assetLib.length ? buildAssetCatalogBlock(assetLib) : "";
 
@@ -2110,10 +2131,12 @@ export async function POST(request: NextRequest) {
     // most common cause of "the bot isn't sending its images" - see the numbered-key gotcha,
     // where bulk upload names files name_1/name_2 so a prompt against the bare `name` matches
     // nothing). resolvedAssets is looked up by the delivery block at each media step.
-    const MAX_AI_ASSETS = Math.max(1, Math.min(10, Number(process.env.MAX_AI_ASSETS) || 6));
+    // A response channel's flow sends one picture per reply (see 7a).
+    const MAX_AI_ASSETS = canPush ? Math.max(1, Math.min(10, Number(process.env.MAX_AI_ASSETS) || 6)) : 1;
     const mediaKeys = linkPlan.deliver.flatMap((s) => (s.kind === "media" ? [s.key] : []));
     const resolvedAssets: Record<string, OutboundAsset> = {};
     const assetRows: { content: string; media_url: string; media_type: string | null }[] = [];
+    let picture: ResponsePicture | null = null;
     if (mediaKeys.length > MAX_AI_ASSETS) {
       console.warn(
         "[manychat-webhook] asset cap hit - dropping keys",
@@ -2132,6 +2155,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
       resolvedAssets[key] = { kind: asset.kind, url: asset.url };
+      if (asset.kind === "image") picture ??= { key: asset.key, url: asset.url };
       // media_type stays a real MIME (or null) - the inbox renderer matches on
       // startsWith("image/"|"audio/"|"video/").
       assetRows.push({
@@ -2365,7 +2389,7 @@ export async function POST(request: NextRequest) {
       })();
     }
 
-    return { text: replyText, deliver: linkPlan.deliver, resolvedAssets, tagWork };
+    return { text: replyText, deliver: linkPlan.deliver, resolvedAssets, picture, tagWork };
   };
 
   // 10. Deliver. Two paths depending on whether the channel has a ManyChat send API:
@@ -2491,8 +2515,7 @@ export async function POST(request: NextRequest) {
   // shares the ~10s timeout risk we avoid for push channels, but TikTok replies are
   // short. Auto-upgrades to the push path once PLATFORM_META gives the channel a
   // sendContent type (canPush=true).
-  // Media assets can't be pushed on response channels (no send API), so only the
-  // text is returned here; AI media is a push-channel feature.
+  // A picture the model attached comes back as media_key/media_url for the flow to send.
   let syncResult: Awaited<ReturnType<typeof generateAndPersistReply>> = null;
   try {
     // On a normal response (non-push) channel the pre-reply disqualify screen is
@@ -2518,7 +2541,7 @@ export async function POST(request: NextRequest) {
       syncTagWork ?? Promise.resolve(),
     ]);
   });
-  return manychatReply(replyText, { ai_delivery: "response", platform });
+  return manychatReply(replyText, { ai_delivery: "response", platform, ...pictureFields(syncResult?.picture) });
 }
 
 export async function GET() {
