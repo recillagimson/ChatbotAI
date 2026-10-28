@@ -249,6 +249,8 @@ export default async function ConversationDetailPage({
 
       <ConversationReplyBox
         conversationId={conversation.id}
+        platform={conversation.platform}
+        liveChatUrl={conversation.manychat_live_chat_url ?? null}
         botSilent={botReplySilenced(conversation, {
           keep_replies_when_tagged: keepRepliesWhenTagged,
           keep_replies_when_subscribed:

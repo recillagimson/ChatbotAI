@@ -189,11 +189,11 @@ the `platform` value (and that channel's username variable).
    - Set `platform` to the channel this flow runs on: `instagram`, `messenger` (Facebook), `whatsapp`, `telegram`, or `tiktok`. Use that channel's username variable (e.g. `{{ig_username}}` on Instagram, `{{user_name}}` elsewhere).
 4. **Delivery:**
    - **Instagram / Facebook / WhatsApp / Telegram:** the reply is **pushed automatically** by the app - no extra step (the External Request returns instantly with `ai_queued`).
-   - **TikTok:** ManyChat has no TikTok sending API yet, so in **Response Mapping** map the JSON field `reply` to a custom field `ai_reply` (text), then add a **Send Message** action that posts `ai_reply`.
+   - **TikTok:** ManyChat has no TikTok sending API yet, so the reply comes back in the request's response and the flow sends it. Trigger the flow on **User sends a message**, and before the External Request add **Clear Custom Field** for a text field `ai_reply`. In the request's **Response Mapping** map the JSON field `reply` to `ai_reply`. Then add a **Condition** (`ai_reply` has any value) with a **Send Message** action that posts `ai_reply` on that branch. A turn the bot answers with silence returns an empty `reply`; clearing first and the condition keep the previous reply from being sent again. The bot's **Connect TikTok** card (Connection tab) shows the same steps with the bot's own body.
 5. **Publish** the flow.
 
 > The `chatbot_id` comes from `/chatbots/[id]` in your dashboard - copy the UUID after creating a chatbot in step 7. The same `chatbot_id` + secret is reused across all of that bot's channel flows.
-> Note: TikTok messaging is in beta and unavailable for accounts in the EU/UK.
+> Note: TikTok messaging needs a TikTok Business account with messaging connected in ManyChat, and is unavailable for accounts in the EU, UK and Switzerland. On TikTok each reply is one message with links as plain text; follow-ups, images, link buttons, the welcome voice message and manual replies from the inbox are not available. The AI call is held to 8 seconds so the reply (or the holding line) is back before ManyChat stops waiting.
 
 ### 5d. ManyChat API key (per-chatbot, in-app)
 Each customer enters their ManyChat API key on their chatbot page (**Chatbots → [your bot]**). The app validates the key against ManyChat and stores it encrypted - no `.env` entry needed per customer.

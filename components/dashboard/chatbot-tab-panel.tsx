@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { GraduationCap, Key, TriangleAlert, Zap } from "lucide-react";
@@ -18,6 +17,8 @@ import { WebhookSecretField } from "@/components/dashboard/webhook-secret-field"
 import { BotTrainer } from "@/components/dashboard/bot-trainer";
 import { KnowledgeSection } from "@/components/dashboard/knowledge-section";
 import { ScrollToHash } from "@/components/dashboard/scroll-to-hash";
+import { Code, Field, SetupStep } from "@/components/dashboard/setup-bits";
+import { TikTokSetupCard, TIKTOK_ANCHOR } from "@/components/dashboard/tiktok-setup-card";
 import { Sk, SkCard, SkCardHead } from "@/components/ss/skeleton";
 import { SsCard, SsCardHead, SsCardLink } from "@/components/ss/card";
 import { SsChip, SsStatus } from "@/components/ss/controls";
@@ -600,11 +601,13 @@ export async function ChatbotTabPanel({
                 </p>
                 <p className="text-[12.5px] leading-relaxed text-ss-body">
                   For Instagram, Facebook, WhatsApp and Telegram the reply is
-                  delivered automatically - no extra step needed.{" "}
+                  delivered automatically, with no extra step.{" "}
                   <strong className="font-semibold text-ss-ink">TikTok</strong>{" "}
-                  can&apos;t receive API pushes yet, so for the TikTok flow map the
-                  response field <Code>reply</Code> to a custom field and add a
-                  Send Message step.
+                  needs a few more steps in the flow: see{" "}
+                  <a href={`#${TIKTOK_ANCHOR}`} className="font-semibold text-ss-indigo-600">
+                    Connect TikTok
+                  </a>{" "}
+                  below.
                 </p>
                 <p className="text-[12.5px] leading-relaxed text-ss-muted">
                   Reminder: Instagram and Facebook only accept an automated send
@@ -621,6 +624,8 @@ export async function ChatbotTabPanel({
                 </p>
               </div>
             </SsCard>
+
+            <TikTokSetupCard chatbotId={chatbot.id} />
 
             {/* New Instagram followers (lib/follows.ts). Statistics' "Set it up"
                 links here, so the anchor id must stay FOLLOWERS_ANCHOR. */}
@@ -802,29 +807,6 @@ function maskSecret(secret: string | null | undefined): string {
   return `${secret.slice(0, 6)}…${secret.slice(-5)}`;
 }
 
-function Code({ children }: { children: ReactNode }) {
-  return (
-    <code className="rounded-[5px] bg-ss-chip px-1.5 py-0.5 font-mono text-[11.5px] text-ss-ink">
-      {children}
-    </code>
-  );
-}
-
-/** One numbered setup step, styled like the ManyChat guide in Settings. */
-function SetupStep({ n, children }: { n: number; children: ReactNode }) {
-  return (
-    <li className="flex gap-3">
-      <span
-        className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-ss-indigo-50 font-display text-[11px] font-bold leading-none text-ss-indigo-600"
-        aria-hidden="true"
-      >
-        {n}
-      </span>
-      <span className="text-[12.5px] leading-relaxed text-ss-body">{children}</span>
-    </li>
-  );
-}
-
 /**
  * In-page links to each section of the Prompt & Knowledge tab. Plain hash
  * anchors (no router round trip); the targets carry scroll-mt so the heading is
@@ -853,16 +835,6 @@ function PromptJumpLinks() {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="ss-eyebrow mb-1.5 text-ss-muted">{label}</p>
-      <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-chip bg-ss-page px-3.5 py-3 font-mono text-[11.5px] leading-relaxed text-ss-ink">
-        {value}
-      </pre>
-    </div>
-  );
-}
 
 /**
  * The placeholder for a tab that's loading. Shaped per tab rather than one generic

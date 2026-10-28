@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Lock, Send, Sparkles } from "lucide-react";
 import { SsButton } from "@/components/ss/controls";
+import { canPushPlatform, platformLabel, toPlatform } from "@/lib/platforms";
 
 const MAX_LEN = 1000;
 
@@ -17,13 +18,23 @@ const MAX_LEN = 1000;
  * (the same engine the live bot uses) and drops it into the box to edit. "Send"
  * posts to /reply, which pushes the message to the contact via ManyChat and
  * records it as a `human_agent` message. Drafting delivers nothing - only Send does.
+ *
+ * On a channel ManyChat can't send to (TikTok) there is no composer: /reply would
+ * refuse the send, so the box says where to reply instead (with the ManyChat link when
+ * the thread has one).
  */
 export function ConversationReplyBox({
   conversationId,
   botSilent,
+  platform = null,
+  liveChatUrl = null,
 }: {
   conversationId: string;
   botSilent: boolean;
+  /** The thread's channel; a missing value is the legacy default (Instagram). */
+  platform?: string | null;
+  /** The thread's ManyChat Live Chat link, if known. */
+  liveChatUrl?: string | null;
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -33,6 +44,37 @@ export function ConversationReplyBox({
   const [manychatUrl, setManychatUrl] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [drafting, setDrafting] = useState(false);
+
+  const channel = toPlatform(platform);
+  if (!canPushPlatform(channel)) {
+    const label = platformLabel(channel);
+    return (
+      <div className="flex-none border-t border-ss-line bg-ss-surface px-5 py-4 sm:px-6">
+        <div className="flex items-start gap-2.5 rounded-chip border border-ss-line bg-ss-page px-3.5 py-3">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-ss-muted" aria-hidden="true" />
+          <p className="text-[12.5px] leading-snug text-ss-body">
+            {botSilent
+              ? `Replies to ${label} contacts can't be sent from here, because ManyChat can't send to ${label} yet. Reply in the ${label} app or in ManyChat's Live Chat.`
+              : `The AI is handling this thread. ${label} replies can't be sent from here, so to answer yourself, pause the AI above and reply in the ${label} app or in ManyChat's Live Chat.`}
+            {liveChatUrl && (
+              <>
+                {" "}
+                <a
+                  href={liveChatUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-semibold text-ss-ink underline underline-offset-2 hover:text-ss-indigo"
+                >
+                  Open in ManyChat
+                  <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                </a>
+              </>
+            )}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!botSilent) {
     return (
