@@ -233,15 +233,20 @@ background after a short debounce (`REPLY_DEBOUNCE_MS`, default 5s): if the
 contact sends more messages during the wait, the timer resets and the whole
 burst is answered with ONE consolidated reply.
 
-On TikTok (no send API) the reply comes back in `reply`. When the reply carries a
+On TikTok (no send API) the reply comes back in `reply`, and also split the way the
+push channels split their bubbles into `reply_1`, `reply_2` and `reply_3` (always all
+three, `""` when unused; anything past the third part rides in `reply_3`). The owner's
+flow sends each part with a 10-second Smart Delay between them. A TikTok reply is held
+until `RESPONSE_MIN_REPLY_MS` (env, default 6000, capped at 7000) after the request
+arrived, so it doesn't land instantly. When the reply carries a
 picture (the AI attached one from the bot's Media library, or a keyword reply has
 one), the response also has `media_key` (the picture's key) and `media_url`; the
 owner's flow maps `media_key` and sends the matching picture from an Image block.
 Pictures only (no video or audio), at most one per reply. A Media item with its own
 TikTok flow (`tiktok_flow_ns`, set with Edit on the Media tab; any kind) is sent
 differently: the response names no `media_key`, and the webhook starts that flow
-through ManyChat's `sendFlow` about 3 seconds after responding, so the reply text
-lands first.
+through ManyChat's `sendFlow` about 3 seconds after responding, plus 11 seconds for
+each reply part after the first, so the whole reply lands first.
 
 ### `PATCH /api/followup-assets`
 Edit a Media item. JSON body: `{ id, label?, description?, tiktok_flow_ns?,

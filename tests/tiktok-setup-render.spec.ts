@@ -70,6 +70,15 @@ describe("the Connect TikTok card", () => {
     expect(t).toMatch(/Condition ai_media is that picture's key/);
   });
 
+  it("explains how to send the reply as several messages with pauses", () => {
+    const t = text(html());
+    expect(t).toMatch(/map reply_1 to ai_reply instead of reply/);
+    expect(t).toMatch(/Smart Delay of 10 seconds/);
+    expect(t).toContain("ai_reply_2");
+    expect(t).toContain("ai_reply_3");
+    expect(t).toMatch(/Required/);
+  });
+
   it("offers the simpler way: pick a ManyChat flow for an item on the Media tab", () => {
     const t = text(html());
     expect(t).toMatch(/On the Media tab, click Edit on an item and pick a TikTok flow/);

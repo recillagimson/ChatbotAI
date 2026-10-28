@@ -129,6 +129,27 @@ export const maxDuration = 300;
 // it can't), leaving about 2s to save the turn and return it.
 const RESPONSE_PATH_MODEL_DEADLINE_MS = 8_000;
 
+// The response channel's version of the push channels' paced bubbles: the owner's TikTok
+// flow sends reply_1..reply_3 as separate messages with a Smart Delay between them
+// (ManyChat's minimum is 10s), and a fast reply is held a moment before it returns.
+const RESPONSE_REPLY_PARTS = 3;
+const RESPONSE_PART_GAP_MS = 11_000; // the flow's 10s Smart Delay plus ManyChat's send
+
+/** The reply split the way the push channels split their bubbles, at most 3 parts. */
+const replyParts = (text: string) => (text ? splitIntoMessages(text, RESPONSE_REPLY_PARTS) : []);
+
+/**
+ * Hold a response-channel reply until RESPONSE_MIN_REPLY_MS (default 6s) after the request
+ * arrived, so it doesn't land the instant the lead hits send. Capped at 7s: ManyChat stops
+ * waiting at about 10s, and a slow model is never held further.
+ */
+async function holdResponse(startedAt: number): Promise<void> {
+  const raw = Number(process.env.RESPONSE_MIN_REPLY_MS ?? 6_000);
+  const min = Number.isFinite(raw) ? Math.max(0, Math.min(raw, 7_000)) : 6_000;
+  const wait = min - (performance.now() - startedAt);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+}
+
 const BodySchema = z.object({
   chatbot_id: z.string().uuid(),
   subscriber_id: z.union([z.string(), z.number()]).transform(String),
@@ -268,10 +289,15 @@ function manychatReply(text: string, extra: Record<string, unknown> = {}) {
   // isolateLinkBubbles mirrors the push path (buildOutboundMessages): every link
   // sits on its own bubble with the full URL intact.
   const bubbles = text ? splitIntoMessages(text).flatMap(isolateLinkBubbles) : [];
+  // Always every part, "" when unused, so a flow's mapping overwrites the last turn's value.
+  const parts = replyParts(text);
   return NextResponse.json({
     version: "v2",
     content: { messages: bubbles.map((t) => ({ type: "text", text: t })) },
     reply: text,
+    ...Object.fromEntries(
+      Array.from({ length: RESPONSE_REPLY_PARTS }, (_, i) => [`reply_${i + 1}`, parts[i] ?? ""])
+    ),
     ...extra,
   });
 }
@@ -286,8 +312,9 @@ type ResponsePicture = { key: string; url: string; flowNs?: string };
 const pictureFields = (p: ResponsePicture | null | undefined) =>
   p && !p.flowNs ? { media_key: p.key, media_url: p.url } : {};
 
-// shortcut: a fixed pause so the reply text (which ManyChat sends after it reads our
-// response) lands before the item's flow; ManyChat gives no "sent" signal to wait on.
+// shortcut: a fixed pause (plus RESPONSE_PART_GAP_MS for each later reply part) so the
+// reply text, which ManyChat sends after it reads our response, lands before the item's
+// flow; ManyChat gives no "sent" signal to wait on. Assumes 10s Smart Delays between parts.
 const RESPONSE_FLOW_DELAY_MS = 3_000;
 
 /**
@@ -302,13 +329,16 @@ function startResponseFlow(
     apiKey: string | null;
     userId: string;
     chatbotId: string;
+    /** How many reply parts the flow sends first (each after a Smart Delay but the first). */
+    parts: number;
   }
 ): void {
   const flowNs = p?.flowNs;
   const apiKey = to.apiKey;
   if (!flowNs || !apiKey) return;
+  const delayMs = RESPONSE_FLOW_DELAY_MS + Math.max(0, to.parts - 1) * RESPONSE_PART_GAP_MS;
   after(async () => {
-    await new Promise((r) => setTimeout(r, RESPONSE_FLOW_DELAY_MS));
+    await new Promise((r) => setTimeout(r, delayMs));
     try {
       await sendManychatFlow({ subscriberId: to.subscriberId, flowNs, apiKey });
     } catch (err) {
@@ -1657,13 +1687,18 @@ export async function POST(request: NextRequest) {
             chatbot.user_id, chatbot.id, apiKey, platform, chatbot.link_buttons_enabled === true
           );
           await markFired();
-          startResponseFlow(picture, {
-            supabase, subscriberId: body.subscriber_id, apiKey, userId: chatbot.user_id, chatbotId: chatbot.id,
-          });
           // Sanitize the response-body copy (raw stays in the DB row): on response
           // channels (TikTok) the body IS the delivery, so owner em dashes must be
           // stripped just like AI replies; on push channels the send layer sanitizes.
-          return manychatReply(sanitizeReply(text), {
+          const replyBody = sanitizeReply(text);
+          if (!canPushPlatform(platform)) {
+            startResponseFlow(picture, {
+              supabase, subscriberId: body.subscriber_id, apiKey, userId: chatbot.user_id, chatbotId: chatbot.id,
+              parts: replyParts(replyBody).length,
+            });
+            await holdResponse(startedAt);
+          }
+          return manychatReply(replyBody, {
             ai_skipped: true,
             reason: "keyword_trigger",
             ...pictureFields(picture),
@@ -2586,7 +2621,9 @@ export async function POST(request: NextRequest) {
   });
   startResponseFlow(syncResult?.picture, {
     supabase, subscriberId: body.subscriber_id, apiKey, userId: chatbot.user_id, chatbotId: chatbot.id,
+    parts: replyParts(replyText).length,
   });
+  await holdResponse(startedAt);
   return manychatReply(replyText, { ai_delivery: "response", platform, ...pictureFields(syncResult?.picture) });
 }
 

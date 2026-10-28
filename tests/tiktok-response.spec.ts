@@ -179,6 +179,7 @@ const instagram = (message: string) => ({ platform: "instagram", message });
 
 beforeEach(() => {
   vi.stubEnv("MANYCHAT_WEBHOOK_SECRET", "");
+  vi.stubEnv("RESPONSE_MIN_REPLY_MS", "0"); // no human-like pause unless a test asks for one
   vi.stubEnv("MANYCHAT_API_KEY", "mc-test-key");
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -258,6 +259,30 @@ describe("a TikTok DM is answered inside ManyChat's wait", () => {
     expect(Date.now() - before).toBeLessThan(3_000);
   });
 
+  it("holds a fast reply for a human-like pause before answering", async () => {
+    vi.stubEnv("RESPONSE_MIN_REPLY_MS", "400");
+    const before = Date.now();
+    await post(tiktok("what does it cost?"));
+    expect(Date.now() - before).toBeGreaterThanOrEqual(380);
+  });
+
+  it("returns the reply in up to 3 parts for the flow to send with pauses, like Instagram's bubbles", async () => {
+    const text = "Totally.\n\nIt's $97 a month.\n\nYou can cancel anytime.\n\nWant the link?";
+    generate.mockResolvedValue({ text, tokensUsed: 12, finishReason: "stop", refused: false });
+    const body = await post(tiktok("what does it cost?"));
+    expect(body.reply).toBe(text); // a flow that sends `reply` keeps working
+    expect(body.reply_1).toBe("Totally.");
+    expect(body.reply_2).toBe("It's $97 a month.");
+    // Anything past the third part rides in the last one.
+    expect(body.reply_3).toContain("You can cancel anytime.");
+    expect(body.reply_3).toContain("Want the link?");
+  });
+
+  it("a one-part reply leaves parts 2 and 3 empty, so last turn's values are overwritten", async () => {
+    const body = await post(tiktok("what does it cost?"));
+    expect(body).toMatchObject({ reply_1: REPLY, reply_2: "", reply_3: "" });
+  });
+
   it("a model too slow for the deadline gives the lead the fallback line, not nothing", async () => {
     generate.mockRejectedValue(Object.assign(new Error("deadline"), { name: "TimeoutError" }));
     const body = await post(tiktok("what does it cost?"));
@@ -333,6 +358,31 @@ describe("TikTok gets only what TikTok can show", () => {
     // The thread still records what went out.
     const sent = writes.filter((w) => w.table === "messages" && w.row.media_url);
     expect(sent.map((w) => w.row.content)).toEqual(["(sent image: reviews)"]);
+  });
+
+  it("an item's flow waits until every part of the reply has gone out", async () => {
+    chatbotRow.ai_media_enabled = true;
+    fetchAssets.mockResolvedValue([{ ...REVIEWS, tiktok_flow_ns: "content_reviews" }]);
+    generate.mockResolvedValue({
+      text: "Love that.\n\nHere's what clients say.\n\nTake a look\n[[SEND_ASSET: reviews]]",
+      tokensUsed: 9,
+      finishReason: "stop",
+      refused: false,
+    });
+    const body = await post(tiktok("can you show me results?"));
+    expect(body.reply_3).toBe("Take a look");
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      const done = runQueued();
+      // Parts 2 and 3 each follow a 10-second Smart Delay in the owner's flow.
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(sends.flow).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(sends.flow).toHaveBeenCalledTimes(1);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a flow ManyChat refuses is recorded as a failed send, so it shows up in the no-reply checks", async () => {
@@ -426,6 +476,7 @@ describe("TikTok gets only what TikTok can show", () => {
     expect(body).toMatchObject({
       reason: "keyword_trigger",
       reply: "Here are a few of our reviews!",
+      reply_1: "Here are a few of our reviews!",
       media_key: "reviews",
       media_url: REVIEWS.url,
     });
