@@ -48,6 +48,7 @@ export default defineConfig({
       "tests/bot-off-tag*.spec.ts",
       "tests/bot-on*.spec.ts",
       "tests/followup-ai*.spec.ts",
+      "tests/tiktok*.spec.ts",
     ],
   },
   resolve: {

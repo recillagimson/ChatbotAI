@@ -1,12 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Chatbot, Message } from "./types";
 import { sanitizeReply } from "./sanitize";
-import { openaiChat, type OpenAIChatMessage } from "./openai";
+import { openaiChat, MIN_ATTEMPT_MS, type OpenAIChatMessage } from "./openai";
 import { HISTORY_TURNS } from "./memory";
 import { renderKnownFactsBlock } from "./lead-facts";
 import { HUMANIZER_STYLE } from "./humanizer";
 import { MODELS, resolveReplyModel } from "./model-tiers";
 import { linkFlowPromptBlock } from "@/lib/link-flow";
+import { canPushPlatform, isPlatform } from "@/lib/platforms";
 import { foreignScriptLeak } from "@/lib/script-guard";
 
 let _anthropic: Anthropic | null = null;
@@ -187,7 +188,11 @@ ${catalog}`
   // Link-via-ManyChat: when enabled with a flow, tell the model to emit the marker
   // token instead of pasting the signup link (which Instagram strips). The webhook
   // (lib/link-flow.ts) detects the token, strips it, and fires the ManyChat flow.
-  const linkFlowBlock = linkFlowPromptBlock(chatbot);
+  // Not on a channel ManyChat can't push to (TikTok): no flow can fire there, so the
+  // token would be stripped and the lead promised a link that never comes. Without the
+  // block the model writes the link as text from the bot's offers and knowledge.
+  const linkFlowBlock =
+    isPlatform(extras?.platform) && !canPushPlatform(extras.platform) ? "" : linkFlowPromptBlock(chatbot);
 
   // Scheduled start - the lead said they'll begin on a future date. Remember it
   // and don't re-pitch or pressure them to start now (see conversations.start_*).
@@ -343,9 +348,12 @@ export async function generateReply(opts: {
   // reply into the "a teammate will follow up" fallback. Absent => 0 (single attempt,
   // unchanged) so the preview / follow-up callers behave exactly as before.
   retries?: number;
-  // Per-attempt timeout (ms) for that call; the sync path tightens it so both tries
-  // stay within ManyChat's ~10s budget. Absent => the openaiChat default (20s).
+  // Per-attempt timeout (ms) for that call. Absent => the openaiChat default (20s).
   timeoutMs?: number;
+  // Wall-clock end (Date.now() ms) for the whole call, retries included: the synchronous
+  // response path (TikTok) sets it so the reply, or the fallback when the model is too
+  // slow, is back before ManyChat stops waiting (see openaiChat). Absent => no deadline.
+  deadlineAt?: number;
 }) {
   // Continuing conversation if there's any prior history - drives the
   // continuity directive so the bot doesn't restart the intro or re-ask.
@@ -415,6 +423,7 @@ export async function generateReply(opts: {
       // canned fallback; absent => 0, single attempt (unchanged for preview/follow-up).
       retries: opts.retries,
       timeoutMs: opts.timeoutMs,
+      deadlineAt: opts.deadlineAt,
     });
     return {
       text: sanitizeReply(text),
@@ -453,6 +462,15 @@ export async function generateReply(opts: {
   // call within ~5 min hits the cache at ~10% of the input-token cost.
   // Caching only kicks in above 4096 input tokens (Opus 4.8); small KBs pay
   // normal rate and that's fine - no regression.
+  // Under a deadline (the synchronous response path) the call gets only the time left
+  // and no SDK retries, like the OpenAI path; without one the SDK defaults apply.
+  const left = opts.deadlineAt === undefined ? Infinity : opts.deadlineAt - Date.now();
+  if (left < MIN_ATTEMPT_MS) {
+    throw Object.assign(new Error("Anthropic reply not attempted: the reply deadline is too close"), {
+      name: "TimeoutError",
+    });
+  }
+  const requestOptions = Number.isFinite(left) ? { timeout: left, maxRetries: 0 } : undefined;
   const response = await getAnthropic().messages.create({
     model: AI_MODEL,
     // 500 (was 400): Opus 4.8's tokenizer counts ~1–1.35x more tokens for the
@@ -466,7 +484,7 @@ export async function generateReply(opts: {
       },
     ],
     messages,
-  });
+  }, requestOptions);
 
   const text = sanitizeReply(
     response.content

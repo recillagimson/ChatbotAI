@@ -122,6 +122,12 @@ export const dynamic = "force-dynamic";
 // budget this is capped to 60; lower BUBBLE_PACING_BUDGET_MS to match if you revert.
 export const maxDuration = 300;
 
+// Response path (TikTok): ManyChat's External Request stops waiting after about 10s,
+// and the reply only reaches the lead if it is in our response by then. The model call
+// must end by this point after the request arrived (it falls back to the canned line if
+// it can't), leaving about 2s to save the turn and return it.
+const RESPONSE_PATH_MODEL_DEADLINE_MS = 8_000;
+
 const BodySchema = z.object({
   chatbot_id: z.string().uuid(),
   subscriber_id: z.union([z.string(), z.number()]).transform(String),
@@ -441,6 +447,9 @@ async function sendKeywordCannedReply(
  */
 export async function POST(request: NextRequest) {
   const startedAt = performance.now(); // for the bubble-pacing deadline guard
+  // On the response path (TikTok) the model must be done this long after the request
+  // arrived, leaving time to save the reply and return it before ManyChat stops waiting.
+  const responseModelDeadlineAt = Date.now() + RESPONSE_PATH_MODEL_DEADLINE_MS;
   // 1. Read the shared secret header; it's verified AFTER the chatbot lookup
   // against that chatbot's own webhook_secret (with a legacy env fallback).
   const secret = request.headers.get("x-manychat-secret");
@@ -1352,7 +1361,9 @@ export async function POST(request: NextRequest) {
       const sendWelcome = action !== "none";
       // "welcome_and_answer": the VM goes out AND the AI answers the message below.
       const alsoAnswer = action === "welcome_and_answer";
-      if (sendWelcome && apiKey) {
+      // The Welcome VM is a ManyChat flow fired through the API, which can't reach a
+      // channel ManyChat can't push to (TikTok): there the AI answers the opener.
+      if (sendWelcome && apiKey && canPushPlatform(platform)) {
         // Race-safe claim so a first-message burst fires the VM at most once.
         const { data: claimed, error: claimError } = await supabase
           .from("conversations")
@@ -1428,8 +1439,9 @@ export async function POST(request: NextRequest) {
           .eq("id", conversationId!)
           .is("welcomed_at", null);
       }
-      // sendWelcome && !apiKey → can't trigger the flow; fall through to the AI
-      // WITHOUT marking welcomed_at, so a later turn with a working key can still greet.
+      // sendWelcome but no key, or a channel the flow can't reach → can't trigger the
+      // flow; fall through to the AI WITHOUT marking welcomed_at, so a later turn with a
+      // working key can still greet.
     } catch (err) {
       console.error("[manychat-webhook] welcome gate error (falling through to AI)", err);
     }
@@ -1939,8 +1951,9 @@ export async function POST(request: NextRequest) {
 
     // 7a. Follow-up media library - only when the bot may send AI-triggered media.
     // Fetched once here so the same list feeds the system-prompt catalog AND the
-    // directive resolution below.
-    const assetLib = chatbot.ai_media_enabled
+    // directive resolution below. Not on a channel ManyChat can't push to (TikTok):
+    // media can't reach the lead there, so the model is never offered any.
+    const assetLib = chatbot.ai_media_enabled && canPushPlatform(platform)
       ? await fetchFollowupAssets(supabase, chatbot.id)
       : [];
     const mediaCatalog = assetLib.length ? buildAssetCatalogBlock(assetLib) : "";
@@ -2047,11 +2060,14 @@ export async function POST(request: NextRequest) {
         // Retry a transient provider blip (429 / 5xx overload / request timeout)
         // before falling back to the canned "a teammate will follow up" line below:
         // 2 extra tries on the background push path (300s maxDuration), 1 on the
-        // synchronous response path - whose tighter 8s per-attempt timeout keeps both
-        // tries inside ManyChat's ~10s window. A permanent 4xx/quota error still fails
-        // fast to the fallback (see isTransientOpenAIError).
+        // synchronous response path. There the deadline bounds the whole call, retry
+        // included (two 8s tries alone could outlast ManyChat's ~10s wait): an attempt
+        // gets only the time left and a retry that can't fit is skipped, so the lead
+        // gets the fallback instead of nothing. A permanent 4xx/quota error still
+        // fails fast to the fallback (see isTransientOpenAIError).
         retries: synchronous ? 1 : 2,
         timeoutMs: synchronous ? 8_000 : undefined,
+        deadlineAt: synchronous ? responseModelDeadlineAt : undefined,
       });
     } catch (err) {
       console.error("[manychat-webhook] AI error", err);

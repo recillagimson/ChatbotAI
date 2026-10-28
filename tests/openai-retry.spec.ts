@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { openaiChat, isTransientOpenAIError, OpenAIChatError } from "@/lib/openai";
+import { openaiChat, isTransientOpenAIError, OpenAIChatError, MIN_ATTEMPT_MS } from "@/lib/openai";
+import { generateReply } from "@/lib/anthropic";
+import type { Chatbot } from "@/lib/types";
 
 /**
  * The DM-reply transport (openaiChat) is a single raw fetch that THROWS on any
@@ -175,5 +177,135 @@ describe("openaiChat - bounded retry loop", () => {
     expect(res.text).toBe("recovered");
     expect(bodies[0].max_completion_tokens).toBe(1200);
     expect(bodies[1].max_completion_tokens).toBe(2400);
+  });
+});
+
+/**
+ * A deadline for the whole call, retries included. TikTok's reply rides the webhook's
+ * HTTP response, and ManyChat stops waiting after about 10 seconds: two 8s attempts
+ * could run 16s and the lead got nothing. With `deadlineAt`, every attempt fits in the
+ * time left, a retry that can't fit is skipped, and the call throws in time for the
+ * caller to send its fallback line.
+ */
+describe("openaiChat - deadline for the whole call", () => {
+  beforeEach(() => {
+    process.env.OPENAI_API_KEY = "test-key";
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const args = { model: "gpt-x", system: "s", messages: [{ role: "user" as const, content: "hi" }] };
+  /** A clock the fetch stub moves forward: every attempt takes `ms`. */
+  function clockedFetch(seq: Array<Response | Error>, ms: number) {
+    let t = 0;
+    const inner = scriptedFetch(seq);
+    const fetchMock = vi.fn(async () => {
+      t += ms;
+      return inner();
+    });
+    return { fetchMock, now: () => t };
+  }
+
+  it("skips a retry that would not fit, and throws the attempt's own error", async () => {
+    const { fetchMock, now } = clockedFetch([errResponse(503), okResponse("too late")], 2_000);
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      openaiChat({ ...args, retries: 1, sleep: noSleep, now, deadlineAt: 3_000 })
+    ).rejects.toThrow(/503/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("still retries when the retry fits", async () => {
+    const { fetchMock, now } = clockedFetch([errResponse(503), okResponse("recovered")], 2_000);
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await openaiChat({ ...args, retries: 1, sleep: noSleep, now, deadlineAt: 10_000 });
+    expect(res.text).toBe("recovered");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("a retry that runs out of time during its backoff reports the attempt's own error", async () => {
+    let t = 0;
+    const inner = scriptedFetch([errResponse(503), okResponse("never")]);
+    const fetchMock = vi.fn(async () => {
+      t += 1_000;
+      return inner();
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    // The backoff overruns (a slow timer): 3s pass instead of 400ms.
+    const slowSleep = async () => {
+      t += 3_000;
+    };
+    await expect(
+      openaiChat({ ...args, retries: 1, sleep: slowSleep, now: () => t, deadlineAt: 5_000 })
+    ).rejects.toThrow(/503/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("generateReply hands its deadline to the call: too close, nothing is sent", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const chatbot = { id: "b1", name: "Test", tone: "friendly" } as unknown as Chatbot;
+    await expect(
+      generateReply({ chatbot, kbBlock: "", history: [], userMessage: "hi", deadlineAt: Date.now() + 500 })
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("starts no attempt when less than the minimum is left", async () => {
+    const fetchMock = scriptedFetch([okResponse("never")]);
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      openaiChat({ ...args, retries: 1, sleep: noSleep, now: () => 0, deadlineAt: MIN_ATTEMPT_MS - 1 })
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("cuts an attempt's own timeout to the time left", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: unknown, init: { signal: AbortSignal }) =>
+          new Promise<Response>((_resolve, reject) => {
+            signal = init.signal;
+            init.signal.addEventListener("abort", () => {
+              const e = new Error("aborted");
+              e.name = "AbortError";
+              reject(e);
+            });
+          })
+      )
+    );
+    const call = openaiChat({ ...args, timeoutMs: 8_000, sleep: noSleep, now: () => 0, deadlineAt: 3_000 });
+    const settled = call.catch((e: Error) => e);
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(signal?.aborted).toBe(true);
+    expect(await settled).toMatchObject({ name: "AbortError" });
+  });
+
+  it("without a deadline nothing changes: the 8s attempt timeout is used as given", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: unknown, init: { signal: AbortSignal }) =>
+          new Promise<Response>((_resolve, reject) => {
+            signal = init.signal;
+            init.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+          })
+      )
+    );
+    const settled = openaiChat({ ...args, timeoutMs: 8_000, sleep: noSleep }).catch((e: Error) => e);
+    await vi.advanceTimersByTimeAsync(7_999);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(signal?.aborted).toBe(true);
+    await settled;
   });
 });

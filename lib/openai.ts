@@ -65,6 +65,13 @@ export function isTransientOpenAIError(err: unknown): boolean {
   return false;
 }
 
+/** Per-attempt timeout when the caller gives none. */
+const DEFAULT_ATTEMPT_TIMEOUT_MS = 20_000;
+
+/** Under a deadline, no attempt starts with less than this left: a reply rarely lands
+ *  faster, and the caller needs the remainder to send its fallback line. */
+export const MIN_ATTEMPT_MS = 2_000;
+
 /** A completed chat call. `text` may be "" (see finishReason/refusal for why). */
 export interface OpenAIChatResult {
   text: string;
@@ -89,7 +96,7 @@ async function openaiChatOnce(
   apiKey: string
 ): Promise<OpenAIChatResult> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 20_000);
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS);
   try {
     const res = await fetch(OPENAI_CHAT_URL, {
       method: "POST",
@@ -176,6 +183,16 @@ export async function openaiChat(opts: {
   backoffMs?: number[];
   /** Injectable delay so the retry loop is unit-testable without real waits. */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Wall-clock time (`now()` ms) the WHOLE call, retries included, must end by. Each
+   * attempt's timeout is cut to the time left, a retry that would start with less than
+   * MIN_ATTEMPT_MS left is skipped (the attempt's own error is thrown), and with less
+   * than that left before the first attempt nothing is sent (a TimeoutError is thrown),
+   * so the caller still has time to send its fallback. Unset = no deadline (unchanged).
+   */
+  deadlineAt?: number;
+  /** Clock for deadlineAt; injectable for tests. Default Date.now. */
+  now?: () => number;
 }): Promise<OpenAIChatResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
@@ -183,22 +200,38 @@ export async function openaiChat(opts: {
   const maxAttempts = 1 + Math.max(0, Math.min(opts.retries ?? 0, 5));
   const backoff = opts.backoffMs ?? [400, 800];
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = opts.now ?? Date.now;
+  const timeLeft = () => (opts.deadlineAt === undefined ? Infinity : opts.deadlineAt - now());
 
   let attemptMax = opts.maxTokens ?? 400;
   let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const left = timeLeft();
+    if (left < MIN_ATTEMPT_MS) {
+      // A retry that ran out of time during its backoff reports what actually failed.
+      if (lastErr) throw lastErr;
+      throw Object.assign(new Error("OpenAI chat not attempted: the reply deadline is too close"), {
+        name: "TimeoutError",
+      });
+    }
+    const timeoutMs = Number.isFinite(left)
+      ? Math.min(opts.timeoutMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS, left)
+      : opts.timeoutMs;
     try {
-      return await openaiChatOnce({ ...opts, maxTokens: attemptMax }, apiKey);
+      return await openaiChatOnce({ ...opts, maxTokens: attemptMax, timeoutMs }, apiKey);
     } catch (err) {
       lastErr = err;
       if (attempt >= maxAttempts || !isTransientOpenAIError(err)) throw err;
+      const wait = backoff[Math.min(attempt - 1, backoff.length - 1)];
+      // No time for another attempt after the backoff: fail now with what happened.
+      if (timeLeft() - wait < MIN_ATTEMPT_MS) throw err;
       // A truncation (empty, finish_reason=length) won't fix itself on a same-size retry -
       // the reasoning consumes the same budget again. Give the next attempt materially more
       // room so the visible reply can actually land (capped so a runaway can't balloon).
       if (err instanceof OpenAIChatError && err.truncated) {
         attemptMax = Math.min(Math.round(attemptMax * 2), 4000);
       }
-      await sleep(backoff[Math.min(attempt - 1, backoff.length - 1)]);
+      await sleep(wait);
     }
   }
   throw lastErr; // unreachable: the loop returns or throws inside
