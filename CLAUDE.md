@@ -357,3 +357,13 @@ A SaaS platform (**SpeedSettr** - www.speedsettr.com) that auto-replies to Insta
 ## A note about how the user works
 
 The user prefers to be walked through external-account setup step by step ("step by step please"). They are not a deep TypeScript engineer - they're a founder using Claude as their developer. Write code end-to-end. For third-party UIs (Stripe dashboard, ManyChat, Meta Business), give explicit click paths. They'll happily share screenshots when stuck.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on recillagimson/ChatbotAI, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` at the repo root plus `docs/adr/`. See `docs/agents/domain.md`.
