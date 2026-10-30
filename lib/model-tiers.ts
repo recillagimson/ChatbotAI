@@ -60,19 +60,30 @@ export const MODELS = {
 
 // --- Per-chatbot reactive-reply model override (admin-only) -----------------
 // The allowlist the admin dropdown offers AND the server validates against - one
-// source of truth so the two can never drift. Members MUST be OpenAI chat models
-// (the DM reply path runs on OpenAI by default; the override only affects that
-// path). Keep every entry compatible with lib/openai.ts's request shape - all
-// gpt-5.x + gpt-4.1-mini use max_completion_tokens (already handled there).
+// source of truth so the two can never drift. OpenAI entries must fit lib/openai.ts's
+// request shape (all gpt-5.x + gpt-4.1-mini use max_completion_tokens, handled there).
+// claude-* entries are answered by Anthropic instead (generateReply; needs
+// ANTHROPIC_API_KEY, and falls back to the OpenAI default if the call fails).
 export const ALLOWED_REPLY_MODELS = [
   "gpt-5.4-mini",
   "gpt-5.4-nano",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
   "gpt-4.1-mini",
+  "claude-haiku-5-5",
+  "claude-sonnet-5-5",
 ] as const;
 
 export type AllowedReplyModel = (typeof ALLOWED_REPLY_MODELS)[number];
+
+/** True for a model the Anthropic API answers rather than OpenAI. */
+export const isClaudeModel = (model: string) => model.startsWith("claude-");
+
+/** The chatbot's own reply model when it is on the allowlist, else null. */
+export function allowedReplyModel(chatbotModel?: string | null): string | null {
+  const v = chatbotModel?.trim();
+  return v && (ALLOWED_REPLY_MODELS as readonly string[]).includes(v) ? v : null;
+}
 
 /**
  * Resolve the reactive-reply model for one chatbot. A valid per-bot override
@@ -81,7 +92,5 @@ export type AllowedReplyModel = (typeof ALLOWED_REPLY_MODELS)[number];
  * Never throws; the fallback makes a bad column value safe.
  */
 export function resolveReplyModel(chatbotModel?: string | null): string {
-  const v = chatbotModel?.trim();
-  if (v && (ALLOWED_REPLY_MODELS as readonly string[]).includes(v)) return v;
-  return MODELS.reply();
+  return allowedReplyModel(chatbotModel) ?? MODELS.reply();
 }

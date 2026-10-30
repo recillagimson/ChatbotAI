@@ -5,7 +5,7 @@ import { openaiChat, MIN_ATTEMPT_MS, type OpenAIChatMessage } from "./openai";
 import { HISTORY_TURNS } from "./memory";
 import { renderKnownFactsBlock } from "./lead-facts";
 import { HUMANIZER_STYLE } from "./humanizer";
-import { MODELS, resolveReplyModel } from "./model-tiers";
+import { MODELS, allowedReplyModel, isClaudeModel } from "./model-tiers";
 import { linkFlowPromptBlock } from "@/lib/link-flow";
 import { canPushPlatform, isPlatform } from "@/lib/platforms";
 import { foreignScriptLeak } from "@/lib/script-guard";
@@ -343,8 +343,8 @@ export async function generateReply(opts: {
   // The contact's channel. On "instagram" the prompt forbids links in text (they only go
   // out as the link-flow button). Absent = no channel rule (the trainer preview).
   platform?: string | null;
-  // When true, ignore the per-chatbot reply_model override and use the reply-tier
-  // default (MODELS.reply()). The override is a REACTIVE-reply lever only; the
+  // When true, ignore the per-chatbot reply_model override and use the app-wide default
+  // (MODELS.reply(), or AI_MODEL under AI_PROVIDER=anthropic). The override is a REACTIVE-reply lever only; the
   // follow-up drip (generateFollowupText) sets this so it never inherits it.
   ignoreReplyModel?: boolean;
   // Transient-error retry budget for the OpenAI reply call. The webhook sets this
@@ -387,10 +387,32 @@ export async function generateReply(opts: {
     content: m.content,
   }));
 
+  // Which engine answers: the bot's own reply model (Overview tab, superadmin) when it has
+  // a valid one, else the app-wide default (AI_PROVIDER: OpenAI unless set to anthropic).
+  // Follow-ups pass ignoreReplyModel so the drip keeps the default (the per-bot model is
+  // a reactive-reply lever only).
+  const perBot = opts.ignoreReplyModel ? null : allowedReplyModel(opts.chatbot.reply_model);
+  const claudeModel = perBot
+    ? isClaudeModel(perBot) ? perBot : null
+    : DM_AI_PROVIDER === "anthropic" ? AI_MODEL : null;
+  const openaiModel = perBot && !isClaudeModel(perBot) ? perBot : MODELS.reply();
+
+  if (claudeModel) {
+    try {
+      return await claudeReply(claudeModel);
+    } catch (err) {
+      // Out of credit, no key, an outage: the OpenAI default answers instead, so the lead
+      // still gets a reply. A missed deadline falls through too, and openaiChat then
+      // refuses to start without enough time left, exactly as a slow OpenAI call would.
+      console.warn("[generateReply] Claude reply failed; answering with OpenAI", { model: claudeModel }, err);
+    }
+  }
+  return openaiReply(openaiModel);
+
   // OpenAI (ChatGPT) - the default DM engine. Same system prompt + history; the
   // return shape matches the Anthropic path (cache fields are 0, OpenAI has no
   // prompt-cache token accounting here).
-  if (DM_AI_PROVIDER !== "anthropic") {
+  async function openaiReply(replyModel: string) {
     // The DM/helper-tier model is multimodal: send images as data-URL image_url
     // parts on the current turn alongside the text.
     const currentTurn: OpenAIChatMessage = images.length
@@ -406,13 +428,6 @@ export async function generateReply(opts: {
         }
       : { role: "user", content: opts.userMessage };
 
-    // Per-chatbot reply-model override (admin-only) wins over the reply-tier
-    // default; an unset/invalid column value falls back to MODELS.reply().
-    // Follow-ups pass ignoreReplyModel so the drip keeps the tier default (the
-    // override is a reactive-reply lever only).
-    const replyModel = opts.ignoreReplyModel
-      ? MODELS.reply()
-      : resolveReplyModel(opts.chatbot.reply_model);
     const { text, tokensUsed, finishReason, refusal } = await openaiChat({
       model: replyModel,
       system: systemText,
@@ -442,76 +457,97 @@ export async function generateReply(opts: {
     };
   }
 
-  // Anthropic current turn: image blocks (base64 source) + a text block.
-  const currentContent: Anthropic.MessageParam["content"] = images.length
-    ? [
-        ...images.map((img) => ({
-          type: "image" as const,
-          source: {
-            type: "base64" as const,
-            media_type: img.mediaType as
-              | "image/jpeg"
-              | "image/png"
-              | "image/gif"
-              | "image/webp",
-            data: img.base64,
-          },
-        })),
-        { type: "text" as const, text: opts.userMessage || "(see attached image)" },
-      ]
-    : opts.userMessage;
-  const messages = [...trimmed, { role: "user" as const, content: currentContent }];
+  async function claudeReply(model: string) {
+    // Anthropic current turn: image blocks (base64 source) + a text block.
+    const currentContent: Anthropic.MessageParam["content"] = images.length
+      ? [
+          ...images.map((img) => ({
+            type: "image" as const,
+            source: {
+              type: "base64" as const,
+              media_type: img.mediaType as
+                | "image/jpeg"
+                | "image/png"
+                | "image/gif"
+                | "image/webp",
+              data: img.base64,
+            },
+          })),
+          { type: "text" as const, text: opts.userMessage || "(see attached image)" },
+        ]
+      : opts.userMessage;
+    const messages = [...trimmed, { role: "user" as const, content: currentContent }];
 
-  // Mark the system prompt as ephemeral-cacheable. The persona + knowledge
-  // base are identical across every reply for a given chatbot, so the next
-  // call within ~5 min hits the cache at ~10% of the input-token cost.
-  // Caching only kicks in above 4096 input tokens (Opus 4.8); small KBs pay
-  // normal rate and that's fine - no regression.
-  // Under a deadline (the synchronous response path) the call gets only the time left
-  // and no SDK retries, like the OpenAI path; without one the SDK defaults apply.
-  const left = opts.deadlineAt === undefined ? Infinity : opts.deadlineAt - Date.now();
-  if (left < MIN_ATTEMPT_MS) {
-    throw Object.assign(new Error("Anthropic reply not attempted: the reply deadline is too close"), {
-      name: "TimeoutError",
-    });
+    // Cache only the fixed part (persona through confidentiality): it is identical on
+    // every reply of this bot, so a call within ~5 min reads it at ~10% of the input
+    // cost. The per-turn blocks (continuity, known facts, flow state, instruction,
+    // memory, scheduled start) change every reply, so they go in an uncached block
+    // after it. buildSystemPrompt puts them last in section mode, so the prompt built
+    // without them is an exact prefix; the older modes mix them in, so there the whole
+    // prompt stays one block. Below the model's minimum cacheable size nothing caches,
+    // and that costs nothing extra. A push channel's platform only adds a per-turn rule
+    // (Instagram's no-links line), so it is left out here; a response channel (TikTok)
+    // changes fixed blocks (media, link tokens), so it stays.
+    const fixedPlatform =
+      isPlatform(opts.platform) && !canPushPlatform(opts.platform) ? opts.platform : null;
+    const fixedText = buildSystemPrompt(
+      opts.chatbot,
+      opts.kbBlock,
+      null,
+      false,
+      opts.mediaCatalog,
+      null,
+      null,
+      opts.trainedResponses ?? null,
+      null,
+      { flowStateBlock: null, platform: fixedPlatform }
+    );
+    const cached = { cache_control: { type: "ephemeral" as const } };
+    const system =
+      fixedText.length < systemText.length && systemText.startsWith(fixedText)
+        ? [
+            { type: "text" as const, text: fixedText, ...cached },
+            // Kept as-is (it starts with the blank line that separates the two parts).
+            { type: "text" as const, text: systemText.slice(fixedText.length) },
+          ]
+        : [{ type: "text" as const, text: systemText, ...cached }];
+
+    // Under a deadline (the synchronous response path) the call gets only the time left
+    // and no SDK retries, like the OpenAI path; without one the SDK defaults apply.
+    const left = opts.deadlineAt === undefined ? Infinity : opts.deadlineAt - Date.now();
+    if (left < MIN_ATTEMPT_MS) {
+      throw Object.assign(new Error("Anthropic reply not attempted: the reply deadline is too close"), {
+        name: "TimeoutError",
+      });
+    }
+    const requestOptions = Number.isFinite(left) ? { timeout: left, maxRetries: 0 } : undefined;
+    const response = await getAnthropic().messages.create(
+      { model, max_tokens: REPLY_MAX_TOKENS, system, messages },
+      requestOptions
+    );
+
+    const text = sanitizeReply(
+      response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("\n")
+        .trim()
+    );
+
+    const usage = response.usage;
+    return {
+      text,
+      tokensUsed:
+        (usage?.input_tokens ?? 0) +
+        (usage?.cache_creation_input_tokens ?? 0) +
+        (usage?.cache_read_input_tokens ?? 0) +
+        (usage?.output_tokens ?? 0),
+      cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: usage?.cache_creation_input_tokens ?? 0,
+      finishReason: response.stop_reason ?? null,
+      refused: (response.stop_reason as string | null) === "refusal",
+    };
   }
-  const requestOptions = Number.isFinite(left) ? { timeout: left, maxRetries: 0 } : undefined;
-  const response = await getAnthropic().messages.create({
-    model: AI_MODEL,
-    // 500 (was 400): Opus 4.8's tokenizer counts ~1–1.35x more tokens for the
-    // same text as Sonnet 4.6, so the old cap could truncate multi-bubble replies.
-    max_tokens: 500,
-    system: [
-      {
-        type: "text",
-        text: systemText,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    messages,
-  }, requestOptions);
-
-  const text = sanitizeReply(
-    response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n")
-      .trim()
-  );
-
-  const usage = response.usage;
-  return {
-    text,
-    tokensUsed:
-      (usage?.input_tokens ?? 0) +
-      (usage?.cache_creation_input_tokens ?? 0) +
-      (usage?.cache_read_input_tokens ?? 0) +
-      (usage?.output_tokens ?? 0),
-    cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
-    cacheWriteTokens: usage?.cache_creation_input_tokens ?? 0,
-    finishReason: response.stop_reason ?? null,
-    refused: (response.stop_reason as string | null) === "refusal",
-  };
 }
 
 /**
