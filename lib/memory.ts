@@ -14,6 +14,7 @@
 // importing lib/anthropic, which imports HISTORY_TURNS from here (avoids a cycle).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { openaiChat } from "./openai";
+import type { AiUsageTag } from "./usage-log";
 import { MODELS } from "./model-tiers";
 
 // Token cut (2026-08-03): trimmed HISTORY_TURNS from 20 to 10 - the verbatim
@@ -140,7 +141,8 @@ export function buildSummaryPrompt(
  */
 export async function summarizeConversation(
   prevSummary: string | null,
-  newMsgs: Pick<SummaryMessage, "role" | "content">[]
+  newMsgs: Pick<SummaryMessage, "role" | "content">[],
+  usage?: AiUsageTag
 ): Promise<string | null> {
   if (newMsgs.length === 0) return null;
   try {
@@ -150,6 +152,7 @@ export async function summarizeConversation(
       system,
       messages: [{ role: "user", content: user }],
       maxTokens: 700,
+      usage,
     });
     return text.trim() || null;
   } catch (err) {
@@ -166,6 +169,7 @@ export async function summarizeConversation(
 export async function refreshConversationMemory(ctx: {
   supabase: SupabaseClient;
   conversationId: string;
+  usage?: AiUsageTag;
 }): Promise<void> {
   const { supabase, conversationId } = ctx;
   try {
@@ -206,7 +210,7 @@ export async function refreshConversationMemory(ctx: {
     if (!older || older.length === 0) return;
 
     const prev = conv?.memory_summary ?? null;
-    const next = await summarizeConversation(prev, older);
+    const next = await summarizeConversation(prev, older, ctx.usage);
     // A failed summarize must NOT advance the watermark - `older` would drop below it
     // and become invisible to every future refresh. Skip the write; the same batch is
     // re-folded on the next turn.

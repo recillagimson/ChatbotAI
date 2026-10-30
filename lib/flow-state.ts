@@ -50,6 +50,7 @@
 // LLM/DB work and unit-tested in tests/flow-state.spec.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { openaiChat } from "./openai";
+import type { AiUsageTag } from "./usage-log";
 import { HISTORY_TURNS } from "./memory";
 import { MODELS } from "./model-tiers";
 
@@ -584,7 +585,8 @@ export function renderFlowStateBlock(args: {
  */
 export async function updateFlowState(
   prev: string | null,
-  msgs: FlowMessage[]
+  msgs: FlowMessage[],
+  usage?: AiUsageTag
 ): Promise<string | null> {
   if (msgs.length === 0) return null;
   try {
@@ -601,6 +603,7 @@ export async function updateFlowState(
       // relies on, so protect it. Related: REPLY_MAX_TOKENS 400 -> 1200 in lib/anthropic.ts.
       maxTokens: 700,
       timeoutMs: 15_000,
+      usage,
     });
     return normalizeFlowState(text);
   } catch (err) {
@@ -625,6 +628,7 @@ export async function refreshFlowState(ctx: {
   supabase: SupabaseClient;
   conversationId: string;
   chatbotId: string;
+  usage?: AiUsageTag;
 }): Promise<void> {
   if (!flowStateEnabled(ctx.chatbotId)) return;
   const { supabase, conversationId, chatbotId } = ctx;
@@ -668,7 +672,7 @@ export async function refreshFlowState(ctx: {
       .reverse()
       .map((m) => ({ role: m.role, content: m.content }));
 
-    const next = await updateFlowState(prev, msgs);
+    const next = await updateFlowState(prev, msgs, ctx.usage);
     if (next === null) return; // extraction failed - leave the stored ledger + stamp alone
 
     // Compare-and-swap on the stamp we read, so a reset (or a concurrent run) landing

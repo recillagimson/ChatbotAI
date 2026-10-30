@@ -51,6 +51,7 @@ export default defineConfig({
       "tests/tiktok*.spec.ts",
       "tests/followup-asset*.spec.ts",
       "tests/reply-provider*.spec.ts",
+      "tests/usage-log*.spec.ts",
     ],
   },
   resolve: {

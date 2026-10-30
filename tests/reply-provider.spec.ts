@@ -104,6 +104,28 @@ describe("which provider answers a bot", () => {
   });
 });
 
+describe("token detail on the reply (usage_log, token-cost plan step 1)", () => {
+  it("an OpenAI reply reports its model and token split, and leaves the row to the webhook", async () => {
+    const detail = { model: "gpt-5.6-luna", inputTokens: 8, cachedTokens: 4, outputTokens: 2 };
+    openaiChat.mockResolvedValueOnce({ text: "hi", tokensUsed: 10, finishReason: "stop", refusal: null, detail });
+    const r = await reply(bot("gpt-5.6-luna"));
+    expect(r.detail).toEqual(detail);
+    // The webhook writes the ai_reply row itself; a tag here would count the reply twice.
+    expect(openaiChat.mock.calls[0][0].usage).toBeUndefined();
+  });
+
+  it("a Claude reply counts cache reads as cached input, and cache writes as input", async () => {
+    claudeCreate.mockResolvedValueOnce({
+      content: [{ type: "text", text: "from claude" }],
+      usage: { input_tokens: 100, output_tokens: 30, cache_read_input_tokens: 5000, cache_creation_input_tokens: 200 },
+      stop_reason: "end_turn",
+    });
+    const r = await reply(bot("claude-haiku-5-5"));
+    expect(r.detail).toEqual({ model: "claude-haiku-5-5", inputTokens: 5300, cachedTokens: 5000, outputTokens: 30 });
+    expect(r.tokensUsed).toBe(5330);
+  });
+});
+
 describe("caching on Claude", () => {
   type Block = { text: string; cache_control?: unknown };
   const system = () => claudeCreate.mock.calls[0][0].system as Block[];

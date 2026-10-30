@@ -11,6 +11,7 @@
  * prompt is generic (no client keyword/persona/offer), so it screens for every bot.
  */
 import { openaiChat } from "./openai";
+import type { AiUsageTag } from "./usage-log";
 import { MODELS } from "./model-tiers";
 
 const SCREEN_MODEL = MODELS.classifier();
@@ -155,6 +156,7 @@ export function isBenignShortReply(message: string | null | undefined): boolean 
 export async function screenDisqualify(opts: {
   message: string;
   lastBotMessage: string;
+  usage?: AiUsageTag;
 }): Promise<ScreenResult> {
   const text = (opts.message ?? "").trim();
   if (!text) return { outcome: "none" };
@@ -187,6 +189,7 @@ export async function screenDisqualify(opts: {
       ],
       maxTokens: 6,
       timeoutMs: 8_000,
+      usage: opts.usage,
     });
     return parseScreen(out);
   } catch {

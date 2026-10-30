@@ -15,6 +15,7 @@
 // Multi-tenant + generic: the prompt extracts whatever is visible for ANY business
 // (text, numbers, names, prices, dates, charts) - it never assumes a domain.
 import { openaiChat } from "./openai";
+import type { AiUsageTag } from "./usage-log";
 import { MODELS } from "./model-tiers";
 
 /** Vision model for image description. Defaults to the DM model (multimodal). */
@@ -55,7 +56,7 @@ export function imageTextPart(description: string): string {
  * gracefully (the current reply turn still carries the raw image as vision).
  * Never throws.
  */
-export async function describeImage(opts: { base64: string; mediaType: string }): Promise<string> {
+export async function describeImage(opts: { base64: string; mediaType: string; usage?: AiUsageTag }): Promise<string> {
   if (!opts.base64) return "";
   try {
     const { text } = await openaiChat({
@@ -72,6 +73,7 @@ export async function describeImage(opts: { base64: string; mediaType: string })
       ],
       maxTokens: 350,
       timeoutMs: REQUEST_TIMEOUT_MS,
+      usage: opts.usage,
     });
     return cleanDescription(text);
   } catch (err) {

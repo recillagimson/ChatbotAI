@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { resolveChatbotAccess, ownerScope } from "@/lib/chatbot-access";
 import { buildKbBlock, isEmptyKbBlock } from "@/lib/retrieval";
 import { generateReply } from "@/lib/anthropic";
+import { insertUsageRow } from "@/lib/usage-log";
+import { createServiceClient } from "@/lib/supabase/server";
 import { renderTrainedResponses, isUsableTrainingPair } from "@/lib/training";
 import { pickSectionOverrides } from "@/lib/change-categories";
 import { firstMatchingGroup } from "@/lib/keyword-triggers";
@@ -129,7 +131,7 @@ export async function POST(
     // [[SEND_ASSET: key]] can be tested here too.
     const assetLib = bot.ai_media_enabled ? await fetchFollowupAssets(access.db, bot.id) : [];
     const kb = await buildKbBlock({ supabase: access.db, chatbot, history, userMessage });
-    const { text } = await generateReply({
+    const { text, tokensUsed, detail } = await generateReply({
       chatbot: bot,
       kbBlock: kb.block,
       history,
@@ -143,6 +145,12 @@ export async function POST(
       // live webhook does; a blip here used to dead-end the owner's test.
       retries: 1,
     });
+    // Service client: usage_log has no insert policy for signed-in users.
+    await insertUsageRow(
+      createServiceClient(),
+      { user_id: chatbot.user_id, chatbot_id: chatbot.id, event_type: "ai_call_preview", tokens_used: tokensUsed },
+      detail
+    );
     // What the lead would actually receive: link tokens and media directives
     // stripped and delivered in place, text split into separate DMs.
     const mediaMatches = bot.ai_media_enabled ? findAssetDirectives(text) : [];

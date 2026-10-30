@@ -48,6 +48,7 @@ let messagesReadFails: boolean;
 const sends = { message: vi.fn(), paced: vi.fn(), media: vi.fn(), flow: vi.fn() };
 const generate = vi.fn();
 const duplicate = vi.fn();
+const refreshFacts = vi.fn(async (_ctx: unknown) => {});
 
 const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
 
@@ -177,7 +178,7 @@ vi.mock("@/lib/memory", async (importOriginal) => ({
 }));
 vi.mock("@/lib/lead-facts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/lead-facts")>()),
-  refreshKnownFacts: async () => {},
+  refreshKnownFacts: (ctx: unknown) => refreshFacts(ctx),
 }));
 vi.mock("@/lib/flow-state", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/flow-state")>()),
@@ -278,6 +279,7 @@ beforeEach(() => {
   claimFails = false;
   messagesReadFails = false;
   for (const s of [...Object.values(sends), generate, duplicate]) s.mockReset();
+  refreshFacts.mockClear();
   generate.mockResolvedValue({ text: REPLY, tokensUsed: 12, finishReason: "stop", refused: false });
   duplicate.mockResolvedValue({ isDuplicate: false });
 });
@@ -326,6 +328,45 @@ describe("BOT_ON answers what the contact already sent", () => {
     expect(sends.flow).not.toHaveBeenCalled();
     expect(messageInserts()).toEqual([expect.objectContaining({ role: "assistant", content: REPLY })]);
     expect(conversation!.reply_claimed_for).toBeNull();
+  });
+
+  it("the reply's usage row carries the model and its token split", async () => {
+    generate.mockResolvedValueOnce({
+      text: REPLY,
+      tokensUsed: 12,
+      finishReason: "stop",
+      refused: false,
+      detail: { model: "gpt-5.6-luna", inputTokens: 9, cachedTokens: 6, outputTokens: 3 },
+    });
+    await post(TAG);
+    await runQueued();
+    const row = writes.find((w) => w.table === "usage_log" && w.row.event_type === "ai_reply")?.row;
+    expect(row).toMatchObject({ tokens_used: 12, model: "gpt-5.6-luna", input_tokens: 9, cached_tokens: 6, output_tokens: 3 });
+    // The after-reply facts refresh is billed to the bot's owner under its own event.
+    expect(refreshFacts.mock.calls[0]?.[0]).toMatchObject({
+      usage: { userId: "owner-1", chatbotId: chatbotRow.id, event: "ai_call_facts" },
+    });
+  });
+
+  it("a reply thrown away because the lead muted the bot mid-generation is still counted, as discarded", async () => {
+    generate.mockImplementationOnce(async () => {
+      conversation!.user_muted_at = minutesAgo(0);
+      return {
+        text: REPLY,
+        tokensUsed: 12,
+        finishReason: "stop",
+        refused: false,
+        detail: { model: "gpt-5.6-luna", inputTokens: 9, cachedTokens: 6, outputTokens: 3 },
+      };
+    });
+    await post(TAG);
+    await runQueued();
+    expect(sends.paced).not.toHaveBeenCalled();
+    const usage = writes.filter((w) => w.table === "usage_log").map((w) => w.row);
+    expect(usage.some((r) => r.event_type === "ai_reply")).toBe(false);
+    expect(usage).toContainEqual(
+      expect.objectContaining({ event_type: "ai_reply_discarded", tokens_used: 12, model: "gpt-5.6-luna", cached_tokens: 6 })
+    );
   });
 
   it("Full Contact Data's last typed text and media are not read as a new message", async () => {

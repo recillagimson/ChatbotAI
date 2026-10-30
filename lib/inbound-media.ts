@@ -9,6 +9,7 @@
 // unit-tested in scripts/test-inbound-media.ts. The async processInboundMedia()
 // at the bottom does the network + storage work and is verified end-to-end.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AiUsageTag } from "./usage-log";
 import { cleanContactField } from "./contact";
 import { transcribeAudio } from "./transcribe";
 import { describeImage, imageTextPart } from "./vision";
@@ -294,7 +295,7 @@ async function storeMedia(
  */
 export async function processInboundMedia(
   items: MediaItem[],
-  ctx: { supabase: SupabaseClient; userId: string },
+  ctx: { supabase: SupabaseClient; userId: string; usage?: AiUsageTag },
   // describeImages: run the vision-describe call that turns each image into
   // persistent text. Default ON (push path - describe time is absorbed by the
   // reply-wait window). Pass FALSE on the synchronous RESPONSE path (TikTok /
@@ -340,7 +341,7 @@ export async function processInboundMedia(
         // body so a many-image carousel can't multiply describe latency.
         if (describeImages && describeCalls < MAX_DESCRIBE_IMAGES) {
           describeCalls++;
-          const imgPart = imageTextPart(await describeImage({ base64, mediaType }));
+          const imgPart = imageTextPart(await describeImage({ base64, mediaType, usage: ctx.usage }));
           if (imgPart) out.textParts.push(imgPart);
         }
         const stored = await storeMedia(ctx.supabase, { userId: ctx.userId, buffer: fetched.buffer, contentType: mediaType, ext });

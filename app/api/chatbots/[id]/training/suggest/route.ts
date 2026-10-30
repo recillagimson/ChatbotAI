@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveChatbotAccess, ownerScope } from "@/lib/chatbot-access";
 import { openaiChat } from "@/lib/openai";
+import { usageTag } from "@/lib/usage-log";
+import { createServiceClient } from "@/lib/supabase/server";
 import { MODELS } from "@/lib/model-tiers";
 import { MAX_SCENARIO_CHARS, hasContactDetails } from "@/lib/training";
 
@@ -41,7 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!access.ok) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const { data: bot } = await ownerScope(
-    access.db.from("chatbots").select("id").eq("id", id),
+    access.db.from("chatbots").select("id, user_id").eq("id", id),
     access
   ).maybeSingle();
   if (!bot) return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
@@ -58,6 +60,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       maxTokens: 40,
       timeoutMs: 8_000,
       retries: 1,
+      // Service client: usage_log has no insert policy for signed-in users.
+      usage: usageTag(createServiceClient(), bot, "ai_call_training_suggest"),
     });
     const line = cleanLine(text);
     // Backstop for the prompt's "never copy contact details": a suggestion that

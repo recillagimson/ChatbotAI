@@ -15,6 +15,7 @@ import { isTaggedBotOff } from "@/lib/bot-off-tag";
 import { fetchFollowupAssets, resolveAssetByKey, stepAssetKeys } from "@/lib/followup-assets";
 import { hasActiveAccess } from "@/lib/access";
 import { generateFollowupText } from "@/lib/anthropic";
+import { insertUsageRow } from "@/lib/usage-log";
 import { buildKbBlock } from "@/lib/retrieval";
 import { HISTORY_TURNS } from "@/lib/memory";
 import type {
@@ -264,15 +265,11 @@ async function run() {
         if (gen?.text) {
           overrideText = gen.text;
           bump(reasons, "ai_generated");
-          await supabase
-            .from("usage_log")
-            .insert({
-              user_id: cb.user_id,
-              chatbot_id: cb.id,
-              event_type: "followup_ai",
-              tokens_used: gen.tokensUsed,
-            })
-            .then(() => {}, () => {});
+          await insertUsageRow(
+            supabase,
+            { user_id: cb.user_id, chatbot_id: cb.id, event_type: "followup_ai", tokens_used: gen.tokensUsed },
+            gen.detail
+          );
         } else {
           bump(reasons, "ai_generate_failed");
         }

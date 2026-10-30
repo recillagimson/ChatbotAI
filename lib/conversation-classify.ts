@@ -10,6 +10,7 @@
  * unrecognized reply, or an API error.
  */
 import { openaiChat } from "./openai";
+import type { AiUsageTag } from "./usage-log";
 import { isTag, type ConversationTag } from "./conversation-tags";
 import { MODELS } from "./model-tiers";
 
@@ -93,6 +94,7 @@ export async function classifyConversation(opts: {
   botReply: string;
   /** Today's date (YYYY-MM-DD) so the model can resolve "Wednesday" → an ISO date. */
   today: string;
+  usage?: AiUsageTag;
 }): Promise<ClassifyResult> {
   const text = (opts.userMessage ?? "").trim();
   if (!text) return { tag: "lead", startOn: null, startNote: null };
@@ -119,6 +121,7 @@ export async function classifyConversation(opts: {
       ],
       maxTokens: 60,
       timeoutMs: 8_000,
+      usage: opts.usage,
     });
     return parseClassification(out, opts.today);
   } catch {

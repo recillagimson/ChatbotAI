@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Chatbot, Message } from "./types";
 import { sanitizeReply } from "./sanitize";
 import { openaiChat, MIN_ATTEMPT_MS, type OpenAIChatMessage } from "./openai";
+import type { TokenDetail } from "./usage-log";
 import { HISTORY_TURNS } from "./memory";
 import { renderKnownFactsBlock } from "./lead-facts";
 import { HUMANIZER_STYLE } from "./humanizer";
@@ -428,7 +429,7 @@ export async function generateReply(opts: {
         }
       : { role: "user", content: opts.userMessage };
 
-    const { text, tokensUsed, finishReason, refusal } = await openaiChat({
+    const { text, tokensUsed, detail, finishReason, refusal } = await openaiChat({
       model: replyModel,
       system: systemText,
       messages: [...trimmed, currentTurn],
@@ -448,6 +449,7 @@ export async function generateReply(opts: {
     return {
       text: sanitizeReply(text),
       tokensUsed,
+      detail,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
       // Why an empty `text` is empty (a deliberate "stop", a safety refusal, a
@@ -542,6 +544,17 @@ export async function generateReply(opts: {
         (usage?.cache_creation_input_tokens ?? 0) +
         (usage?.cache_read_input_tokens ?? 0) +
         (usage?.output_tokens ?? 0),
+      // Same convention as OpenAI: input includes the cached part. Cache writes are
+      // billed as input (at 1.25x on Claude), so they count as uncached input here.
+      detail: {
+        model,
+        inputTokens:
+          (usage?.input_tokens ?? 0) +
+          (usage?.cache_creation_input_tokens ?? 0) +
+          (usage?.cache_read_input_tokens ?? 0),
+        cachedTokens: usage?.cache_read_input_tokens ?? 0,
+        outputTokens: usage?.output_tokens ?? 0,
+      },
       cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
       cacheWriteTokens: usage?.cache_creation_input_tokens ?? 0,
       finishReason: response.stop_reason ?? null,
@@ -588,10 +601,10 @@ export async function generateFollowupText(opts: {
   instruction?: string | null; // the step's `text` (may be blank)
   hoursSilent: number;
   platform?: string | null; // the contact's channel (Instagram forbids links in text)
-}): Promise<{ text: string; tokensUsed: number } | null> {
+}): Promise<{ text: string; tokensUsed: number; detail?: TokenDetail } | null> {
   try {
     const userMessage = buildFollowupInstruction(opts.hoursSilent, opts.instruction);
-    const { text, tokensUsed } = await generateReply({
+    const { text, tokensUsed, detail } = await generateReply({
       chatbot: opts.chatbot,
       kbBlock: opts.kbBlock,
       history: opts.history,
@@ -609,7 +622,7 @@ export async function generateFollowupText(opts: {
       console.warn("[generateFollowupText] foreign-script leak, skipping", clean.slice(0, 120));
       return null;
     }
-    return clean ? { text: clean, tokensUsed } : null;
+    return clean ? { text: clean, tokensUsed, detail } : null;
   } catch (err) {
     console.error("[generateFollowupText] failed", err);
     return null;

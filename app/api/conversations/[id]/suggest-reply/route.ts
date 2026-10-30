@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, getCurrentUser, createServiceClient } from "@/lib/supabase/server";
 import { generateFollowupText } from "@/lib/anthropic";
+import { insertUsageRow } from "@/lib/usage-log";
 import { buildKbBlock } from "@/lib/retrieval";
 import type { Chatbot } from "@/lib/types";
 
@@ -124,6 +125,13 @@ export async function POST(
       instruction: null,
       hoursSilent,
     });
+    if (result) {
+      await insertUsageRow(
+        createServiceClient(),
+        { user_id: chatbot.user_id, chatbot_id: chatbot.id, event_type: "ai_call_suggest_reply", tokens_used: result.tokensUsed },
+        result.detail
+      );
+    }
 
     // Defensive: strip any stray [[...]] directives, collapse blank runs, cap at
     // the ManyChat per-message ceiling. The owner edits before sending.

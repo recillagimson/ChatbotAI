@@ -22,6 +22,7 @@ import { getTrivialReply } from "./limits";
 import { detectUserControl } from "./user-controls";
 import { detectExtractionAttempt } from "./extraction-detect";
 import { openaiChat } from "./openai";
+import type { AiUsageTag } from "./usage-log";
 import { MODELS } from "./model-tiers";
 
 /** Max paid relevance screens per contact before we stop screening them (cost bound). */
@@ -87,6 +88,7 @@ export async function screenInquiryRelevance(opts: {
   text: string;
   botName: string;
   businessContext: string;
+  usage?: AiUsageTag;
 }): Promise<boolean> {
   const text = (opts.text ?? "").trim();
   if (!text) return false;
@@ -106,6 +108,7 @@ export async function screenInquiryRelevance(opts: {
       messages: [{ role: "user", content: `Message: ${text}\n\nYES or NO:` }],
       maxTokens: 3,
       timeoutMs: 6_000,
+      usage: opts.usage,
     });
     return parseRelevance(out);
   } catch {

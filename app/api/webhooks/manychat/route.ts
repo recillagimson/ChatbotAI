@@ -80,6 +80,7 @@ import {
 import { retryStillDeliverable } from "@/lib/messaging-window";
 import { HISTORY_TURNS, refreshConversationMemory } from "@/lib/memory";
 import { refreshKnownFacts } from "@/lib/lead-facts";
+import { insertUsageRow, usageTag } from "@/lib/usage-log";
 import { renderSentStateBlock, parseSentAssetKeys } from "@/lib/sent-state";
 import { detectHandoff, renderHandoffBlock } from "@/lib/handoff-detect";
 import { botReplySilenced, keepsReplyingToSubscribed } from "@/lib/conversation-silence";
@@ -1345,6 +1346,7 @@ export async function POST(request: NextRequest) {
         text: baseText,
         botName: chatbot.name,
         businessContext: chatbot.business_description || (chatbot.system_prompt ?? "").slice(0, 400),
+        usage: usageTag(supabase, chatbot, "ai_call_question_gate"),
       });
       if (answerAsInquiry) {
         await supabase
@@ -1789,7 +1791,7 @@ export async function POST(request: NextRequest) {
     if (hasMedia) {
       const media = await processInboundMedia(
         mediaItems,
-        { supabase, userId: chatbot.user_id },
+        { supabase, userId: chatbot.user_id, usage: usageTag(supabase, chatbot, "ai_call_vision") },
         { describeImages: !synchronous }
       );
       images = media.images;
@@ -1969,7 +1971,11 @@ export async function POST(request: NextRequest) {
         console.warn("[manychat-webhook] deterministic promo/referral spam - silencing", { conversationId, patterns: spamHit.patterns });
         outcome = "spam";
       } else {
-        ({ outcome } = await screenDisqualify({ message: effectiveMessage, lastBotMessage }));
+        ({ outcome } = await screenDisqualify({
+          message: effectiveMessage,
+          lastBotMessage,
+          usage: usageTag(supabase, chatbot, "ai_call_screen"),
+        }));
       }
       // A `bot` (automated-sender) verdict only makes sense at first contact. Once the
       // assistant has had genuine back-and-forth with this person (a prior assistant
@@ -2181,6 +2187,16 @@ export async function POST(request: NextRequest) {
     let replyText = outcome.kind === "silent" ? "" : outcome.text;
     // Real tokens whenever the call completed: a silent turn was still generated/billed.
     const tokens = generated?.tokensUsed ?? 0;
+    // A generated reply thrown away below (superseded, or the lead / owner stopped the
+    // bot meanwhile) was still paid for. Its own event, so reply counts never include it.
+    const logDiscarded = () =>
+      generated
+        ? insertUsageRow(
+            supabase,
+            { user_id: chatbot.user_id, chatbot_id: chatbot.id, event_type: "ai_reply_discarded", tokens_used: tokens },
+            generated.detail
+          )
+        : Promise.resolve();
     if (silent) {
       console.warn(
         `[manychat-webhook] AI chose not to reply (finish=${generated?.finishReason ?? "-"}, refused=${generated?.refused ? "yes" : "no"}); staying silent and flagging needs_human. bot=${chatbot.id} conversation=${conversationId}`
@@ -2259,6 +2275,7 @@ export async function POST(request: NextRequest) {
       if (releaseError) {
         console.error("[manychat-webhook] claim release failed", releaseError);
       } else if (!released?.length) {
+        await logDiscarded();
         return null; // superseded mid-generate
       }
     }
@@ -2289,6 +2306,7 @@ export async function POST(request: NextRequest) {
       }
       if (shouldStandDown(recheck)) {
         await releaseClaim();
+        await logDiscarded();
         return null;
       }
       if (!recheck) {
@@ -2334,14 +2352,18 @@ export async function POST(request: NextRequest) {
       });
     }
     await Promise.all([
-      supabase.from("usage_log").insert({
-        user_id: chatbot.user_id,
-        chatbot_id: chatbot.id,
-        // A silent turn is not a sent reply (analytics count ai_reply rows as replies),
-        // but its tokens were spent, so they stay on the ai_silent row.
-        event_type: silent ? "ai_silent" : "ai_reply",
-        tokens_used: tokens,
-      }),
+      insertUsageRow(
+        supabase,
+        {
+          user_id: chatbot.user_id,
+          chatbot_id: chatbot.id,
+          // A silent turn is not a sent reply (analytics count ai_reply rows as replies),
+          // but its tokens were spent, so they stay on the ai_silent row.
+          event_type: silent ? "ai_silent" : "ai_reply",
+          tokens_used: tokens,
+        },
+        generated?.detail
+      ),
       supabase.from("usage_log").insert({
         user_id: chatbot.user_id,
         chatbot_id: chatbot.id,
@@ -2399,7 +2421,12 @@ export async function POST(request: NextRequest) {
           // subscribed/disqualified/bot thread.
           const { tag, startOn, startNote } = handoff.handoff || silent
             ? { tag: "needs_human" as ConversationTag, startOn: null, startNote: null }
-            : await classifyConversation({ userMessage, botReply, today });
+            : await classifyConversation({
+                userMessage,
+                botReply,
+                today,
+                usage: usageTag(supabase, chatbot, "ai_call_tags"),
+              });
           if (tag === "subscribed") {
             await supabase
               .from("conversations")
@@ -2507,9 +2534,9 @@ export async function POST(request: NextRequest) {
         // delivery - the assistant row is already persisted. allSettled so one
         // rejection can't skip the other two.
         const stateJobs = Promise.allSettled([
-          refreshConversationMemory({ supabase, conversationId: conversationId! }),
-          refreshKnownFacts({ supabase, conversationId: conversationId! }),
-          refreshFlowState({ supabase, conversationId: conversationId!, chatbotId: chatbot.id }),
+          refreshConversationMemory({ supabase, conversationId: conversationId!, usage: usageTag(supabase, chatbot, "ai_call_memory") }),
+          refreshKnownFacts({ supabase, conversationId: conversationId!, usage: usageTag(supabase, chatbot, "ai_call_facts") }),
+          refreshFlowState({ supabase, conversationId: conversationId!, chatbotId: chatbot.id, usage: usageTag(supabase, chatbot, "ai_call_flow_state") }),
         ]);
         const { deliver, resolvedAssets } = result;
         // Per-chatbot: render Messenger links as tappable URL buttons (default off).
@@ -2613,9 +2640,9 @@ export async function POST(request: NextRequest) {
   const syncTagWork = syncResult?.tagWork;
   after(async () => {
     await Promise.allSettled([
-      refreshConversationMemory({ supabase, conversationId: conversationId! }),
-      refreshKnownFacts({ supabase, conversationId: conversationId! }),
-      refreshFlowState({ supabase, conversationId: conversationId!, chatbotId: chatbot.id }),
+      refreshConversationMemory({ supabase, conversationId: conversationId!, usage: usageTag(supabase, chatbot, "ai_call_memory") }),
+      refreshKnownFacts({ supabase, conversationId: conversationId!, usage: usageTag(supabase, chatbot, "ai_call_facts") }),
+      refreshFlowState({ supabase, conversationId: conversationId!, chatbotId: chatbot.id, usage: usageTag(supabase, chatbot, "ai_call_flow_state") }),
       syncTagWork ?? Promise.resolve(),
     ]);
   });

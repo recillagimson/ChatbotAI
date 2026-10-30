@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/admin";
 import { draftChangeRequest } from "@/lib/openai-changes";
+import { usageTag } from "@/lib/usage-log";
 import { sectionColumnFor } from "@/lib/change-categories";
 import { buildChangeFinal, planPublish, type LiveSections } from "@/lib/change-final";
 import { MAX_SECTION_CHARS } from "@/lib/section-edits";
@@ -97,7 +98,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { data: chatbot } = await supabase
       .from("chatbots")
       .select(
-        "id, name, business_description, tone, system_prompt, persona_section, offers_section, rebuttals_section"
+        "id, user_id, name, business_description, tone, system_prompt, persona_section, offers_section, rebuttals_section"
       )
       .eq("id", cr.chatbot_id)
       .maybeSingle();
@@ -126,6 +127,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         category: cr.category,
         currentSection,
         sections,
+        // Billed to the bot's owner, not the reviewing admin.
+        usage: usageTag(createServiceClient(), chatbot as Chatbot, "ai_call_change_assistant"),
       });
       const { error } = await supabase
         .from("change_requests")

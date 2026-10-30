@@ -11,7 +11,27 @@
 // to before) so the reply path can ride out a blip; the latency-sensitive screener /
 // classifier callers keep the default and are unchanged.
 
+import { logAiCall, type AiUsageTag, type TokenDetail } from "./usage-log";
+
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
+
+/** The `usage` block of a chat completion. */
+export interface OpenAIUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+}
+
+/** The token split of one completion (missing fields count as 0). */
+export function tokenDetail(model: string, usage: OpenAIUsage | undefined): TokenDetail {
+  return {
+    model,
+    inputTokens: usage?.prompt_tokens ?? 0,
+    cachedTokens: usage?.prompt_tokens_details?.cached_tokens ?? 0,
+    outputTokens: usage?.completion_tokens ?? 0,
+  };
+}
 
 /** A multimodal content part - text or an image (data: URL or https URL). */
 export type OpenAIContentPart =
@@ -76,6 +96,8 @@ export const MIN_ATTEMPT_MS = 2_000;
 export interface OpenAIChatResult {
   text: string;
   tokensUsed: number;
+  /** Model plus input / cached / output tokens, for usage_log. */
+  detail: TokenDetail;
   /** choices[0].finish_reason ("stop", "length", "content_filter", ...), or null. */
   finishReason: string | null;
   /** choices[0].message.refusal: the model's safety decline text, or null. */
@@ -127,7 +149,7 @@ async function openaiChatOnce(
         message?: { content?: string | null; refusal?: string | null };
         finish_reason?: string;
       }[];
-      usage?: { total_tokens?: number };
+      usage?: OpenAIUsage;
     };
     const choice = data.choices?.[0];
     const text = (choice?.message?.content ?? "").trim();
@@ -151,6 +173,7 @@ async function openaiChatOnce(
     return {
       text,
       tokensUsed: data.usage?.total_tokens ?? 0,
+      detail: tokenDetail(opts.model, data.usage),
       finishReason: choice?.finish_reason ?? null,
       refusal,
     };
@@ -193,6 +216,9 @@ export async function openaiChat(opts: {
   deadlineAt?: number;
   /** Clock for deadlineAt; injectable for tests. Default Date.now. */
   now?: () => number;
+  /** Bills this call to a bot: a usage_log row under `usage.event` once it succeeds.
+   *  Unset = no row (the DM reply, whose ai_reply row the webhook writes itself). */
+  usage?: AiUsageTag;
 }): Promise<OpenAIChatResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
@@ -218,7 +244,9 @@ export async function openaiChat(opts: {
       ? Math.min(opts.timeoutMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS, left)
       : opts.timeoutMs;
     try {
-      return await openaiChatOnce({ ...opts, maxTokens: attemptMax, timeoutMs }, apiKey);
+      const result = await openaiChatOnce({ ...opts, maxTokens: attemptMax, timeoutMs }, apiKey);
+      if (opts.usage) await logAiCall(opts.usage, result.tokensUsed, result.detail);
+      return result;
     } catch (err) {
       lastErr = err;
       if (attempt >= maxAttempts || !isTransientOpenAIError(err)) throw err;

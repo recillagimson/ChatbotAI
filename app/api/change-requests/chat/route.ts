@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, createServiceClient, getCurrentUser } from "@/lib/supabase/server";
+import { usageTag } from "@/lib/usage-log";
 import { chatTurn, type ChatTurnMessage, type SectionsContext } from "@/lib/openai-changes";
 import { downloadAsBase64, downloadAsBuffer, CLAUDE_IMAGE_TYPES } from "@/lib/storage";
 import { extractTextFromFile, MAX_DOC_CHARS } from "@/lib/document-parser";
@@ -175,6 +176,8 @@ export async function POST(request: NextRequest) {
       category: effectiveCategory,
       currentSection,
       sections: sectionsCtx,
+      // Service client: usage_log has no insert policy for signed-in users.
+      usage: usageTag(createServiceClient(), { id: chatbot_id, user_id: user.id }, "ai_call_change_assistant"),
     });
     assistantText = out.assistantText;
     proposal = out.proposal;

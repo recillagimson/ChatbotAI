@@ -17,6 +17,7 @@
 // Self-contained like lib/memory.ts (reads env directly; imports only openaiChat).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { openaiChat } from "./openai";
+import type { AiUsageTag } from "./usage-log";
 import { HISTORY_TURNS } from "./memory";
 import { MODELS } from "./model-tiers";
 
@@ -152,7 +153,8 @@ export function renderKnownFactsBlock(facts: string | null | undefined): string 
  */
 export async function updateKnownFacts(
   prevFacts: string | null,
-  msgs: FactMessage[]
+  msgs: FactMessage[],
+  usage?: AiUsageTag
 ): Promise<string> {
   if (msgs.length === 0) return prevFacts ?? "";
   try {
@@ -166,6 +168,7 @@ export async function updateKnownFacts(
       // shared with gpt-5.x reasoning tokens - too small a cap returns "" and the facts
       // silently don't get written. Ceiling only; the model still stops when done.
       maxTokens: 700,
+      usage,
     });
     const next = normalizeFacts(text);
     // Guard against a transient empty/garbage completion wiping a good list: only
@@ -187,6 +190,7 @@ export async function updateKnownFacts(
 export async function refreshKnownFacts(ctx: {
   supabase: SupabaseClient;
   conversationId: string;
+  usage?: AiUsageTag;
 }): Promise<void> {
   if (!LEAD_FACTS_ENABLED) return;
   const { supabase, conversationId } = ctx;
@@ -222,7 +226,7 @@ export async function refreshKnownFacts(ctx: {
       .single<{ known_facts: string | null }>();
 
     const prev = conv?.known_facts ?? null;
-    const next = await updateKnownFacts(prev, msgs);
+    const next = await updateKnownFacts(prev, msgs, ctx.usage);
     // Skip the write when nothing changed (avoids a needless UPDATE + realtime ping).
     if ((next ?? "") === (prev ?? "")) return;
 

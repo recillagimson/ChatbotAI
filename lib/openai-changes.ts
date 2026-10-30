@@ -29,6 +29,8 @@ import {
   SECTION_LABELS,
 } from "./change-categories";
 import { MODELS } from "./model-tiers";
+import { tokenDetail, type OpenAIUsage } from "./openai";
+import { logAiCall, type AiUsageTag } from "./usage-log";
 import { applyTextEdits, sectionFingerprint, FULL_REWRITE_MAX_CHARS } from "./section-edits";
 
 /** Current text of all three editable sections - the context an "overall" request revises. */
@@ -410,11 +412,16 @@ interface OpenAIResponseMessage {
 
 interface OpenAIChatResponse {
   choices?: { message?: OpenAIResponseMessage; finish_reason?: string }[];
-  usage?: { total_tokens?: number };
+  usage?: OpenAIUsage;
 }
 
-/** POST to OpenAI chat/completions with a hard timeout. Throws on non-2xx. */
-async function postChat(body: Record<string, unknown>, timeoutMs: number): Promise<OpenAIChatResponse> {
+/** POST to OpenAI chat/completions with a hard timeout. Throws on non-2xx. With a
+ *  usage tag, a completed call leaves its usage_log row. */
+async function postChat(
+  body: Record<string, unknown>,
+  timeoutMs: number,
+  usage?: AiUsageTag
+): Promise<OpenAIChatResponse> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
 
@@ -434,7 +441,11 @@ async function postChat(body: Record<string, unknown>, timeoutMs: number): Promi
       const detail = await res.text().catch(() => "");
       throw new Error(`OpenAI chat failed (${res.status}): ${detail.slice(0, 300)}`);
     }
-    return (await res.json()) as OpenAIChatResponse;
+    const data = (await res.json()) as OpenAIChatResponse;
+    if (usage) {
+      await logAiCall(usage, data.usage?.total_tokens ?? 0, tokenDetail(String(body.model), data.usage));
+    }
+    return data;
   } finally {
     clearTimeout(timer);
   }
@@ -501,6 +512,7 @@ async function proposeWithRepair(opts: {
   category: ChangeCategory;
   bases: Partial<Record<SectionColumn, string>>;
   forced: boolean;
+  usage?: AiUsageTag;
 }): Promise<{
   proposal?: ChangeProposal;
   rawText: string;
@@ -521,7 +533,8 @@ async function proposeWithRepair(opts: {
       tool_choice: opts.forced ? forcedChoice : "auto",
       messages: opts.messages,
     },
-    PROPOSAL_BUDGET_MS
+    PROPOSAL_BUDGET_MS,
+    opts.usage
   );
   let tokensUsed = first.usage?.total_tokens ?? 0;
   const choice = first.choices?.[0];
@@ -557,7 +570,8 @@ async function proposeWithRepair(opts: {
         })),
       ],
     },
-    remaining
+    remaining,
+    opts.usage
   );
   tokensUsed += retry.usage?.total_tokens ?? 0;
   const m2 = retry.choices?.[0]?.message;
@@ -769,6 +783,7 @@ export async function chatTurn(opts: {
   category: ChangeCategory;
   currentSection: string;
   sections?: SectionsContext; // "overall" only: live text of all three sections
+  usage?: AiUsageTag;
 }): Promise<{ assistantText: string; proposal?: ChangeProposal; tokensUsed: number; model: string }> {
   const system = buildChatSystemPrompt(
     opts.chatbot,
@@ -783,6 +798,7 @@ export async function chatTurn(opts: {
     category: opts.category,
     bases: basesFor(opts.category, opts.currentSection, opts.sections),
     forced: false, // reply with a question OR propose when ready
+    usage: opts.usage,
   });
 
   // A proposal that never applied must not be narrated as if it had: whatever the
@@ -891,6 +907,7 @@ export async function draftChangeRequest(opts: {
   category: ChangeCategory;
   currentSection: string;
   sections?: SectionsContext; // "overall" only
+  usage?: AiUsageTag;
 }): Promise<{ proposal: ChangeProposal; tokensUsed: number; model: string }> {
   const { system, userContent } = buildDraftPrompts(opts);
 
@@ -902,6 +919,7 @@ export async function draftChangeRequest(opts: {
     category: opts.category,
     bases: basesFor(opts.category, opts.currentSection, opts.sections),
     forced: true,
+    usage: opts.usage,
   });
 
   if (!out.proposal) {
