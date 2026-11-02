@@ -206,6 +206,9 @@ export interface Conversation {
   quality_tag: QualityTag | null;    // owner-set quality rating (good | bad), orthogonal to `tag`; null = unrated
   start_on: string | null;           // starting_later: the date (YYYY-MM-DD) the lead wants to begin; pauses the drip
   start_note: string | null;         // starting_later: the human phrase ("Wednesday", "in a week")
+  lead_phone?: string | null;        // phone number the lead typed in a DM (lib/lead-contact.ts); optional until the 2026-11-03 migration
+  lead_email?: string | null;        // email the lead typed in a DM
+  lead_contact_at?: string | null;   // when the latest new phone/email was saved
   disqualify_strikes: number;        // consecutive pre-reply "disqualified" screen signals from an ENGAGED lead; the terminal disqualify tag only fires on the 2nd (two-strike false-positive backstop, lib/conversation-screen.ts decideDisqualify). Default 0.
   followup_resolved_at: string | null; // manual follow-up: when the user marked the current band "done by hand in ManyChat"; a later lead reply auto-invalidates it (lib/manual-followups.ts followupResolvedHidden)
   followup_resolved_hi: number | null; // the resolved band's upper edge in hours (72/120/144/168); the thread reappears in the next band once its lead-silence age crosses this

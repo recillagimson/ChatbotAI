@@ -53,6 +53,11 @@ export const FRESH_CONVERSATION_RESET: Record<string, unknown> = {
   link_sent_at: null,
   start_on: null,
   start_note: null,
+  // Contact details the lead typed belong to the wiped transcript; clearing them
+  // also lets a re-test fire the Slack alert again.
+  lead_phone: null,
+  lead_email: null,
+  lead_contact_at: null,
   // Two-strike disqualify counter (lib/conversation-screen.ts). A reset thread is a
   // fresh first-contact, so any half-accumulated strike must be cleared too.
   disqualify_strikes: 0,

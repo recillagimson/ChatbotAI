@@ -5,6 +5,7 @@ import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { requireSuperadmin } from "@/lib/admin";
 import { ConversationActions } from "@/components/dashboard/conversation-actions";
 import { ConversationReplyBox } from "@/components/dashboard/conversation-reply-box";
+import { formatPhone } from "@/lib/lead-contact";
 import { ChatScroll } from "@/components/dashboard/chat-scroll";
 import { CorrectReplyButton } from "@/components/dashboard/correct-reply-button";
 import { isCorrectableBotMessage } from "@/lib/training";
@@ -186,6 +187,7 @@ export default async function ConversationDetailPage({
           </div>
         }
         meta={
+          <>
           <p className="text-[12px] leading-none text-ss-muted">
             {botNameOf(conversation.chatbots) ?? "-"}
             {handle ? ` · @${handle}` : ""}
@@ -196,6 +198,21 @@ export default async function ConversationDetailPage({
               ? ` · starting ${conversation.start_note}`
               : ""}
           </p>
+          {conversation.lead_phone || conversation.lead_email ? (
+            <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[12px] leading-none text-ss-body">
+              {conversation.lead_phone ? (
+                <a href={`tel:${conversation.lead_phone}`} className="font-medium text-ss-ink hover:underline">
+                  Phone: {formatPhone(conversation.lead_phone)}
+                </a>
+              ) : null}
+              {conversation.lead_email ? (
+                <a href={`mailto:${conversation.lead_email}`} className="font-medium text-ss-ink hover:underline">
+                  Email: {conversation.lead_email}
+                </a>
+              ) : null}
+            </p>
+          ) : null}
+          </>
         }
       />
 

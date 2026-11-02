@@ -52,6 +52,7 @@ export default defineConfig({
       "tests/followup-asset*.spec.ts",
       "tests/reply-provider*.spec.ts",
       "tests/usage-log*.spec.ts",
+      "tests/lead-contact*.spec.ts",
     ],
   },
   resolve: {

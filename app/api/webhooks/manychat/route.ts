@@ -69,7 +69,9 @@ import {
   getTrivialReply,
 } from "@/lib/limits";
 import { type Platform, toPlatform, canPushPlatform } from "@/lib/platforms";
-import { cleanContactField } from "@/lib/contact";
+import { cleanContactField, contactHandle } from "@/lib/contact";
+import { extractLeadContacts, newLeadContacts } from "@/lib/lead-contact";
+import { captureLeadContact } from "@/lib/lead-contact-server";
 import {
   normalizeMediaItems,
   processInboundMedia,
@@ -1188,6 +1190,29 @@ export async function POST(request: NextRequest) {
   // own that matches NO message row, so the reply closure reads every waiting message
   // back from the thread as stored (combineBurstText) and backfills none.
   const inboundId = botOn ? crypto.randomUUID() : (inboundMsg?.id as string | undefined);
+
+  // 5a-contact. A phone number or email the lead typed: save it, flag the thread
+  // Needs attention and alert the team's Slack (lib/lead-contact-server.ts). Runs
+  // before every reply gate, so it works even while the bot stays quiet, and in
+  // after() so it never slows the reply. Only a NEW contact does anything.
+  if (!botOn && baseText && conversationId) {
+    const newContact = newLeadContacts(existing, extractLeadContacts(baseText));
+    if (newContact) {
+      const captureInput = {
+        conversationId,
+        currentTag: (existing?.tag as string | undefined) ?? null,
+        savedPhone: (existing?.lead_phone as string | undefined) ?? null,
+        phone: newContact.phone,
+        email: newContact.email,
+        botName: chatbot.name ?? null,
+        platform,
+        leadName: displayName,
+        handle: contactHandle(username),
+        message: baseText,
+      };
+      after(() => captureLeadContact(supabase, captureInput));
+    }
+  }
 
   // 5b. Returning-contact pause. This fresh row inherited a prior thread's silence
   // state (step 4: the person's ManyChat contact was deleted+recreated). The inbound is
