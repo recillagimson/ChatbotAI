@@ -53,6 +53,7 @@ export default defineConfig({
       "tests/reply-provider*.spec.ts",
       "tests/usage-log*.spec.ts",
       "tests/lead-contact*.spec.ts",
+      "tests/lead-status*.spec.ts",
     ],
   },
   resolve: {

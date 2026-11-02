@@ -20,6 +20,7 @@ import {
   Settings,
   CreditCard,
   ShieldCheck,
+  PhoneCall,
   type LucideIcon,
 } from "lucide-react";
 
@@ -63,6 +64,9 @@ export const WORKSPACE_NAV: NavItem[] = [
     badgeTone: "amber",
   },
   { href: "/statistics", label: "Statistics", short: "Stats", icon: BarChart3 },
+  // Leads who sent a phone number or email (lib/lead-contact.ts). Kept after
+  // Statistics so MOBILE_TABS' indexes below don't shift.
+  { href: "/leads", label: "Lead contacts", short: "Leads", icon: PhoneCall },
   // No Knowledge Base item: knowledge belongs to one bot, so it lives in that
   // bot's Prompt tab. /knowledge-base still resolves for old links (it redirects).
   { href: "/learn", label: "Learn", icon: GraduationCap },
@@ -104,6 +108,7 @@ export const IMPERSONATION_HREFS = new Set([
   "/conversations",
   "/follow-ups",
   "/statistics",
+  "/leads",
   "/learn",
   "/requests",
 ]);
