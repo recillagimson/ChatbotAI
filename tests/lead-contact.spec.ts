@@ -5,6 +5,10 @@ import {
   formatPhone,
   phoneKey,
   buildSlackLeadAlert,
+  isSlackWebhookUrl,
+  maskSlackUrl,
+  hasLeadContact,
+  CONTACT_SHARED_BLOCK,
 } from "@/lib/lead-contact";
 
 const phones = (t: string) => extractLeadContacts(t).phones;
@@ -51,6 +55,14 @@ describe("extractLeadContacts: phones", () => {
 
   it("finds an 11-digit local number starting with 0", () => {
     expect(phones("09171234567")).toEqual(["09171234567"]);
+  });
+
+  it("finds a number with its country code but no + (the live miss)", () => {
+    expect(
+      phones("I'm at work. Before joining please make your team call me. 639202004181")
+    ).toEqual(["639202004181"]);
+    expect(phones("447946095812")).toEqual(["447946095812"]);
+    expect(phones("4242424242424242")).toEqual([]); // 16 digits: a card, not a phone
   });
 
   it("does not treat scores, money, dates, years or short numbers as phones", () => {
@@ -179,5 +191,38 @@ describe("buildSlackLeadAlert", () => {
     expect(text).toContain("@jane");
     expect(JSON.stringify(blocks)).not.toContain("Open conversation");
     expect(JSON.stringify(blocks)).not.toContain("Phone");
+  });
+});
+
+describe("per-bot Slack link", () => {
+  it("accepts only Slack Incoming Webhook links", () => {
+    expect(isSlackWebhookUrl("https://hooks.slack.com/services/T0/B0/abc123")).toBe(true);
+    expect(isSlackWebhookUrl(" https://hooks.slack.com/services/T0/B0/abc123 ")).toBe(true);
+    expect(isSlackWebhookUrl("http://hooks.slack.com/services/T0/B0/abc")).toBe(false);
+    expect(isSlackWebhookUrl("https://evil.com/hooks.slack.com/services/x")).toBe(false);
+    expect(isSlackWebhookUrl("https://hooks.slack.com.evil.com/services/x")).toBe(false);
+    expect(isSlackWebhookUrl("")).toBe(false);
+    expect(isSlackWebhookUrl(null)).toBe(false);
+  });
+
+  it("masks the link down to its last 4 characters", () => {
+    const hint = maskSlackUrl("https://hooks.slack.com/services/T0/B0/secretXYZ9");
+    expect(hint).toBe("hooks.slack.com/services/…XYZ9");
+    expect(hint).not.toContain("secret");
+  });
+});
+
+describe("contact-shared reply steer", () => {
+  it("fires only when the message holds a phone or email", () => {
+    expect(hasLeadContact("make your team call me. 639202004181")).toBe(true);
+    expect(hasLeadContact("jane@x.com")).toBe(true);
+    expect(hasLeadContact("my score is 649")).toBe(false);
+    expect(hasLeadContact(undefined)).toBe(false);
+  });
+
+  it("tells the bot the team will reach out and never to refuse calls", () => {
+    expect(CONTACT_SHARED_BLOCK).toContain("team will reach out");
+    expect(CONTACT_SHARED_BLOCK).toContain("Do not say there are no calls");
+    expect(CONTACT_SHARED_BLOCK).not.toMatch(/skool/i); // generic, no client wording (#12)
   });
 });

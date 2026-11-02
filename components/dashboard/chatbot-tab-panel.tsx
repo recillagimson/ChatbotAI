@@ -6,6 +6,8 @@ import { FollowupSequenceForm } from "@/components/dashboard/followup-sequence-f
 import { KeepRepliesToggle } from "@/components/dashboard/keep-replies-toggle";
 import { keepsReplyingToSubscribed } from "@/lib/conversation-silence";
 import { ModelControls } from "@/components/dashboard/model-controls";
+import { SlackAlertCard } from "@/components/dashboard/slack-alert-card";
+import { isSlackWebhookUrl, maskSlackUrl } from "@/lib/lead-contact";
 import { WelcomeForm } from "@/components/dashboard/welcome-form";
 import { LinkFlowForm } from "@/components/dashboard/link-flow-form";
 import { KeywordTriggersForm } from "@/components/dashboard/keyword-triggers-form";
@@ -75,8 +77,9 @@ export async function ChatbotTabPanel({
   if (!chatbot) notFound();
 
   const apiKeySet = !!chatbot.manychat_api_key_enc;
-  // Never serialize the encrypted key to the browser; the client forms don't use it.
-  const safeChatbot = { ...chatbot, manychat_api_key_enc: null } as Chatbot;
+  // Never serialize the encrypted key or the Slack alert link to the browser; the
+  // client forms don't use them (the Slack card gets a masked hint instead).
+  const safeChatbot = { ...chatbot, manychat_api_key_enc: null, slack_alert_url: null } as Chatbot;
 
   // Overview-only stats - skip these queries on every other tab.
   let kbCount = 0;
@@ -249,6 +252,17 @@ export async function ChatbotTabPanel({
                 chatbotId={chatbot.id}
                 initialReplyModel={chatbot.reply_model}
                 initialForceRetrieval={chatbot.force_retrieval}
+              />
+            )}
+
+            {isSuperadmin && (
+              <SlackAlertCard
+                chatbotId={chatbot.id}
+                initialHint={
+                  isSlackWebhookUrl(chatbot.slack_alert_url)
+                    ? maskSlackUrl(chatbot.slack_alert_url)
+                    : null
+                }
               />
             )}
 

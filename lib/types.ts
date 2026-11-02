@@ -75,6 +75,7 @@ export interface Chatbot {
   keep_replies_when_tagged: boolean;      // disqualified / Bot-Spam tags don't silence the reactive reply
   keep_replies_when_subscribed?: boolean; // subscribed users still get replies (drip stays off); missing before 2026-09-29, then keep_replies_when_tagged decides (lib/conversation-silence.ts)
   reply_model: string | null;             // admin-only per-bot reactive-reply model override; null/invalid = MODELS.reply() default
+  slack_alert_url?: string | null;        // this bot's Slack Incoming Webhook for lead-contact alerts (admin-set; lib/lead-contact-server.ts); optional until the 2026-11-03 slack migration
   force_retrieval: boolean;               // admin-only: force KB vector retrieval regardless of size (needs an indexed KB)
   keyword_triggers: KeywordGroup[];       // per-chatbot keyword auto-reply groups (JSONB)
   training_pairs: TrainingPair[];         // Bot Trainer scenario corrections (JSONB)

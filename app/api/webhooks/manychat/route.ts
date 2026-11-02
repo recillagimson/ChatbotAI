@@ -70,7 +70,7 @@ import {
 } from "@/lib/limits";
 import { type Platform, toPlatform, canPushPlatform } from "@/lib/platforms";
 import { cleanContactField, contactHandle } from "@/lib/contact";
-import { extractLeadContacts, newLeadContacts } from "@/lib/lead-contact";
+import { extractLeadContacts, newLeadContacts, hasLeadContact, CONTACT_SHARED_BLOCK } from "@/lib/lead-contact";
 import { captureLeadContact } from "@/lib/lead-contact-server";
 import {
   normalizeMediaItems,
@@ -1209,6 +1209,7 @@ export async function POST(request: NextRequest) {
         leadName: displayName,
         handle: contactHandle(username),
         message: baseText,
+        slackUrl: chatbot.slack_alert_url ?? null,
       };
       after(() => captureLeadContact(supabase, captureInput));
     }
@@ -2152,7 +2153,12 @@ export async function POST(request: NextRequest) {
     // One combined block in the flow-state slot: all are volatile-tail, model-facing "known
     // state" blocks. Joined here so buildSystemPrompt needs no change AND a bot with the
     // flow-state ledger OFF still receives the sent-state / handoff blocks.
-    const flowAndSentBlock = [flowStateBlock, sentStateBlock, handoffBlock].filter(Boolean).join("\n\n");
+    // A phone/email in this burst: the team has been flagged, so the bot says so
+    // instead of "we don't do calls" (lib/lead-contact.ts, every bot).
+    const contactBlock = hasLeadContact(effectiveMessage) ? CONTACT_SHARED_BLOCK : "";
+    const flowAndSentBlock = [flowStateBlock, sentStateBlock, handoffBlock, contactBlock]
+      .filter(Boolean)
+      .join("\n\n");
 
     let generated: Awaited<ReturnType<typeof generateReply>> | null = null;
     try {

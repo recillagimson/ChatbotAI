@@ -33,6 +33,10 @@ function phoneFrom(raw: string): string | null {
   }
   if (digits.length === 10) return digits;
   if (digits.length === 11 && (digits[0] === "1" || digits[0] === "0")) return digits;
+  // An unbroken run is a number with its country code and no "+"
+  // ("639202004181"). Written with spaces it could be a list of scores, so only
+  // the unbroken form counts; 16+ digits is a card number, not a phone.
+  if (/^\d+$/.test(raw) && digits.length <= 15) return digits;
   return null;
 }
 
@@ -156,4 +160,31 @@ export function buildSlackLeadAlert(a: LeadContactAlert): {
   }
   const contact = [a.phone ? formatPhone(a.phone) : null, a.email].filter(Boolean).join(" · ");
   return { text: `New lead contact from ${who} (${bot}): ${contact}`, blocks };
+}
+
+/** A Slack Incoming Webhook link (the only kind of URL an alert may be posted to). */
+export function isSlackWebhookUrl(url: unknown): url is string {
+  return typeof url === "string" && /^https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/_-]+$/.test(url.trim());
+}
+
+/** "https://hooks.slack.com/services/T0/B0/abcd1234" -> "…/services/…1234" for display. */
+export function maskSlackUrl(url: string): string {
+  return `hooks.slack.com/services/…${url.trim().slice(-4)}`;
+}
+
+/**
+ * Steer for a turn where the lead shared a phone number or email (every bot). The
+ * team is flagged (Needs attention + this bot's Slack alert), so the reply must not
+ * say nobody will call. A bot's own wording (its Training tab) can shape the rest.
+ */
+export const CONTACT_SHARED_BLOCK =
+  "CONTACT DETAILS SHARED - in this message the person sent their phone number or email. " +
+  "Acknowledge that you have it and that the team will reach out to them, and that it can take a little while. " +
+  "Do not say there are no calls or that nobody will contact them. Do not repeat their number or email back. " +
+  "Then continue with the next step from this chatbot's own instructions.";
+
+/** True when the text holds any phone number or email. */
+export function hasLeadContact(text: unknown): boolean {
+  const found = extractLeadContacts(text);
+  return found.emails.length > 0 || found.phones.length > 0;
 }

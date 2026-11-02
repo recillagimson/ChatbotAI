@@ -2,8 +2,9 @@
  * Server half of lead contact capture (pure half: lib/lead-contact.ts).
  *
  * When a lead types a new phone number or email: save it on the conversation, flag
- * the thread needs_human ("Needs attention"), and post one alert to the team's Slack
- * channel (Incoming Webhook in SLACK_CONTACT_WEBHOOK_URL; unset = save and tag only).
+ * the thread needs_human ("Needs attention"), and post one alert to THIS chatbot's
+ * Slack channel (chatbots.slack_alert_url, an Incoming Webhook; unset = save and tag
+ * only). Per bot, so one client's leads never land in another client's channel.
  *
  * The saves are conditional ("only if the stored value differs"), so two messages
  * racing with the same number alert once. Runs in the webhook's after() and never
@@ -12,7 +13,7 @@
  * posted (no repeat alerts on every message).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildSlackLeadAlert, phoneKey } from "@/lib/lead-contact";
+import { buildSlackLeadAlert, isSlackWebhookUrl, phoneKey, type LeadContactAlert } from "@/lib/lead-contact";
 import { resolveTagWrite, CONVERSATION_TAGS, TAG_RANK, type ConversationTag } from "@/lib/conversation-tags";
 
 export interface CaptureInput {
@@ -26,6 +27,7 @@ export interface CaptureInput {
   leadName: string | null;
   handle: string | null;
   message: string;
+  slackUrl: string | null;
 }
 
 async function saveIfNew(
@@ -100,10 +102,9 @@ export async function captureLeadContact(
 }
 
 async function postSlackAlert(input: CaptureInput): Promise<void> {
-  const url = process.env.SLACK_CONTACT_WEBHOOK_URL?.trim();
-  if (!url) return;
+  if (!isSlackWebhookUrl(input.slackUrl)) return;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "");
-  const body = buildSlackLeadAlert({
+  await postToSlack(input.slackUrl, {
     botName: input.botName,
     platform: input.platform,
     leadName: input.leadName,
@@ -113,17 +114,23 @@ async function postSlackAlert(input: CaptureInput): Promise<void> {
     message: input.message,
     conversationUrl: appUrl ? `${appUrl}/conversations/${input.conversationId}` : null,
   });
+}
+
+/** Posts one alert. Returns whether Slack accepted it; never throws. */
+export async function postToSlack(url: string, alert: LeadContactAlert): Promise<boolean> {
   try {
-    const res = await fetch(url, {
+    const res = await fetch(url.trim(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(buildSlackLeadAlert(alert)),
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
       console.error("[lead-contact] Slack post failed", res.status, await res.text().catch(() => ""));
     }
+    return res.ok;
   } catch (err) {
     console.error("[lead-contact] Slack post failed", err);
+    return false;
   }
 }
