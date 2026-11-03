@@ -55,3 +55,46 @@ describe("refreshKnownFacts message window", () => {
     expect(messages[0].content).toContain("Lead: [Image]: score is 580");
   });
 });
+
+// Token-cost plan step 4: a turn where the lead only acknowledged has nothing new to
+// extract, so the facts call is skipped. A yes / no still runs ("yes" to "are you in
+// Texas?" is a fact), and so does any burst holding one real message. Skipping only
+// delays: the exchange stays in the window for the next real turn.
+describe("a turn the lead only acknowledged", () => {
+  beforeEach(() => openaiChat.mockClear());
+
+  /** This turn: the bot's reply (newest), the lead's messages, then older context. */
+  const turn = (...lead: string[]): StubRow[] => [
+    { role: "assistant", content: "Great, talk soon!", created_at: "2026-08-19T12:00:09.000Z", media_url: null },
+    ...lead.map((content, i) => ({ role: "user", content, created_at: `2026-08-19T12:00:0${8 - i}.000Z`, media_url: null })),
+    ...rows().slice(2),
+  ];
+  const refresh = (r: StubRow[]) =>
+    refreshKnownFacts({ supabase: makeSupabaseStub(r, { known_facts: null }).client, conversationId: CONV });
+
+  it("makes no facts call on a bare ok, thanks or emoji", async () => {
+    await refresh(turn("ok"));
+    await refresh(turn("Thanks!! 🙏"));
+    await refresh(turn("👍"));
+    await refresh(turn("gracias", "lol"));
+    expect(openaiChat).not.toHaveBeenCalled();
+  });
+
+  it("still runs when the same burst also says something", async () => {
+    await refresh(turn("ok", "I'm Sam, I live in Texas"));
+    expect(openaiChat).toHaveBeenCalledTimes(1);
+  });
+
+  it("still runs on a message in another script, even next to an ok", async () => {
+    await refresh(turn("Я хочу купить дом"));
+    await refresh(turn("我想买房子"));
+    await refresh(turn("ok 我想买房子"));
+    expect(openaiChat).toHaveBeenCalledTimes(3);
+  });
+
+  it("still runs on a yes or a no", async () => {
+    await refresh(turn("yes"));
+    await refresh(turn("no"));
+    expect(openaiChat).toHaveBeenCalledTimes(2);
+  });
+});

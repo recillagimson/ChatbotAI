@@ -18,6 +18,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { openaiChat } from "./openai";
 import type { AiUsageTag } from "./usage-log";
+import { normalizeShortReply } from "./conversation-screen";
 import { HISTORY_TURNS } from "./memory";
 import { MODELS } from "./model-tiers";
 
@@ -181,6 +182,33 @@ export async function updateKnownFacts(
   }
 }
 
+/** Pure acknowledgements: they carry no fact on their own. Yes / no are NOT here, because
+ *  "yes" to "are you in Texas?" is a fact. Matched after normalizeShortReply. */
+const ACK_ONLY = new Set([
+  "ok", "okay", "k", "kk", "okie", "alright", "aight", "cool", "nice", "great", "awesome",
+  "perfect", "got it", "gotcha", "thanks", "thank you", "thx", "ty", "tysm", "thanks so much",
+  "thank you so much", "lol", "haha", "hahaha", "lmao",
+  "gracias", "muchas gracias", "vale", "dale", "listo", "perfecto", "genial", "jaja", "jajaja",
+]);
+
+/** A letter outside the Latin script. normalizeShortReply strips those to nothing, so a
+ *  line holding one must never be read as an acknowledgement. */
+const NON_LATIN_LETTER = /(?!\p{Script=Latin})\p{L}/u;
+
+/** True when every message (and every line of it) is a pure acknowledgement or emoji only. */
+export function isAckOnly(messages: string[]): boolean {
+  return (
+    messages.length > 0 &&
+    messages.every((m) =>
+      m.split("\n").every((line) => {
+        if (NON_LATIN_LETTER.test(line)) return false;
+        const p = normalizeShortReply(line);
+        return p === "" || ACK_ONLY.has(p);
+      })
+    )
+  );
+}
+
 /**
  * Refresh a conversation's known-facts list from its recent history. Runs in the
  * background after a reply; best-effort - any failure is logged and swallowed (never
@@ -214,6 +242,14 @@ export async function refreshKnownFacts(ctx: {
       .limit(HISTORY_TURNS)
       .returns<{ role: string; content: string; created_at: string }[]>();
     if (!recent || recent.length < LEAD_FACTS_MIN_MESSAGES) return;
+    // This turn's lead messages: the user rows just below the newest bot rows. When all of
+    // them are bare acknowledgements there is nothing new to extract (token-cost plan step
+    // 4); anything said earlier is still in this window for the next real turn.
+    const turn: string[] = [];
+    for (let i = recent.findIndex((m) => m.role === "user"); i >= 0 && recent[i]?.role === "user"; i++) {
+      turn.push(recent[i].content);
+    }
+    if (isAckOnly(turn)) return;
     const msgs = recent
       .slice()
       .reverse()

@@ -52,6 +52,8 @@ export default defineConfig({
       "tests/followup-asset*.spec.ts",
       "tests/reply-provider*.spec.ts",
       "tests/usage-log*.spec.ts",
+      "tests/prompt-cache*.spec.ts",
+      "tests/model-tiers*.spec.ts",
       "tests/lead-contact*.spec.ts",
       "tests/lead-status*.spec.ts",
     ],
