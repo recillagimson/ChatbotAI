@@ -5,14 +5,16 @@
 
 export type ModelTier = "classifier" | "reply" | "helper";
 
-// Defaults used ONLY when no env var is set. Uniform gpt-5.4-mini on purpose:
-// a same-or-up move from today's gpt-4.1-mini for every touchpoint (never a
-// downgrade), so a zero-env deploy is GA- AND capability-safe. Tiers diverge
-// via the MODEL_TIER_* knobs (see docs/model-architecture.md).
+// Defaults used ONLY when no env var is set (token-cost plan step 3, 2026-11-02).
+// Replies and the 700-token helpers (facts, memory, flow state) use gpt-5.6-luna: about a
+// quarter of gpt-5.4-mini's price, and clean in the re-ask sim. The classifiers stay on
+// gpt-5.4-mini: luna is a reasoning model, and its reasoning can use up their 3-60 token
+// budgets and come back empty. gpt-5.4-nano for them is an env opt-in (MODEL_TIER_CLASSIFIER)
+// after a disqualify-screen spot check (see docs/model-architecture.md).
 const TIER_DEFAULT: Record<ModelTier, string> = {
   classifier: "gpt-5.4-mini",
-  reply: "gpt-5.4-mini",
-  helper: "gpt-5.4-mini",
+  reply: "gpt-5.6-luna",
+  helper: "gpt-5.6-luna",
 };
 
 // Optional whole-tier override. NON-CASCADING: each tier reads only its own
@@ -33,13 +35,17 @@ const TIER_ENV: Record<ModelTier, string> = {
  * are the terminal default and .trim().
  */
 export function resolveModel(tier: ModelTier, ...envVars: string[]): string {
+  return envModel(tier, envVars) ?? TIER_DEFAULT[tier];
+}
+
+/** Steps 1-2 of resolveModel: the env-configured model, or null when none is set. */
+function envModel(tier: ModelTier, envVars: string[]): string | null {
   for (const name of envVars) {
     const v = process.env[name];
     if (v && v.trim()) return v.trim();
   }
   const override = process.env[TIER_ENV[tier]];
-  if (override && override.trim()) return override.trim();
-  return TIER_DEFAULT[tier];
+  return override && override.trim() ? override.trim() : null;
 }
 
 /**
@@ -54,8 +60,11 @@ export const MODELS = {
   memory: () => resolveModel("helper", "MEMORY_SUMMARY_MODEL", "OPENAI_DM_MODEL"),
   leadFacts: () => resolveModel("helper", "LEAD_FACTS_MODEL", "OPENAI_DM_MODEL"),
   flowState: () => resolveModel("helper", "FLOW_STATE_MODEL", "OPENAI_DM_MODEL"),
-  vision: () => resolveModel("helper", "OPENAI_VISION_MODEL", "OPENAI_DM_MODEL"),
-  change: () => resolveModel("helper", "OPENAI_CHANGE_MODEL"),
+  // Helper tier, but gpt-5.4-mini at zero env: luna's reasoning can use up describe's
+  // 350-token budget (and its image input is unverified); the change assistant is
+  // low-volume tool calling.
+  vision: () => envModel("helper", ["OPENAI_VISION_MODEL", "OPENAI_DM_MODEL"]) ?? "gpt-5.4-mini",
+  change: () => envModel("helper", ["OPENAI_CHANGE_MODEL"]) ?? "gpt-5.4-mini",
 } as const;
 
 // --- Per-chatbot reactive-reply model override (admin-only) -----------------
