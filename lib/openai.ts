@@ -23,6 +23,28 @@ export interface OpenAIUsage {
   prompt_tokens_details?: { cached_tokens?: number };
 }
 
+/** Explicit prompt-cache breakpoints are documented for gpt-5.6 and later only. */
+export function supportsCacheBreakpoint(model: string): boolean {
+  const m = /^gpt-(\d+)\.(\d+)/.exec(model);
+  return !!m && (Number(m[1]) > 5 || (Number(m[1]) === 5 && Number(m[2]) >= 6));
+}
+
+type SystemPart = { type: "text"; text: string; prompt_cache_breakpoint?: { mode: "explicit" } };
+
+/** Models that refused the breakpoint field on this instance; they get the plain prompt
+ *  from then on, so a refusal costs one extra round trip, not one per reply. */
+const breakpointRefused = new Set<string>();
+
+/** The system prompt as text parts, its first `breakAt` characters marked as a reusable
+ *  cache prefix. The parts join back to exactly the same text. */
+function cachedSystem(system: string, breakAt: number): SystemPart[] {
+  const parts: SystemPart[] = [
+    { type: "text", text: system.slice(0, breakAt), prompt_cache_breakpoint: { mode: "explicit" } },
+  ];
+  if (breakAt < system.length) parts.push({ type: "text", text: system.slice(breakAt) });
+  return parts;
+}
+
 /** The token split of one completion (missing fields count as 0). */
 export function tokenDetail(model: string, usage: OpenAIUsage | undefined): TokenDetail {
   return {
@@ -114,31 +136,44 @@ async function openaiChatOnce(
     maxTokens?: number;
     timeoutMs?: number;
     promptCacheKey?: string;
+    cacheBreakAt?: number;
   },
   apiKey: string
 ): Promise<OpenAIChatResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS);
   try {
-    const res = await fetch(OPENAI_CHAT_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: opts.model,
-        max_completion_tokens: opts.maxTokens ?? 400,
-        messages: [{ role: "system", content: opts.system }, ...opts.messages],
-        // Routing hint so a given bot's requests reuse the same cached static prefix.
-        // Purely a cache-hit optimization; ignored by models that don't cache, and it
-        // never overrides content matching (a changed prompt is still a fresh miss).
-        ...(opts.promptCacheKey ? { prompt_cache_key: opts.promptCacheKey } : {}),
-      }),
-      signal: controller.signal,
-    });
+    const post = (system: string | SystemPart[]) =>
+      fetch(OPENAI_CHAT_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: opts.model,
+          max_completion_tokens: opts.maxTokens ?? 400,
+          messages: [{ role: "system", content: system }, ...opts.messages],
+          // Routing hint so a given bot's requests reuse the same cached static prefix.
+          // Purely a cache-hit optimization; ignored by models that don't cache, and it
+          // never overrides content matching (a changed prompt is still a fresh miss).
+          ...(opts.promptCacheKey ? { prompt_cache_key: opts.promptCacheKey } : {}),
+        }),
+        signal: controller.signal,
+      });
+    const breakAt =
+      supportsCacheBreakpoint(opts.model) && !breakpointRefused.has(opts.model) ? opts.cacheBreakAt : undefined;
+    let res = await post(breakAt ? cachedSystem(opts.system, breakAt) : opts.system);
+    let detail = res.ok ? "" : await res.text().catch(() => "");
+    // A model that refuses the breakpoint field gets the same request without it, so a
+    // caching hint can never cost the lead their reply.
+    if (!res.ok && breakAt && res.status === 400 && /prompt_cache_breakpoint/i.test(detail)) {
+      breakpointRefused.add(opts.model);
+      console.warn("[openai] cache breakpoint refused; sending without it", { model: opts.model });
+      res = await post(opts.system);
+      detail = res.ok ? "" : await res.text().catch(() => "");
+    }
     if (!res.ok) {
-      const detail = await res.text().catch(() => "");
       throw new OpenAIChatError(
         `OpenAI chat failed (${res.status}): ${detail.slice(0, 300)}`,
         res.status
@@ -200,6 +235,10 @@ export async function openaiChat(opts: {
   /** Optional cache-routing key (e.g. the chatbot id) so a bot's replies reuse the same
    *  cached static prompt prefix. Optional; unset callers (screener/classifier) unchanged. */
   promptCacheKey?: string;
+  /** Where the system prompt's reusable prefix ends (a character index). On gpt-5.6+ that
+   *  prefix is sent as its own text part marked as an explicit cache breakpoint, so every
+   *  lead of a bot can read it; older models get the plain string. Unset = no breakpoint. */
+  cacheBreakAt?: number;
   /** Extra attempts beyond the first, on transient errors only. Default 0. Clamped to 5. */
   retries?: number;
   /** Backoff before each retry; entry i is the wait before attempt i+2. */

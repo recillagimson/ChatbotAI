@@ -376,6 +376,32 @@ export async function generateReply(opts: {
     opts.knownFacts ?? null,
     { flowStateBlock: opts.flowStateBlock ?? null, platform: opts.platform ?? null }
   );
+  // The fixed part (persona through confidentiality) is identical on every reply of this
+  // bot, so both providers mark it as a reusable cache prefix: a call within the cache
+  // window reads it at ~10% of the input cost. The per-turn blocks (continuity, known
+  // facts, flow state, instruction, memory, scheduled start) change every reply and come
+  // after it. buildSystemPrompt puts them last in section mode, so the prompt built
+  // without them is an exact prefix. The older modes mix them in, so there no prefix is
+  // shared across leads: cacheBreakAt is null, Claude caches the whole prompt as before and
+  // OpenAI gets no breakpoint (one would only add a lead-specific cache write). A push
+  // channel's platform only adds a per-turn rule
+  // (Instagram's no-links line), so it is left out; a response channel (TikTok) changes
+  // fixed blocks (media, link tokens), so it stays.
+  const fixedPlatform =
+    isPlatform(opts.platform) && !canPushPlatform(opts.platform) ? opts.platform : null;
+  const fixedText = buildSystemPrompt(
+    opts.chatbot,
+    opts.kbBlock,
+    null,
+    false,
+    opts.mediaCatalog,
+    null,
+    null,
+    opts.trainedResponses ?? null,
+    null,
+    { flowStateBlock: null, platform: fixedPlatform }
+  );
+  const cacheBreakAt = systemText.startsWith(fixedText) ? fixedText.length : null;
   const images = opts.images ?? [];
 
   // Recent turns sent verbatim; older context comes from memorySummary. Keeps
@@ -436,6 +462,9 @@ export async function generateReply(opts: {
       // Pin cache routing per bot so the static prompt prefix (persona/offers/rebuttals/KB/
       // guardrails, assembled first in buildSystemPrompt) stays warm across this bot's chats.
       promptCacheKey: opts.chatbot.id,
+      // Explicit breakpoint after the fixed part (gpt-5.6+ only), so a new lead's first
+      // reply can read the bot's cached prefix too.
+      cacheBreakAt: cacheBreakAt ?? undefined,
       // Enough headroom that reasoning tokens can't starve the visible reply to empty
       // (the "teammate will follow up" bug on gpt-5.x). See REPLY_MAX_TOKENS above.
       maxTokens: REPLY_MAX_TOKENS,
@@ -480,37 +509,16 @@ export async function generateReply(opts: {
       : opts.userMessage;
     const messages = [...trimmed, { role: "user" as const, content: currentContent }];
 
-    // Cache only the fixed part (persona through confidentiality): it is identical on
-    // every reply of this bot, so a call within ~5 min reads it at ~10% of the input
-    // cost. The per-turn blocks (continuity, known facts, flow state, instruction,
-    // memory, scheduled start) change every reply, so they go in an uncached block
-    // after it. buildSystemPrompt puts them last in section mode, so the prompt built
-    // without them is an exact prefix; the older modes mix them in, so there the whole
-    // prompt stays one block. Below the model's minimum cacheable size nothing caches,
-    // and that costs nothing extra. A push channel's platform only adds a per-turn rule
-    // (Instagram's no-links line), so it is left out here; a response channel (TikTok)
-    // changes fixed blocks (media, link tokens), so it stays.
-    const fixedPlatform =
-      isPlatform(opts.platform) && !canPushPlatform(opts.platform) ? opts.platform : null;
-    const fixedText = buildSystemPrompt(
-      opts.chatbot,
-      opts.kbBlock,
-      null,
-      false,
-      opts.mediaCatalog,
-      null,
-      null,
-      opts.trainedResponses ?? null,
-      null,
-      { flowStateBlock: null, platform: fixedPlatform }
-    );
+    // Cache only the fixed part (see cacheBreakAt above); the per-turn part follows in an
+    // uncached block. Below the model's minimum cacheable size nothing caches, and that
+    // costs nothing extra.
     const cached = { cache_control: { type: "ephemeral" as const } };
     const system =
-      fixedText.length < systemText.length && systemText.startsWith(fixedText)
+      cacheBreakAt !== null && cacheBreakAt < systemText.length
         ? [
-            { type: "text" as const, text: fixedText, ...cached },
+            { type: "text" as const, text: systemText.slice(0, cacheBreakAt), ...cached },
             // Kept as-is (it starts with the blank line that separates the two parts).
-            { type: "text" as const, text: systemText.slice(fixedText.length) },
+            { type: "text" as const, text: systemText.slice(cacheBreakAt) },
           ]
         : [{ type: "text" as const, text: systemText, ...cached }];
 
