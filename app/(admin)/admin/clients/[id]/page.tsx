@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AdminChatbotEditForm } from "@/components/admin/admin-chatbot-edit-form";
 import { ViewAsButton } from "@/components/admin/view-as-button";
 import { GrantAccessForm } from "@/components/admin/grant-access-form";
+import { ResetPasswordForm } from "@/components/admin/reset-password-form";
 import { KnowledgeBaseForm } from "@/components/dashboard/kb-form";
 import { KnowledgeBaseList } from "@/components/dashboard/kb-list";
 import { RetrainBotButton } from "@/components/dashboard/retrain-bot-button";
@@ -304,6 +305,16 @@ export default async function AdminClientDetailPage({
                 />
               </SsCard>
             )}
+          </div>
+        </section>
+
+        {/* ---- Password ------------------------------------------------- */}
+        <section>
+          <h2 className={SECTION_HEADING}>Password</h2>
+          <div className="mt-3">
+            <SsCard className="p-[22px]">
+              <ResetPasswordForm userId={profile.id} email={profile.email} />
+            </SsCard>
           </div>
         </section>
 

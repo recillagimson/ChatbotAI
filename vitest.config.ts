@@ -10,6 +10,7 @@ export default defineConfig({
   test: {
     include: [
       "tests/link-flow*.spec.ts",
+      "tests/admin-reset-password*.spec.ts",
       "tests/instagram-links*.spec.ts",
       "tests/flow-state*.spec.ts",
       "tests/lead-facts*.spec.ts",

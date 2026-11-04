@@ -33,14 +33,12 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: target } = await supabase
     .from("profiles")
-    .select("id, is_superadmin")
+    .select("id")
     .eq("id", clientId)
     .maybeSingle();
   if (!target) return NextResponse.json({ error: "Client not found." }, { status: 404 });
-  // Don't impersonate other team members (auditability; no client account to view).
-  if (target.is_superadmin) {
-    return NextResponse.json({ error: "Can't view as another admin." }, { status: 400 });
-  }
+  // Other team members' accounts can be viewed too (an admin may also own bots).
+  // Admin powers always come from the REAL signed-in user, never the viewed one.
 
   await setViewAs(clientId);
   return NextResponse.json({ ok: true });
